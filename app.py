@@ -16,8 +16,7 @@ app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
 
 # --- CONFIGURATION DATABASE (SUPABASE) ---
 # Sur Vercel, cette variable doit être définie dans les Settings
-# ON FORCE L'ADRESSE ICI DIRECTEMENT
-DB_URL = "postgresql://postgres:R61KlIcfrFKqADHK@db.jsfouzzuekmdyegslhmf.supabase.co:5432/postgres"
+DB_URL = "postgresql://postgres.jsfouzzuekmdyegslhmf:R61KlIcfrFKqADHK@aws-1-eu-west-1.pooler.supabase.com:6543/postgres"
 
 # Configuration Strava
 CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
@@ -393,3 +392,4 @@ def get_activities_route():
 if __name__ == '__main__':
 
     app.run(debug=True, port=5000)
+
