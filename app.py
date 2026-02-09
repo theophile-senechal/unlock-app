@@ -8,6 +8,7 @@ from datetime import datetime
 from shapely.geometry import Point, Polygon, shape
 from shapely.prepared import prep
 from sqlalchemy import create_engine, text
+from sqlalchemy.pool import NullPool  # <--- IMPORT INDISPENSABLE POUR VERCEL
 
 # 1. Configuration initiale
 load_dotenv()
@@ -15,8 +16,10 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
 
 # --- CONFIGURATION DATABASE (SUPABASE) ---
-# Sur Vercel, cette variable doit être définie dans les Settings
-DB_URL = "postgresql://postgres:R61KlIcfrFKqADHK@db.jsfouzzuekmdyegslhmf.supabase.co:5432/postgres"
+# IMPORTANT : Sur Vercel, va dans Settings > Environment Variables
+# Ajoute une variable nommée "DATABASE_URL" et colle ton lien supabase dedans.
+# Ne laisse jamais ton mot de passe en clair dans le code !
+DB_URL = os.getenv('DATABASE_URL') 
 
 # Configuration Strava
 CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
@@ -263,16 +266,12 @@ def get_activities_route():
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
 
-    # --- CALCUL DES VILLES OPTIMISÉ (BATCH REQUEST) ---
-    # Nous utilisons une approche par lots (batch) pour interroger la base de données.
-    # Au lieu de vérifier chaque bloc un par un (trop lent), on envoie des paquets de coordonnées.
+    # --- CALCUL DES VILLES OPTIMISÉ (BATCH REQUEST + NULLPOOL) ---
     
     if grid_store and DB_URL:
         identified_cities = {}
         
         # 1. Création de "Sondes" (Probes)
-        # On ne garde qu'un point unique tous les ~1km (arrondi 2 décimales)
-        # Cela réduit drastiquement le nombre de points à vérifier (ex: 10 000 blocs -> 150 sondes)
         probe_points = set()
         for lat, lon in grid_store.keys():
             probe_points.add((round(lat, 2), round(lon, 2)))
@@ -280,20 +279,19 @@ def get_activities_route():
         probe_list = list(probe_points)
         
         # 2. Interrogation par paquets (Batch)
-        batch_size = 50 # On envoie 50 points d'un coup
+        batch_size = 50 
         
         try:
-            engine = create_engine(DB_URL)
+            # CORRECTION VERCEL : On utilise NullPool pour éviter les connexions gelées
+            engine = create_engine(DB_URL, poolclass=NullPool)
+            
             with engine.connect() as conn:
                 for i in range(0, len(probe_list), batch_size):
                     batch = probe_list[i:i+batch_size]
                     
-                    # Construction d'un MultiPoint WKT (Well Known Text) pour PostGIS
-                    # IMPORTANT: WKT est en format "LON LAT"
                     points_str = ", ".join([f"{lon} {lat}" for lat, lon in batch])
                     wkt_multipoint = f"MULTIPOINT({points_str})"
                     
-                    # Cette requête trouve TOUTES les communes qui intersectent nos points
                     query = text("""
                         SELECT DISTINCT nom_commune, 
                                ST_Area(geometry::geography) as area_m2, 
@@ -304,14 +302,11 @@ def get_activities_route():
                     
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
-                    # Traitement des résultats bruts
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
                             
-                            # Parsing GeoJSON
                             geojson_geom = json.loads(row.outline)
                             inverted_outline = []
-                            # Inversion Lat/Lon pour Leaflet
                             if geojson_geom['type'] == 'Polygon':
                                 inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0]]
                             elif geojson_geom['type'] == 'MultiPolygon':
@@ -321,32 +316,28 @@ def get_activities_route():
                                 "name": row.nom_commune,
                                 "area_m2": row.area_m2,
                                 "outline": inverted_outline,
-                                "poly_obj": Polygon(inverted_outline) # Objet Shapely pour calculs précis
+                                "poly_obj": Polygon(inverted_outline) 
                             }
                     
-                    # Sécurité : Si on a déjà plus de 70 villes, on arrête le scan DB pour ne pas surcharger
                     if len(identified_cities) >= 70: break
 
         except Exception as e:
+            # On affiche l'erreur dans les logs Vercel pour le debug
             print(f"⚠️ Erreur Batch DB: {e}")
 
-        # 3. Calcul précis des statistiques en Python (Rapide car en RAM)
+        # 3. Calcul précis des statistiques
         final_cities_list = []
         
         for city_name, city_data in identified_cities.items():
             try:
-                # Préparation géométrique accélérée
                 poly_geom = city_data['poly_obj']
                 prepared_poly = prep(poly_geom)
                 min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
                 
                 count_inside = 0
                 
-                # On vérifie quels blocs sont réellement DANS cette ville
                 for (clat, clon) in grid_store.keys():
-                    # Check rapide (Bounding Box)
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                        # Check précis (Point in Polygon)
                         if prepared_poly.contains(Point(clat, clon)):
                             count_inside += 1
                 
@@ -365,7 +356,6 @@ def get_activities_route():
             except Exception as e:
                 print(f"Erreur calcul stats ville {city_name}: {e}")
 
-        # On trie pour avoir les villes les plus explorées en premier
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
 
     API_RESULT_CACHE[token][cache_key] = data
