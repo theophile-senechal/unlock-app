@@ -1,1 +1,1 @@
-flaskpython-dotenvrequestspolylineshapelysqlalchemypsycopg2-binarygunicorn
+flaskpython-dotenvrequestspolylineshapelysqlalchemypsycopg2-binarygunicorngeoalchemy2
