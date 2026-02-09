@@ -15,7 +15,8 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
 
 # --- CONFIGURATION DATABASE (SUPABASE) ---
-DB_URL = os.getenv('DATABASE_URL')
+# Sur Vercel, cette variable doit être définie dans les Settings
+DB_URL = "postgresql://postgres:R61KlIcfrFKqADHK@db.jsfouzzuekmdyegslhmf.supabase.co:5432/postgres"
 
 # Configuration Strava
 CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
@@ -31,68 +32,11 @@ SPORT_TRANSLATIONS = {
 }
 GPS_SPORTS = list(SPORT_TRANSLATIONS.keys())
 
-# --- CACHES EN MÉMOIRE (RAM uniquement, reset à chaque redémarrage sur Vercel) ---
-# Sur Vercel, le serveur redémarre souvent, donc on utilise la DB pour le durable.
-# Ces caches servent juste à accélérer la navigation immédiate de l'utilisateur.
+# --- CACHES EN MÉMOIRE (RAM uniquement) ---
 RAW_DATA_CACHE = {}
 API_RESULT_CACHE = {}
 
-# --- FONCTIONS UTILITAIRES BDD ---
-
-def get_city_from_db(lat, lon):
-    """
-    Interroge Supabase pour trouver la ville correspondant au point GPS.
-    Retourne le nom, la surface et le contour (GeoJSON).
-    """
-    if not DB_URL:
-        return None
-
-    try:
-        engine = create_engine(DB_URL)
-        with engine.connect() as conn:
-            # On demande : Nom, Surface, et Géométrie (au format JSON)
-            # ST_Area retourne des m², conversion auto gérée par PostGIS si projection correcte
-            # Ici on utilise ::geography pour avoir des mètres carrés précis
-            query = text("""
-                SELECT 
-                    nom_commune, 
-                    ST_Area(geometry::geography) as area_m2, 
-                    ST_AsGeoJSON(geometry) as outline
-                FROM communes
-                WHERE ST_Contains(
-                    geometry, 
-                    ST_SetSRID(ST_Point(:lon, :lat), 4326)
-                )
-                LIMIT 1;
-            """)
-            
-            result = conn.execute(query, {"lat": lat, "lon": lon}).fetchone()
-            
-            if result:
-                # PostGIS renvoie le GeoJSON sous forme de string, on le parse
-                geojson_geom = json.loads(result.outline)
-                
-                # IMPORTANT : PostGIS renvoie [Lon, Lat], mais ton code et Leaflet veulent souvent [Lat, Lon]
-                # On doit inverser les coordonnées pour ton frontend
-                if geojson_geom['type'] == 'Polygon':
-                    raw_coords = geojson_geom['coordinates'][0]
-                    inverted_outline = [[p[1], p[0]] for p in raw_coords]
-                elif geojson_geom['type'] == 'MultiPolygon':
-                    # On prend le plus grand polygone (souvent le principal)
-                    raw_coords = geojson_geom['coordinates'][0][0]
-                    inverted_outline = [[p[1], p[0]] for p in raw_coords]
-                else:
-                    inverted_outline = []
-
-                return {
-                    "name": result.nom_commune,
-                    "area_m2": result.area_m2,
-                    "outline": inverted_outline
-                }
-            return None
-    except Exception as e:
-        print(f"⚠️ Erreur DB: {e}")
-        return None
+# --- FONCTIONS UTILITAIRES ---
 
 def get_cells_from_polyline(pts, grid_size_deg):
     cells = set()
@@ -149,7 +93,7 @@ def get_strava_activities_cached(token):
     RAW_DATA_CACHE[token] = cleaned_data
     return cleaned_data
 
-# --- ROUTES ---
+# --- ROUTES STANDARD ---
 
 @app.route('/')
 def index():
@@ -190,7 +134,7 @@ def story_page(): return render_template('story.html') if 'access_token' in sess
 @app.route('/timelapse')
 def timelapse_page(): return render_template('timelapse.html') if 'access_token' in session else redirect(url_for('login_page'))
 
-# --- API ---
+# --- API ROUTES ---
 
 @app.route('/api/stats_history')
 def get_stats_history():
@@ -319,77 +263,113 @@ def get_activities_route():
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
 
-    # --- CALCUL DES VILLES (VERSION BDD SUPABASE) ---
-    # Cette partie a été réécrite pour ne plus utiliser le fichier cache ni l'API Gouv.
-    # On interroge la base de données pour les points les plus fréquentés.
+    # --- CALCUL DES VILLES OPTIMISÉ (BATCH REQUEST) ---
+    # Nous utilisons une approche par lots (batch) pour interroger la base de données.
+    # Au lieu de vérifier chaque bloc un par un (trop lent), on envoie des paquets de coordonnées.
     
     if grid_store and DB_URL:
-        # On prend les 400 points les plus visités pour identifier les villes principales
-        sorted_locs = sorted(grid_store.items(), key=lambda x: x[1]['cnt'], reverse=True)
-        scan_points = [k for k, v in sorted_locs[:400]] # Limit 400 pour aller vite
-
         identified_cities = {}
         
-        # Pour éviter de requêter la même ville 50 fois, on fait un petit cache local temporaire
-        local_city_cache = {}
-
-        for lat, lon in scan_points:
-            # On cherche la ville pour ce point
-            # Idéalement on ferait un "Batch Query" mais on reste simple ici pour commencer
-            
-            # Vérif cache local (si on a déjà vu ce point proche)
-            # Astuce : on arrondit fort pour éviter de spammer la BDD
-            approx_key = (round(lat, 2), round(lon, 2))
-            
-            muni = None
-            if approx_key in local_city_cache:
-                muni = local_city_cache[approx_key]
-            else:
-                muni = get_city_from_db(lat, lon)
-                if muni: local_city_cache[approx_key] = muni
-
-            if muni:
-                name = muni['name']
-                if name not in identified_cities and len(identified_cities) < 50:
-                    try:
-                        # Calcul du % exploré (inchangé pour compatibilité)
-                        # On utilise shapely pour vérifier quels carrés sont dans la ville
-                        poly_geom = Polygon(muni['outline'])
-                        prepared_poly = prep(poly_geom)
-                        count_inside = 0
-                        
-                        # Optimisation: on ne teste que les points qui sont proches du centre de la ville
-                        # (bounding box sommaire)
-                        min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
-                        
-                        for (clat, clon) in grid_store.keys():
-                            if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                                if prepared_poly.contains(Point(clat, clon)):
-                                    count_inside += 1
-                        
-                        if count_inside > 0:
-                            # Calcul du pourcentage basé sur la surface réelle de la BDD
-                            area_conquered_m2 = count_inside * (grid_meters**2)
-                            pct = (area_conquered_m2 / muni['area_m2']) * 100
+        # 1. Création de "Sondes" (Probes)
+        # On ne garde qu'un point unique tous les ~1km (arrondi 2 décimales)
+        # Cela réduit drastiquement le nombre de points à vérifier (ex: 10 000 blocs -> 150 sondes)
+        probe_points = set()
+        for lat, lon in grid_store.keys():
+            probe_points.add((round(lat, 2), round(lon, 2)))
+        
+        probe_list = list(probe_points)
+        
+        # 2. Interrogation par paquets (Batch)
+        batch_size = 50 # On envoie 50 points d'un coup
+        
+        try:
+            engine = create_engine(DB_URL)
+            with engine.connect() as conn:
+                for i in range(0, len(probe_list), batch_size):
+                    batch = probe_list[i:i+batch_size]
+                    
+                    # Construction d'un MultiPoint WKT (Well Known Text) pour PostGIS
+                    # IMPORTANT: WKT est en format "LON LAT"
+                    points_str = ", ".join([f"{lon} {lat}" for lat, lon in batch])
+                    wkt_multipoint = f"MULTIPOINT({points_str})"
+                    
+                    # Cette requête trouve TOUTES les communes qui intersectent nos points
+                    query = text("""
+                        SELECT DISTINCT nom_commune, 
+                               ST_Area(geometry::geography) as area_m2, 
+                               ST_AsGeoJSON(geometry) as outline
+                        FROM communes
+                        WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
+                    """)
+                    
+                    result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
+                    
+                    # Traitement des résultats bruts
+                    for row in result_proxy:
+                        if row.nom_commune not in identified_cities:
                             
-                            identified_cities[name] = {
-                                "name": name, 
-                                "outline": muni['outline'],
-                                "stats": {
-                                    "blocks": count_inside, 
-                                    "percent": round(min(pct, 100), 2)
-                                }
+                            # Parsing GeoJSON
+                            geojson_geom = json.loads(row.outline)
+                            inverted_outline = []
+                            # Inversion Lat/Lon pour Leaflet
+                            if geojson_geom['type'] == 'Polygon':
+                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0]]
+                            elif geojson_geom['type'] == 'MultiPolygon':
+                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0][0]]
+                            
+                            identified_cities[row.nom_commune] = {
+                                "name": row.nom_commune,
+                                "area_m2": row.area_m2,
+                                "outline": inverted_outline,
+                                "poly_obj": Polygon(inverted_outline) # Objet Shapely pour calculs précis
                             }
-                    except Exception as e:
-                        print(f"Erreur calcul ville {name}: {e}")
+                    
+                    # Sécurité : Si on a déjà plus de 70 villes, on arrête le scan DB pour ne pas surcharger
+                    if len(identified_cities) >= 70: break
 
-        data["top_municipalities"] = sorted(list(identified_cities.values()), key=lambda x: x['stats']['blocks'], reverse=True)
+        except Exception as e:
+            print(f"⚠️ Erreur Batch DB: {e}")
+
+        # 3. Calcul précis des statistiques en Python (Rapide car en RAM)
+        final_cities_list = []
+        
+        for city_name, city_data in identified_cities.items():
+            try:
+                # Préparation géométrique accélérée
+                poly_geom = city_data['poly_obj']
+                prepared_poly = prep(poly_geom)
+                min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
+                
+                count_inside = 0
+                
+                # On vérifie quels blocs sont réellement DANS cette ville
+                for (clat, clon) in grid_store.keys():
+                    # Check rapide (Bounding Box)
+                    if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
+                        # Check précis (Point in Polygon)
+                        if prepared_poly.contains(Point(clat, clon)):
+                            count_inside += 1
+                
+                if count_inside > 0:
+                    area_conquered_m2 = count_inside * (grid_meters**2)
+                    pct = (area_conquered_m2 / city_data['area_m2']) * 100
+                    
+                    final_cities_list.append({
+                        "name": city_name,
+                        "outline": city_data['outline'],
+                        "stats": {
+                            "blocks": count_inside,
+                            "percent": round(min(pct, 100), 2)
+                        }
+                    })
+            except Exception as e:
+                print(f"Erreur calcul stats ville {city_name}: {e}")
+
+        # On trie pour avoir les villes les plus explorées en premier
+        data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
 
     API_RESULT_CACHE[token][cache_key] = data
     return jsonify(data)
 
 if __name__ == '__main__':
-
     app.run(debug=True, port=5000)
-
-
