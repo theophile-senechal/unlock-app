@@ -232,9 +232,7 @@
 
         <select id="grid-size-select" onchange="updateDashboard()" style="display:none;">
             <option value="100">100M / 100M</option>
-            <option value="250">250M / 250M</option>
-            <option value="500">500M / 500M</option>
-            <option value="1000">1KM / 1KM</option>
+            <option value="250" selected>250M / 250M</option>
         </select>
         <select id="year-select" onchange="updateDashboard()"><option value="all">HISTORIQUE</option></select>
         
@@ -261,7 +259,15 @@
             </svg>
             STATS
         </a>
-
+        
+        <a href="/leaderboard" class="btn btn-story" style="text-decoration: none;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="8" r="7"></circle>
+                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
+            </svg>
+            CLASSEMENT
+        </a>
+        
         <a href="/logout" class="btn btn-logout" id="logout-btn">DÉCONNEXION</a>
 
         <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="linkedin-menu-item">
@@ -371,7 +377,20 @@
         document.getElementById('card-cells').style.display = mode === 'grid' ? 'block' : 'none';
         document.getElementById('grid-legend').style.display = mode === 'grid' ? 'flex' : 'none';
         document.getElementById('card-muni').style.display = mode === 'grid' ? 'block' : 'none';
-        renderData(); 
+        
+        // --- NOUVEAU : Forcer 250m au clic sur le bouton BLOCS ---
+        if (mode === 'grid') {
+            const gridSelect = document.getElementById('grid-size-select');
+            if (gridSelect.value !== "250") {
+                gridSelect.value = "250";
+                updateDashboard(); // Recharge les données en 250m
+            } else {
+                renderData();
+            }
+        } else {
+            renderData();
+        }
+        // ---------------------------------------------------------
         
         if(window.innerWidth < 1200) {
              document.getElementById('mobile-controls').classList.remove('mobile-visible');
@@ -432,9 +451,19 @@
 
             const dataList = document.getElementById('city-suggestions');
             dataList.innerHTML = '';
+            
             if (currentData.top_municipalities) {
-                const sortedAlpha = [...currentData.top_municipalities].sort((a, b) => a.name.localeCompare(b.name));
-                sortedAlpha.forEach(city => {
+                // MODIFICATION : On ne garde que le TOP 20 pour la recherche
+                // 1. On trie par nombre de blocs pour avoir les "vraies" meilleures villes
+                // 2. On garde les 20 premières
+                const top20 = [...currentData.top_municipalities]
+                    .sort((a, b) => b.stats.blocks - a.stats.blocks)
+                    .slice(0, 20);
+
+                // 3. On trie ces 20 villes par ordre alphabétique pour l'affichage dans la liste
+                const top20SortedAlpha = top20.sort((a, b) => a.name.localeCompare(b.name));
+
+                top20SortedAlpha.forEach(city => {
                     let option = document.createElement('option');
                     option.value = city.name;
                     dataList.appendChild(option);
@@ -454,6 +483,7 @@
     function onCitySearch() {
         const inputVal = document.getElementById('city-search').value;
         if (!currentData || !currentData.top_municipalities) return;
+        // On cherche dans toutes les municipalités renvoyées par l'API (même hors top 20 si le user tape le nom exact d'une ville qui était dans le json mais pas dans la liste top 20, bien que le json soit limité par le backend)
         const city = currentData.top_municipalities.find(c => c.name.toLowerCase() === inputVal.toLowerCase());
         if (city) {
             currentSelectedCityName = city.name;
@@ -490,6 +520,7 @@
         if (currentSort === 'blocks') { sortedCities.sort((a, b) => b.stats.blocks - a.stats.blocks); } 
         else { sortedCities.sort((a, b) => b.stats.percent - a.stats.percent); }
 
+        // LE TABLEAU RESTE LIMITÉ AU TOP 5
         sortedCities.slice(0, 5).forEach((city, index) => {
             const row = document.createElement('tr');
             const activeStyle = 'color: var(--bordeaux); font-weight: 800; font-size: 0.9rem;';
@@ -574,3 +605,4 @@
 </script>
 </body>
 </html>
+<!-- Force trigger Vercel -->
