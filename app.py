@@ -273,15 +273,21 @@ def get_activities_route():
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
-    # --- NOUVEAU : MISE À JOUR SILENCIEUSE DE LA DATE DE VISITE ---
+    athlete_id = None
+    
+    # --- MISE À JOUR SILENCIEUSE ET RÉCUPÉRATION DE L'ID ---
     if DB_URL:
         try:
             engine = create_engine(DB_URL, poolclass=NullPool)
             with engine.connect() as conn:
-                conn.execute(
-                    text("UPDATE strava_users SET last_login_date = CURRENT_TIMESTAMP WHERE access_token = :token"), 
+                # NOUVEAU : On utilise RETURNING pour récupérer l'athlete_id en même temps !
+                res = conn.execute(
+                    text("UPDATE strava_users SET last_login_date = CURRENT_TIMESTAMP WHERE access_token = :token RETURNING athlete_id"), 
                     {"token": token}
-                )
+                ).fetchone()
+                
+                if res:
+                    athlete_id = res[0]
                 conn.commit()
         except Exception as e:
             print(f"Erreur màj silencieuse: {e}")
@@ -294,6 +300,7 @@ def get_activities_route():
     cache_key = f"act_{grid_meters}_{sel_year}_{sel_sport}"
     if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
     
+    # Si les données sont déjà en cache, le score n'a pas changé, on gagne du temps !
     if cache_key in API_RESULT_CACHE[token]:
         return jsonify(API_RESULT_CACHE[token][cache_key])
 
@@ -308,7 +315,8 @@ def get_activities_route():
     
     grid_store = {}
 
-    for act in activities:
+    # NOUVEAU : On utilise enumerate() pour donner un index (idx) unique à chaque activité
+    for idx, act in enumerate(activities):
         dt = datetime.strptime(act['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
         y_str = str(dt.year)
         sport = act['type']
@@ -326,9 +334,12 @@ def get_activities_route():
 
             for b in blocks:
                 if b not in grid_store:
-                    grid_store[b] = {'cnt': 0, 'first': act_ym, 'last': act_ym}
+                    # NOUVEAU : On ajoute un "set" (ensemble) pour stocker les IDs d'activités
+                    grid_store[b] = {'cnt': 0, 'first': act_ym, 'last': act_ym, 'acts': set()}
                 
                 grid_store[b]['cnt'] += 1
+                grid_store[b]['acts'].add(idx)  # On mémorise que cette activité est passée ici
+                
                 if act_ym < grid_store[b]['first']: grid_store[b]['first'] = act_ym
                 if act_ym > grid_store[b]['last']: grid_store[b]['last'] = act_ym
             
@@ -340,29 +351,22 @@ def get_activities_route():
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
 
-    # --- CALCUL DES VILLES OPTIMISÉ (BATCH REQUEST + NULLPOOL) ---
+    # --- CALCUL DES VILLES ET ENREGISTREMENT DES SCORES ---
     
     if grid_store and DB_URL:
         identified_cities = {}
-        
-        # 1. Création de "Sondes" (Probes)
         probe_points = set()
         for lat, lon in grid_store.keys():
             probe_points.add((round(lat, 2), round(lon, 2)))
         
         probe_list = list(probe_points)
-        
-        # 2. Interrogation par paquets (Batch)
         batch_size = 50 
         
         try:
-            # CORRECTION VERCEL : On utilise NullPool pour éviter les connexions gelées
             engine = create_engine(DB_URL, poolclass=NullPool)
-            
             with engine.connect() as conn:
                 for i in range(0, len(probe_list), batch_size):
                     batch = probe_list[i:i+batch_size]
-                    
                     points_str = ", ".join([f"{lon} {lat}" for lat, lon in batch])
                     wkt_multipoint = f"MULTIPOINT({points_str})"
                     
@@ -378,7 +382,6 @@ def get_activities_route():
                     
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
-                            
                             geojson_geom = json.loads(row.outline)
                             inverted_outline = []
                             if geojson_geom['type'] == 'Polygon':
@@ -392,15 +395,14 @@ def get_activities_route():
                                 "outline": inverted_outline,
                                 "poly_obj": Polygon(inverted_outline) 
                             }
-                    
                     if len(identified_cities) >= 70: break
 
         except Exception as e:
-            # On affiche l'erreur dans les logs Vercel pour le debug
             print(f"⚠️ Erreur Batch DB: {e}")
 
         # 3. Calcul précis des statistiques
         final_cities_list = []
+        scores_to_save = [] # NOUVEAU : Liste pour stocker nos données avant envoi
         
         for city_name, city_data in identified_cities.items():
             try:
@@ -409,28 +411,69 @@ def get_activities_route():
                 min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
                 
                 count_inside = 0
+                city_acts = set() # NOUVEAU : Pour fusionner toutes les activités de cette ville
                 
-                for (clat, clon) in grid_store.keys():
+                # NOUVEAU : On récupère aussi les données g_data (qui contient notre set d'activités)
+                for (clat, clon), g_data in grid_store.items():
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
                         if prepared_poly.contains(Point(clat, clon)):
                             count_inside += 1
+                            city_acts.update(g_data['acts']) # On ajoute les IDs d'activités au set
                 
                 if count_inside > 0:
                     area_conquered_m2 = count_inside * (grid_meters**2)
                     pct = (area_conquered_m2 / city_data['area_m2']) * 100
+                    final_pct = round(min(pct, 100), 2)
+                    activities_count = len(city_acts) # NOUVEAU : Le compte exact sans doublon !
                     
                     final_cities_list.append({
                         "name": city_name,
                         "outline": city_data['outline'],
                         "stats": {
                             "blocks": count_inside,
-                            "percent": round(min(pct, 100), 2)
+                            "percent": final_pct,
+                            "activities": activities_count
                         }
                     })
+
+                    # NOUVEAU : Si on a identifié l'utilisateur, on prépare la sauvegarde de son score
+                    if athlete_id:
+                        scores_to_save.append({
+                            "ath_id": athlete_id,
+                            "c_name": city_name,
+                            "g_size": grid_meters,
+                            "b_count": count_inside,
+                            "pct": final_pct,
+                            "act_count": activities_count
+                        })
+
             except Exception as e:
                 print(f"Erreur calcul stats ville {city_name}: {e}")
 
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
+
+        # --- NOUVEAU : ENVOI DES SCORES VERS SUPABASE ---
+        if scores_to_save:
+            try:
+                engine = create_engine(DB_URL, poolclass=NullPool)
+                with engine.connect() as conn:
+                    # L'UPSERT magique
+                    upsert_query = text("""
+                        INSERT INTO city_scores (athlete_id, city_name, grid_size, blocks_count, percent, activities_count, last_updated)
+                        VALUES (:ath_id, :c_name, :g_size, :b_count, :pct, :act_count, CURRENT_TIMESTAMP)
+                        ON CONFLICT (athlete_id, city_name, grid_size) DO UPDATE 
+                        SET blocks_count = EXCLUDED.blocks_count,
+                            percent = EXCLUDED.percent,
+                            activities_count = EXCLUDED.activities_count,
+                            last_updated = CURRENT_TIMESTAMP;
+                    """)
+                    # On envoie toutes les villes d'un seul coup
+                    for score in scores_to_save:
+                        conn.execute(upsert_query, score)
+                    conn.commit()
+            except Exception as e:
+                print(f"Erreur sauvegarde scores: {e}")
+        # ------------------------------------------------
 
     API_RESULT_CACHE[token][cache_key] = data
     return jsonify(data)
@@ -497,6 +540,124 @@ def cleanup_users():
         return jsonify({"status": "Nettoyage terminé", "comptes_supprimes": revoked_count}), 200
 
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ==========================================
+# ROUTES POUR LE LEADERBOARD COMMUNAUTAIRE
+# ==========================================
+
+@app.route('/leaderboard')
+def leaderboard_page():
+    """Route pour afficher la page HTML du leaderboard."""
+    if 'access_token' not in session:
+        return redirect(url_for('login_page'))
+    return render_template('leaderboard.html')
+
+@app.route('/api/global_stats_leaderboard')
+def get_global_stats_leaderboard():
+    """Route qui renvoie le classement des villes (les plus courues, etc.)"""
+    token = session.get('access_token')
+    if not token: return jsonify({"error": "Login required"}), 401
+    
+    grid_size = request.args.get('grid_size', 250, type=int)
+    
+    if not DB_URL:
+        return jsonify({"error": "Base de données non configurée"}), 500
+
+    try:
+        engine = create_engine(DB_URL, poolclass=NullPool)
+        with engine.connect() as conn:
+            # On récupère toutes les villes, triées par nombre de joueurs
+            query = text("""
+                SELECT city_name, 
+                       COUNT(DISTINCT athlete_id) as users_count, 
+                       SUM(activities_count) as total_acts
+                FROM city_scores
+                WHERE grid_size = :grid_size
+                GROUP BY city_name
+                ORDER BY users_count DESC
+            """)
+            res = conn.execute(query, {"grid_size": grid_size}).fetchall()
+            
+            cities_data = []
+            for row in res:
+                cities_data.append({
+                    "name": row.city_name,
+                    "users": row.users_count,
+                    "activities": int(row.total_acts) if row.total_acts else 0
+                })
+            
+            return jsonify({"cities": cities_data}), 200
+
+    except Exception as e:
+        print(f"Erreur global_stats_leaderboard: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/city_leaderboard')
+def get_city_leaderboard():
+    """Route qui renvoie le classement de tous les joueurs pour une ville donnée."""
+    token = session.get('access_token')
+    if not token: return jsonify({"error": "Login required"}), 401
+
+    city = request.args.get('city')
+    grid_size = request.args.get('grid_size', 250, type=int)
+
+    if not city:
+        return jsonify({"error": "Nom de la ville manquant"}), 400
+        
+    if not DB_URL:
+        return jsonify({"error": "Base de données non configurée"}), 500
+
+    try:
+        engine = create_engine(DB_URL, poolclass=NullPool)
+        with engine.connect() as conn:
+            
+            # 1. Calculer les statistiques globales de cette ville précise
+            stats_query = text("""
+                SELECT COUNT(DISTINCT athlete_id) as total_users, SUM(activities_count) as total_activities
+                FROM city_scores
+                WHERE city_name = :city AND grid_size = :grid_size
+            """)
+            stats_res = conn.execute(stats_query, {"city": city, "grid_size": grid_size}).fetchone()
+            
+            total_users = stats_res.total_users if stats_res and stats_res.total_users else 0
+            total_activities = int(stats_res.total_activities) if stats_res and stats_res.total_activities else 0
+
+            # 2. Récupérer TOUS les joueurs pour cette ville avec une jointure
+            # Le tri par défaut est fait sur le pourcentage
+            board_query = text("""
+                SELECT u.athlete_name, c.percent, c.blocks_count, c.activities_count
+                FROM city_scores c
+                JOIN strava_users u ON c.athlete_id = u.athlete_id
+                WHERE c.city_name = :city AND c.grid_size = :grid_size
+                ORDER BY c.percent DESC, c.blocks_count DESC
+            """)
+            board_res = conn.execute(board_query, {"city": city, "grid_size": grid_size}).fetchall()
+            
+            leaderboard = []
+            for idx, row in enumerate(board_res):
+                # Si le joueur n'a pas encore de nom (pas reconnecté récemment)
+                name = row.athlete_name if row.athlete_name else f"Explorateur Anonyme"
+                leaderboard.append({
+                    "name": name,
+                    "percent": row.percent,
+                    "blocks": row.blocks_count,
+                    "activities": row.activities_count
+                })
+
+            return jsonify({
+                "city": city,
+                "grid_size": grid_size,
+                "global_stats": {
+                    "total_explorers": total_users,
+                    "total_activities": total_activities
+                },
+                "leaderboard": leaderboard
+            }), 200
+
+    except Exception as e:
+        print(f"Erreur city_leaderboard: {e}")
         return jsonify({"error": str(e)}), 500
     
 if __name__ == '__main__':
