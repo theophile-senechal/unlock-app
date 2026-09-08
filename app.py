@@ -273,6 +273,20 @@ def get_activities_route():
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
+    # --- NOUVEAU : MISE À JOUR SILENCIEUSE DE LA DATE DE VISITE ---
+    if DB_URL:
+        try:
+            engine = create_engine(DB_URL, poolclass=NullPool)
+            with engine.connect() as conn:
+                conn.execute(
+                    text("UPDATE strava_users SET last_login_date = CURRENT_TIMESTAMP WHERE access_token = :token"), 
+                    {"token": token}
+                )
+                conn.commit()
+        except Exception as e:
+            print(f"Erreur màj silencieuse: {e}")
+    # --------------------------------------------------------------
+
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
     grid_meters = int(request.args.get('grid_size', 100))
