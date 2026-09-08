@@ -10,13 +10,15 @@
     <style>
         :root { --bordeaux: #6d071a; --green: #4caf50; --off-white: #fdfdfb; --bg: #f4f5f7; --card-bg: #ffffff; --text-dark: #2c2c2c; }
         
-        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-dark); padding-bottom: 50px; }
+        /* GESTION GLOBALE DU SCROLL */
+        html, body { height: 100%; margin: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-dark); display: flex; flex-direction: column; overflow-y: auto; }
 
         /* HEADER & NAVIGATION */
         .header { 
             background: #fff; padding: 15px 30px; 
             display: flex; justify-content: space-between; align-items: center; 
-            border-bottom: 1px solid #eee;
+            border-bottom: 1px solid #eee; flex-shrink: 0;
         }
         .header h1 { margin: 0; font-size: 1.4rem; color: var(--bordeaux); letter-spacing: -0.5px; }
         
@@ -26,33 +28,42 @@
         /* BARRE DE FILTRES */
         .filter-bar {
             background: #fff; padding: 12px 30px;
-            display: flex; gap: 20px; align-items: center; flex-wrap: wrap;
+            display: flex; gap: 20px; align-items: center; justify-content: space-between; flex-wrap: wrap;
             border-bottom: 1px solid #eee;
             box-shadow: 0 4px 15px rgba(0,0,0,0.02);
-            position: sticky; top: 0; z-index: 90;
+            position: sticky; top: 0; z-index: 100; flex-shrink: 0;
         }
         
-        .filter-group { display: flex; align-items: center; gap: 10px; }
+        .filter-group { display: flex; align-items: center; gap: 10px; flex-grow: 1; }
         .filter-label { font-size: 0.75rem; font-weight: 700; color: #888; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.5px; }
 
         select, input[type="text"] { 
             padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; 
             font-weight: 600; color: var(--text-dark); outline: none; font-size: 0.9rem; cursor: pointer; 
-            transition: all 0.2s ease; font-family: 'Inter', sans-serif;
+            transition: all 0.2s ease; font-family: 'Inter', sans-serif; width: 100%; box-sizing: border-box;
         }
-        select { min-width: 160px; }
+        select { max-width: 200px; }
         select:hover, input[type="text"]:hover { border-color: #bbb; }
         select:focus, input[type="text"]:focus { border-color: var(--bordeaux); background: #fff; box-shadow: 0 0 0 3px rgba(109,7,26,0.1); }
         
-        .search-wrapper { position: relative; display: flex; align-items: center; width: 100%; max-width: 300px; }
+        .search-wrapper { position: relative; display: flex; align-items: center; width: 100%; max-width: 350px; }
         .search-wrapper svg { position: absolute; left: 12px; color: #888; width: 18px; height: 18px; pointer-events: none; }
-        .search-wrapper input { padding-left: 38px; width: 100%; cursor: text; }
+        .search-wrapper input { padding-left: 38px; cursor: text; }
 
         /* GRILLE PRINCIPALE */
-        .container { max-width: 1300px; margin: 30px auto; padding: 0 20px; display: grid; grid-template-columns: 350px 1fr; gap: 30px; align-items: start; }
+        .container { 
+            flex-grow: 1; 
+            width: 100%; max-width: 1400px; margin: 20px auto; padding: 0 30px; box-sizing: border-box;
+            display: grid; grid-template-columns: 320px 1fr; gap: 25px; align-items: start; 
+        }
 
-        /* PANNEAU GAUCHE (Globale) */
-        .global-panel { display: flex; flex-direction: column; gap: 20px; position: sticky; top: 90px; }
+        /* PANNEAU GAUCHE (Globale) - Scroll masqué mais actif si besoin */
+        .global-panel { 
+            display: flex; flex-direction: column; gap: 20px; 
+            position: sticky; top: 90px; 
+            max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: none; 
+        }
+        .global-panel::-webkit-scrollbar { display: none; }
         
         .card { background: var(--card-bg); padding: 22px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02); }
         .card-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f4f5f7; padding-bottom: 12px; }
@@ -67,25 +78,48 @@
         .top-val { font-weight: 800; color: var(--bordeaux); font-size: 0.85rem; background: rgba(109, 7, 26, 0.06); padding: 4px 10px; border-radius: 20px; }
 
         /* PANNEAU DROITE (Ville) */
-        .city-panel { display: flex; flex-direction: column; gap: 20px; }
+        .city-panel { display: flex; flex-direction: column; gap: 20px; flex-grow: 1; min-width: 0; }
 
-        /* Bannière Ville (Hero) */
+        /* Bannière Ville */
         .city-hero { background: linear-gradient(135deg, var(--bordeaux) 0%, #4a0411 100%); color: white; display: flex; justify-content: space-between; align-items: center; padding: 25px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(109,7,26,0.2); }
         .city-title-wrapper h2 { margin: 0; font-size: 2.2rem; letter-spacing: -1px; line-height: 1.1; }
         .city-title-wrapper p { margin: 6px 0 0 0; opacity: 0.85; font-size: 0.95rem; font-weight: 500; }
         
-        .city-kpis { display: flex; gap: 30px; }
-        .kpi-block { text-align: center; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 12px; backdrop-filter: blur(5px); }
+        .city-kpis { display: flex; gap: 20px; }
+        .kpi-block { text-align: center; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 12px; backdrop-filter: blur(5px); min-width: 100px; }
         .kpi-block .val { display: block; font-size: 1.8rem; font-weight: 800; line-height: 1.2; }
         .kpi-block .lbl { font-size: 0.7rem; text-transform: uppercase; font-weight: 700; opacity: 0.8; letter-spacing: 1px; }
 
-        /* TABLEAU LEADERBOARD */
-        .leaderboard-wrapper { overflow-x: auto; background: var(--card-bg); border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02); }
-        .leaderboard-table { width: 100%; border-collapse: collapse; text-align: left; }
+        /* TABLEAU LEADERBOARD - Optimisé pour le scroll PC */
+        .leaderboard-wrapper { 
+            display: flex; flex-direction: column; 
+            background: var(--card-bg); border-radius: 16px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02);
+            /* SCROLL INTERNE */
+            max-height: calc(100vh - 260px); 
+            overflow-y: auto; overflow-x: auto;
+        }
         
-        .leaderboard-table th { padding: 18px 15px; font-size: 0.75rem; font-weight: 800; color: #888; text-transform: uppercase; border-bottom: 2px solid #eee; cursor: pointer; transition: 0.2s; white-space: nowrap; background: #fff; position: sticky; top: 0; z-index: 10; letter-spacing: 0.5px; }
-        .leaderboard-table th:hover { color: var(--bordeaux); background: #fdfdfb; }
-        .leaderboard-table th.active-sort { color: var(--bordeaux); border-bottom: 2px solid var(--bordeaux); }
+        /* Design de la scrollbar sur PC */
+        .leaderboard-wrapper::-webkit-scrollbar { width: 8px; height: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-track { background: #f9f9f9; border-radius: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-thumb:hover { background: var(--bordeaux); }
+
+        .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; }
+        
+        /* Les en-têtes restent collés en haut du tableau pendant le scroll */
+        .leaderboard-table th { 
+            padding: 18px 15px; font-size: 0.75rem; font-weight: 800; color: #888; text-transform: uppercase; 
+            border-bottom: 2px solid #eee; cursor: pointer; transition: 0.2s; white-space: nowrap; 
+            background: #fff; position: sticky; top: 0; z-index: 10; letter-spacing: 0.5px; 
+        }
+        /* Petite ombre sous l'en-tête quand on scroll en dessous */
+        .leaderboard-table th::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 100%; height: 2px; background: #eee; }
+        
+        .leaderboard-table th:hover { color: var(--bordeaux); }
+        .leaderboard-table th.active-sort { color: var(--bordeaux); }
+        .leaderboard-table th.active-sort::after { background: var(--bordeaux); }
         .th-right { text-align: right; }
 
         .leaderboard-table td { padding: 15px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
@@ -97,11 +131,11 @@
         .rank-2 { color: #C0C0C0; font-size: 1.2rem; }
         .rank-3 { color: #CD7F32; font-size: 1.1rem; }
         
-        .td-name { font-weight: 700; color: var(--text-dark); font-size: 1rem; }
+        .td-name { font-weight: 700; color: var(--text-dark); font-size: 1rem; white-space: nowrap; }
         .td-stat { font-weight: 700; color: #555; text-align: right; font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
         .td-highlight { color: var(--bordeaux); font-weight: 800; font-size: 1.05rem; }
 
-        .empty-state { text-align: center; padding: 60px 20px; color: #888; }
+        .empty-state { margin: auto; text-align: center; padding: 60px 20px; color: #888; }
         .empty-state svg { width: 48px; height: 48px; color: #ddd; margin-bottom: 15px; }
         .empty-state p { margin: 0; font-size: 1.1rem; font-weight: 600; }
 
@@ -114,23 +148,39 @@
         @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
 
         /* ========================================= */
-        /* ---        RESPONSIVE MOBILE          --- */
+        /* --- RESPONSIVE MOBILE --- */
         /* ========================================= */
-        @media (max-width: 1000px) {
-            .container { grid-template-columns: 1fr; }
-            .global-panel { position: static; }
+        @media (max-width: 1024px) {
+            .container { 
+                display: flex; flex-direction: column-reverse; 
+                padding: 0 15px; gap: 20px; margin-bottom: 30px;
+            }
+            .global-panel { position: static; max-height: none; overflow-y: visible; }
             
             .header { padding: 15px; }
             .header h1 { font-size: 1.2rem; }
             .back-btn { font-size: 0.8rem; padding: 6px 12px; }
 
-            .filter-bar { flex-direction: column; align-items: stretch; padding: 15px; position: relative; }
-            .filter-group { justify-content: space-between; width: 100%; }
-            .search-wrapper { max-width: 60%; }
+            .filter-bar { flex-direction: column; align-items: stretch; padding: 15px; gap: 12px; }
+            .filter-group { flex-direction: column; align-items: stretch; width: 100%; gap: 6px; }
+            .search-wrapper { max-width: 100%; }
+            select { max-width: 100%; }
             
             .city-hero { flex-direction: column; text-align: center; gap: 20px; padding: 20px; }
-            .city-kpis { justify-content: center; width: 100%; }
-            .kpi-block { flex: 1; }
+            .city-title-wrapper h2 { font-size: 1.8rem; }
+            .city-kpis { justify-content: center; width: 100%; gap: 15px; }
+            .kpi-block { flex: 1; padding: 10px; }
+            .kpi-block .val { font-size: 1.5rem; }
+
+            /* Sur mobile, on annule le scroll interne pour utiliser le scroll naturel de la page */
+            .leaderboard-wrapper { max-height: none; overflow-y: visible; }
+            
+            /* L'en-tête du tableau vient se coller sous la barre de filtres (qui fait env 150px de haut sur mobile) */
+            .leaderboard-table th { top: 150px; padding: 15px 10px; font-size: 0.7rem; }
+            
+            .leaderboard-table td { padding: 12px 10px; font-size: 0.85rem; }
+            .td-name { font-size: 0.9rem; }
+            .td-highlight { font-size: 0.95rem; }
         }
     </style>
 </head>
@@ -149,7 +199,7 @@
     </div>
 
     <div class="filter-bar">
-        <div class="filter-group">
+        <div class="filter-group" style="flex-grow: 0;">
             <span class="filter-label">Grille</span>
             <select id="grid-select" onchange="loadGlobalStats()">
                 <option value="100">100m x 100m</option>
@@ -157,11 +207,11 @@
             </select>
         </div>
 
-        <div class="filter-group" style="flex-grow: 1; justify-content: flex-end;">
-            <span class="filter-label" style="margin-right: 5px;">Ville</span>
+        <div class="filter-group" style="justify-content: flex-end;">
+            <span class="filter-label">Rechercher une ville</span>
             <div class="search-wrapper">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input type="text" id="city-search" list="city-suggestions" placeholder="Rechercher une commune..." onchange="handleCitySearch()">
+                <input type="text" id="city-search" list="city-suggestions" placeholder="Saisissez le nom d'une commune..." onchange="handleCitySearch()">
                 <datalist id="city-suggestions"></datalist>
             </div>
         </div>
@@ -169,26 +219,20 @@
 
     <div class="container">
         
-        <!-- PANNEAU GAUCHE : STATS GLOBALES -->
+        <!-- PANNEAU GAUCHE -->
         <div class="global-panel">
             <div class="card">
                 <div class="card-title">👥 Villes les plus courues</div>
-                <ul class="top-list" id="top-users-list">
-                    <!-- Rempli par JS -->
-                </ul>
+                <ul class="top-list" id="top-users-list"></ul>
             </div>
-
             <div class="card">
                 <div class="card-title">🔥 Villes les plus actives</div>
-                <ul class="top-list" id="top-acts-list">
-                    <!-- Rempli par JS -->
-                </ul>
+                <ul class="top-list" id="top-acts-list"></ul>
             </div>
         </div>
 
-        <!-- PANNEAU DROITE : LEADERBOARD VILLE -->
+        <!-- PANNEAU DROITE -->
         <div class="city-panel">
-            
             <div class="city-hero" id="city-hero" style="display: none;">
                 <div class="city-title-wrapper">
                     <h2 id="current-city-name">Nantes</h2>
@@ -217,9 +261,7 @@
                             <th onclick="sortLeaderboard('activities')" id="th-activities" class="th-right">Total Activités</th>
                         </tr>
                     </thead>
-                    <tbody id="leaderboard-body">
-                        <!-- Rempli par JS -->
-                    </tbody>
+                    <tbody id="leaderboard-body"></tbody>
                 </table>
                 
                 <div id="empty-state" class="empty-state">
@@ -227,9 +269,7 @@
                     <p>Recherchez ou cliquez sur une ville pour afficher son classement.</p>
                 </div>
             </div>
-
         </div>
-
     </div>
 
     <script>
@@ -237,7 +277,6 @@
         let currentLeaderboard = [];
         let currentSort = 'percent';
 
-        // 1. Charger les statistiques globales et remplir les Top 10
         async function loadGlobalStats() {
             showLoader();
             const gridSize = document.getElementById('grid-select').value;
@@ -248,11 +287,8 @@
                 
                 if (data.cities) {
                     allCities = data.cities;
-                    
-                    // Remplir le menu déroulant intelligent (Datalist)
                     const dataList = document.getElementById('city-suggestions');
                     const currentSelection = document.getElementById('city-search').value;
-                    
                     const alphaCities = [...allCities].sort((a, b) => a.name.localeCompare(b.name));
                     
                     dataList.innerHTML = '';
@@ -268,22 +304,15 @@
                         selectCity(allCities[0].name);
                     }
 
-                    // Remplir Top 10 Users
                     const topUsers = [...allCities].sort((a, b) => b.users - a.users).slice(0, 10);
                     renderTopList('top-users-list', topUsers, 'users', 'athlètes');
 
-                    // Remplir Top 10 Activités
                     const topActs = [...allCities].sort((a, b) => b.activities - a.activities).slice(0, 10);
                     renderTopList('top-acts-list', topActs, 'activities', 'sorties');
                 }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                hideLoader();
-            }
+            } catch (e) { console.error(e); } finally { hideLoader(); }
         }
 
-        // Fonction utilitaire pour générer les listes
         function renderTopList(elementId, dataList, valueKey, suffix) {
             const ul = document.getElementById(elementId);
             ul.innerHTML = '';
@@ -300,16 +329,11 @@
             });
         }
 
-        // Recherche tolérante
         function handleCitySearch() {
             const inputVal = document.getElementById('city-search').value.trim().toLowerCase();
             if (!inputVal) return;
-
             let matchedCity = allCities.find(c => c.name.toLowerCase() === inputVal);
-            
-            if (!matchedCity) {
-                matchedCity = allCities.find(c => c.name.toLowerCase().includes(inputVal));
-            }
+            if (!matchedCity) matchedCity = allCities.find(c => c.name.toLowerCase().includes(inputVal));
 
             if (matchedCity) {
                 document.getElementById('city-search').value = matchedCity.name;
@@ -324,83 +348,56 @@
             loadCityLeaderboard(cityName);
         }
 
-        // 2. Charger le classement détaillé d'une ville
         async function loadCityLeaderboard(cityName = null) {
             const city = cityName || document.getElementById('city-search').value;
             const gridSize = document.getElementById('grid-select').value;
-            
             const table = document.getElementById('leaderboard-table');
             const emptyState = document.getElementById('empty-state');
             const cityHero = document.getElementById('city-hero');
             
             if (!city) {
-                cityHero.style.display = 'none';
-                table.style.display = 'none';
-                emptyState.style.display = 'block';
+                cityHero.style.display = 'none'; table.style.display = 'none'; emptyState.style.display = 'flex';
                 return;
             }
 
             showLoader();
-            
             try {
                 const res = await fetch(`/api/city_leaderboard?city=${encodeURIComponent(city)}&grid_size=${gridSize}`);
                 const data = await res.json();
-
                 if (data.leaderboard) {
                     currentLeaderboard = data.leaderboard;
-                    
                     document.getElementById('current-city-name').textContent = city;
                     document.getElementById('kpi-explorers').textContent = data.global_stats.total_explorers.toLocaleString();
                     document.getElementById('kpi-activities').textContent = data.global_stats.total_activities.toLocaleString();
-
-                    cityHero.style.display = 'flex';
-                    table.style.display = 'table';
-                    emptyState.style.display = 'none';
-                    
+                    cityHero.style.display = 'flex'; table.style.display = 'table'; emptyState.style.display = 'none';
                     renderLeaderboardTable();
                 }
-            } catch (e) {
-                console.error(e);
-            } finally {
-                hideLoader();
-            }
+            } catch (e) { console.error(e); } finally { hideLoader(); }
         }
 
-        // 3. Gérer le tri du tableau
         function sortLeaderboard(key) {
             currentSort = key;
-            
-            document.getElementById('th-percent').className = 'th-right';
-            document.getElementById('th-percent').textContent = 'Surface (%)';
-            document.getElementById('th-blocks').className = 'th-right';
-            document.getElementById('th-blocks').textContent = 'Blocs explorés';
-            document.getElementById('th-activities').className = 'th-right';
-            document.getElementById('th-activities').textContent = 'Total Activités';
+            document.getElementById('th-percent').className = 'th-right'; document.getElementById('th-percent').textContent = 'Surface (%)';
+            document.getElementById('th-blocks').className = 'th-right'; document.getElementById('th-blocks').textContent = 'Blocs explorés';
+            document.getElementById('th-activities').className = 'th-right'; document.getElementById('th-activities').textContent = 'Total Activités';
 
             const activeTh = document.getElementById(`th-${key}`);
             activeTh.classList.add('active-sort');
             activeTh.textContent = activeTh.textContent + ' ▾';
-
             renderLeaderboardTable();
         }
 
-        // 4. Afficher le tableau de classement
         function renderLeaderboardTable() {
             const tbody = document.getElementById('leaderboard-body');
             tbody.innerHTML = '';
-
             const sortedData = [...currentLeaderboard].sort((a, b) => {
-                if (b[currentSort] === a[currentSort]) {
-                    return b.blocks - a.blocks; // Départage par blocs
-                }
+                if (b[currentSort] === a[currentSort]) return b.blocks - a.blocks;
                 return b[currentSort] - a[currentSort];
             });
 
             sortedData.forEach((player, index) => {
                 const tr = document.createElement('tr');
-                
-                let rankVisual = `#${index + 1}`;
-                let rankClass = "td-rank";
+                let rankVisual = `#${index + 1}`; let rankClass = "td-rank";
                 if (index === 0) { rankVisual = "🥇"; rankClass += " rank-1"; }
                 if (index === 1) { rankVisual = "🥈"; rankClass += " rank-2"; }
                 if (index === 2) { rankVisual = "🥉"; rankClass += " rank-3"; }
@@ -419,10 +416,7 @@
         function showLoader() { document.getElementById('loader').style.display = 'flex'; }
         function hideLoader() { setTimeout(() => { document.getElementById('loader').style.display = 'none'; }, 200); }
 
-        document.addEventListener('DOMContentLoaded', () => {
-            loadGlobalStats();
-        });
-
+        document.addEventListener('DOMContentLoaded', () => { loadGlobalStats(); });
     </script>
 </body>
 </html>
