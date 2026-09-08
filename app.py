@@ -150,27 +150,37 @@ def callback():
     if res.status_code == 200:
         data = res.json()
         token = data.get('access_token')
-        athlete_id = data.get('athlete', {}).get('id')
         
-        # Sauvegarde dans la session (navigateur)
+        # Récupération des infos de l'athlète
+        athlete_info = data.get('athlete', {})
+        athlete_id = athlete_info.get('id')
+        firstname = athlete_info.get('firstname', '')
+        lastname = athlete_info.get('lastname', '')
+        # On fusionne le prénom et le nom
+        athlete_name = f"{firstname} {lastname}".strip()
+        
         session['access_token'] = token
         
-        # 2. Sauvegarde ou mise à jour dans Supabase
         if athlete_id and token and DB_URL:
             try:
                 engine = create_engine(DB_URL, poolclass=NullPool)
                 with engine.connect() as conn:
-                    # On insère avec first_login_date, ou on met à jour juste le reste si l'athlète existe
+                    # NOUVEAU : On ajoute athlete_name dans l'INSERT et l'UPDATE
                     query = text("""
-                        INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date)
-                        VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date, athlete_name)
+                        VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :ath_name)
                         ON CONFLICT (athlete_id) DO UPDATE 
                         SET access_token = EXCLUDED.access_token,
                             login_count = strava_users.login_count + 1,
-                            last_login_date = CURRENT_TIMESTAMP;
+                            last_login_date = CURRENT_TIMESTAMP,
+                            athlete_name = EXCLUDED.athlete_name;
                     """)
-                    conn.execute(query, {"ath_id": athlete_id, "token": token})
-                    conn.commit()  # Valide l'écriture dans la base
+                    conn.execute(query, {
+                        "ath_id": athlete_id, 
+                        "token": token, 
+                        "ath_name": athlete_name
+                    })
+                    conn.commit()
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
         
