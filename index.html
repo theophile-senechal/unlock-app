@@ -369,7 +369,20 @@
         document.getElementById('card-cells').style.display = mode === 'grid' ? 'block' : 'none';
         document.getElementById('grid-legend').style.display = mode === 'grid' ? 'flex' : 'none';
         document.getElementById('card-muni').style.display = mode === 'grid' ? 'block' : 'none';
-        renderData(); 
+        
+        // --- NOUVEAU : Forcer 250m au clic sur le bouton BLOCS ---
+        if (mode === 'grid') {
+            const gridSelect = document.getElementById('grid-size-select');
+            if (gridSelect.value !== "250") {
+                gridSelect.value = "250";
+                updateDashboard(); // Recharge les données en 250m
+            } else {
+                renderData();
+            }
+        } else {
+            renderData();
+        }
+        // ---------------------------------------------------------
         
         if(window.innerWidth < 1200) {
              document.getElementById('mobile-controls').classList.remove('mobile-visible');
@@ -579,7 +592,7 @@
             if (group.getLayers().length > 0) map.fitBounds(group.getBounds());
         }
     }
-    document.getElementById('grid-size-select').value = "250";
+
     updateDashboard();
 </script>
 </body>
