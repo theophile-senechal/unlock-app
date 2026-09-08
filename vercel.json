@@ -10,5 +10,15 @@
           "src": "/(.*)",
           "dest": "app.py"
       }
+  ],
+  "crons": [
+    {
+      "path": "/api/keep-alive",
+      "schedule": "0 10 * * *" 
+    },
+    {
+      "path": "/api/cleanup-users",
+      "schedule": "0 0 * * *" 
+    }
   ]
 }

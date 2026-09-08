@@ -114,19 +114,69 @@ def auth():
 def logout():
     token = session.get('access_token')
     if token:
+        try:
+            # 1. On dit à Strava de révoquer l'accès pour libérer la place
+            requests.post(
+                "https://www.strava.com/oauth/deauthorize",
+                headers={'Authorization': f'Bearer {token}'},
+                timeout=5
+            )
+        except Exception as e:
+            print(f"Erreur lors de la révocation Strava : {e}")
+
+        # 2. On nettoie tes caches locaux
         RAW_DATA_CACHE.pop(token, None)
         API_RESULT_CACHE.pop(token, None)
+    
+    # 3. On vide la session Flask
     session.clear()
     return redirect(url_for('login_page'))
 
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
-    res = requests.post("https://www.strava.com/oauth/token", data={'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET, 'code': code, 'grant_type': 'authorization_code'})
+    
+    # 1. Échange du code contre le token Strava
+    res = requests.post(
+        "https://www.strava.com/oauth/token", 
+        data={
+            'client_id': CLIENT_ID, 
+            'client_secret': CLIENT_SECRET, 
+            'code': code, 
+            'grant_type': 'authorization_code'
+        }
+    )
+    
     if res.status_code == 200:
-        session['access_token'] = res.json().get('access_token')
+        data = res.json()
+        token = data.get('access_token')
+        athlete_id = data.get('athlete', {}).get('id')
+        
+        # Sauvegarde dans la session (navigateur)
+        session['access_token'] = token
+        
+        # 2. Sauvegarde ou mise à jour dans Supabase
+        if athlete_id and token and DB_URL:
+            try:
+                engine = create_engine(DB_URL, poolclass=NullPool)
+                with engine.connect() as conn:
+                    # On insère avec first_login_date, ou on met à jour juste le reste si l'athlète existe
+                    query = text("""
+                        INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date)
+                        VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                        ON CONFLICT (athlete_id) DO UPDATE 
+                        SET access_token = EXCLUDED.access_token,
+                            login_count = strava_users.login_count + 1,
+                            last_login_date = CURRENT_TIMESTAMP;
+                    """)
+                    conn.execute(query, {"ath_id": athlete_id, "token": token})
+                    conn.commit()  # Valide l'écriture dans la base
+            except Exception as e:
+                print(f"Erreur d'enregistrement utilisateur: {e}")
+        
         return redirect('/')
-    return "Erreur auth"
+    
+    return "Erreur lors de l'authentification avec Strava"
 
 @app.route('/stats')
 def stats_page(): return render_template('stats.html') if 'access_token' in session else redirect(url_for('login_page'))
@@ -361,5 +411,69 @@ def get_activities_route():
     API_RESULT_CACHE[token][cache_key] = data
     return jsonify(data)
 
+@app.route('/api/keep-alive')
+def keep_alive():
+    if not DB_URL:
+        return jsonify({"error": "Database URL non configurée"}), 500
+    
+    try:
+        # On utilise NullPool comme dans le reste de ton code Vercel
+        engine = create_engine(DB_URL, poolclass=NullPool)
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return jsonify({"status": "Supabase is awake!"}), 200
+    except Exception as e:
+        print(f"Erreur Keep-Alive: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# ==========================================
+# ROUTE POUR NETTOYER LES INACTIFS (> 15 JOURS)
+# ==========================================
+@app.route('/api/cleanup-users')
+def cleanup_users():
+    # Sécurité : Vérifie que c'est bien Vercel (ou toi) qui appelle cette route
+    cron_secret = os.getenv('CRON_SECRET')
+    auth_header = request.headers.get('Authorization')
+    
+    if auth_header != f"Bearer {cron_secret}":
+        return jsonify({"error": "Non autorisé"}), 401
+
+    if not DB_URL:
+        return jsonify({"error": "Database URL non configurée"}), 500
+
+    try:
+        engine = create_engine(DB_URL, poolclass=NullPool)
+        revoked_count = 0
+        
+        with engine.connect() as conn:
+            # 1. Trouver les utilisateurs inactifs depuis plus de 15 jours
+            query = text("""
+                SELECT athlete_id, access_token 
+                FROM strava_users 
+                WHERE last_login_date < NOW() - INTERVAL '15 days'
+            """)
+            inactive_users = conn.execute(query).fetchall()
+
+            # 2. Révoquer et supprimer
+            for row in inactive_users:
+                try:
+                    requests.post(
+                        "https://www.strava.com/oauth/deauthorize",
+                        headers={'Authorization': f'Bearer {row.access_token}'},
+                        timeout=5
+                    )
+                except:
+                    pass # Si l'API Strava plante, on continue pour ne pas bloquer la boucle
+                
+                # On le retire de la base
+                conn.execute(text("DELETE FROM strava_users WHERE athlete_id = :id"), {"id": row.athlete_id})
+                conn.commit()
+                revoked_count += 1
+        
+        return jsonify({"status": "Nettoyage terminé", "comptes_supprimes": revoked_count}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
