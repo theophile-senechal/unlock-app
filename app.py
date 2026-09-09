@@ -374,31 +374,55 @@ def get_activities_route():
                     """)
                     
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
-                    
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
                             geom = json.loads(row.outline)
+
                             if geom['type'] == 'Polygon':
+                                # Coordonnées au format GeoJSON : [longitude, latitude]
                                 coords_lonlat = geom['coordinates'][0]
+
+                                # Géométrie Shapely pour les calculs
+                                poly_shapely = Polygon(coords_lonlat).buffer(0)
+
                             elif geom['type'] == 'MultiPolygon':
-                                coords_lonlat = geom['coordinates'][0][0]
+                                # On conserve l'ensemble des polygones de la commune
+                                from shapely.geometry import MultiPolygon
+
+                                polygons = []
+
+                                for polygon_coords in geom['coordinates']:
+                                    if polygon_coords and polygon_coords[0]:
+                                        polygon = Polygon(polygon_coords[0]).buffer(0)
+
+                                        if not polygon.is_empty:
+                                            polygons.append(polygon)
+
+                                if not polygons:
+                                    continue
+
+                                # Géométrie Shapely complète pour les calculs
+                                poly_shapely = MultiPolygon(polygons).buffer(0)
+
                             else:
                                 continue
-                            
-                            # Format pour Shapely (calculs) -> [lon, lat]
-                            poly_shapely = Polygon(coords_lonlat).buffer(0)
-                            
-                            # Format pour Leaflet (affichage) -> [lat, lon] inversé
-                            leaflet_outline = [[p[1], p[0]] for p in coords_lonlat]
-                            
+
                             identified_cities[row.nom_commune] = {
                                 "name": row.nom_commune,
                                 "area_m2": row.area_m2,
-                                "outline": leaflet_outline,
+
+                                # IMPORTANT :
+                                # On conserve le GeoJSON original pour Leaflet
+                                "outline": row.outline,
+
+                                # Géométrie Shapely utilisée uniquement pour les calculs
                                 "poly": poly_shapely
                             }
-                    if len(identified_cities) >= 70: break
 
+                    if len(identified_cities) >= 70:break
+
+
+                    
         except Exception as e:
             print(f"⚠️ Erreur Batch DB: {e}")
 
