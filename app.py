@@ -5,10 +5,15 @@ import json
 from flask import Flask, redirect, request, jsonify, session, render_template, url_for
 from dotenv import load_dotenv
 from datetime import datetime
-from shapely.geometry import Point, Polygon, shape
+# --- NOUVEAUX IMPORTS POUR LE TIER S ---
+from shapely.geometry import Point, Polygon, shape, LineString
 from shapely.prepared import prep
+import pyproj
+from shapely.ops import transform
+from collections import defaultdict
+# ---------------------------------------
 from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool  # <--- IMPORT INDISPENSABLE POUR VERCEL
+from sqlalchemy.pool import NullPool
 
 # 1. Configuration initiale
 load_dotenv()
@@ -16,9 +21,6 @@ app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
 
 # --- CONFIGURATION DATABASE (SUPABASE) ---
-# IMPORTANT : Sur Vercel, va dans Settings > Environment Variables
-# Ajoute une variable nommée "DATABASE_URL" et colle ton lien supabase dedans.
-# Ne laisse jamais ton mot de passe en clair dans le code !
 DB_URL = os.getenv('DATABASE_URL') 
 
 # Configuration Strava
@@ -65,7 +67,6 @@ def get_cells_from_polyline(pts, grid_size_deg):
     return cells
 
 def get_strava_activities_cached(token):
-    """Charge les activités une seule fois."""
     if token in RAW_DATA_CACHE: return RAW_DATA_CACHE[token]
     
     all_activities = []
@@ -115,48 +116,30 @@ def logout():
     token = session.get('access_token')
     if token:
         try:
-            # 1. On dit à Strava de révoquer l'accès pour libérer la place
-            requests.post(
-                "https://www.strava.com/oauth/deauthorize",
-                headers={'Authorization': f'Bearer {token}'},
-                timeout=5
-            )
+            requests.post("https://www.strava.com/oauth/deauthorize", headers={'Authorization': f'Bearer {token}'}, timeout=5)
         except Exception as e:
             print(f"Erreur lors de la révocation Strava : {e}")
-
-        # 2. On nettoie tes caches locaux
         RAW_DATA_CACHE.pop(token, None)
         API_RESULT_CACHE.pop(token, None)
     
-    # 3. On vide la session Flask
     session.clear()
     return redirect(url_for('login_page'))
 
 @app.route('/callback')
 def callback():
     code = request.args.get('code')
-    
-    # 1. Échange du code contre le token Strava
     res = requests.post(
         "https://www.strava.com/oauth/token", 
-        data={
-            'client_id': CLIENT_ID, 
-            'client_secret': CLIENT_SECRET, 
-            'code': code, 
-            'grant_type': 'authorization_code'
-        }
+        data={'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET, 'code': code, 'grant_type': 'authorization_code'}
     )
     
     if res.status_code == 200:
         data = res.json()
         token = data.get('access_token')
-        
-        # Récupération des infos de l'athlète
         athlete_info = data.get('athlete', {})
         athlete_id = athlete_info.get('id')
         firstname = athlete_info.get('firstname', '')
         lastname = athlete_info.get('lastname', '')
-        # On fusionne le prénom et le nom
         athlete_name = f"{firstname} {lastname}".strip()
         
         session['access_token'] = token
@@ -165,7 +148,6 @@ def callback():
             try:
                 engine = create_engine(DB_URL, poolclass=NullPool)
                 with engine.connect() as conn:
-                    # NOUVEAU : On ajoute athlete_name dans l'INSERT et l'UPDATE
                     query = text("""
                         INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date, athlete_name)
                         VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :ath_name)
@@ -175,11 +157,7 @@ def callback():
                             last_login_date = CURRENT_TIMESTAMP,
                             athlete_name = EXCLUDED.athlete_name;
                     """)
-                    conn.execute(query, {
-                        "ath_id": athlete_id, 
-                        "token": token, 
-                        "ath_name": athlete_name
-                    })
+                    conn.execute(query, {"ath_id": athlete_id, "token": token, "ath_name": athlete_name})
                     conn.commit()
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
@@ -207,12 +185,10 @@ def get_stats_history():
     grid_meters = int(request.args.get('grid_size', 100))
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
-
     cache_key = f"stats_{grid_meters}_{sel_year}_{sel_sport}"
     
     if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
-    if cache_key in API_RESULT_CACHE[token]:
-        return jsonify(API_RESULT_CACHE[token][cache_key])
+    if cache_key in API_RESULT_CACHE[token]: return jsonify(API_RESULT_CACHE[token][cache_key])
 
     activities = get_strava_activities_cached(token)
     grid_size_deg = grid_meters / 111320
@@ -260,8 +236,7 @@ def get_stats_history():
 
     result = {
         "labels": labels, "conquest": conquest, "exploration": explore, "routine": routine,
-        "total_blocks": total_blocks,
-        "available_years": sorted(list(available_years), reverse=True),
+        "total_blocks": total_blocks, "available_years": sorted(list(available_years), reverse=True),
         "available_sports": sorted(list(available_sports))
     }
 
@@ -274,35 +249,26 @@ def get_activities_route():
     if not token: return jsonify({"error": "Login required"}), 401
 
     athlete_id = None
-    
-    # --- MISE À JOUR SILENCIEUSE ET RÉCUPÉRATION DE L'ID ---
     if DB_URL:
         try:
             engine = create_engine(DB_URL, poolclass=NullPool)
             with engine.connect() as conn:
-                # NOUVEAU : On utilise RETURNING pour récupérer l'athlete_id en même temps !
                 res = conn.execute(
                     text("UPDATE strava_users SET last_login_date = CURRENT_TIMESTAMP WHERE access_token = :token RETURNING athlete_id"), 
                     {"token": token}
                 ).fetchone()
-                
-                if res:
-                    athlete_id = res[0]
+                if res: athlete_id = res[0]
                 conn.commit()
         except Exception as e:
             print(f"Erreur màj silencieuse: {e}")
-    # --------------------------------------------------------------
 
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
     grid_meters = int(request.args.get('grid_size', 100))
-    
     cache_key = f"act_{grid_meters}_{sel_year}_{sel_sport}"
-    if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
     
-    # Si les données sont déjà en cache, le score n'a pas changé, on gagne du temps !
-    if cache_key in API_RESULT_CACHE[token]:
-        return jsonify(API_RESULT_CACHE[token][cache_key])
+    if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
+    if cache_key in API_RESULT_CACHE[token]: return jsonify(API_RESULT_CACHE[token][cache_key])
 
     activities = get_strava_activities_cached(token)
     grid_size_deg = grid_meters / 111320
@@ -314,8 +280,12 @@ def get_activities_route():
     }
     
     grid_store = {}
+    
+    # Préparation pour les dimensions (Tier S)
+    project = pyproj.Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True).transform
+    current_year, current_week, _ = datetime.now().isocalendar()
+    current_period = f"{current_year}-W{current_week:02d}"
 
-    # NOUVEAU : On utilise enumerate() pour donner un index (idx) unique à chaque activité
     for idx, act in enumerate(activities):
         dt = datetime.strptime(act['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
         y_str = str(dt.year)
@@ -334,11 +304,10 @@ def get_activities_route():
 
             for b in blocks:
                 if b not in grid_store:
-                    # NOUVEAU : On ajoute un "set" (ensemble) pour stocker les IDs d'activités
                     grid_store[b] = {'cnt': 0, 'first': act_ym, 'last': act_ym, 'acts': set()}
                 
                 grid_store[b]['cnt'] += 1
-                grid_store[b]['acts'].add(idx)  # On mémorise que cette activité est passée ici
+                grid_store[b]['acts'].add(idx) 
                 
                 if act_ym < grid_store[b]['first']: grid_store[b]['first'] = act_ym
                 if act_ym > grid_store[b]['last']: grid_store[b]['last'] = act_ym
@@ -351,8 +320,7 @@ def get_activities_route():
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
 
-    # --- CALCUL DES VILLES ET ENREGISTREMENT DES SCORES ---
-    
+    # --- CALCUL DES VILLES ET ENREGISTREMENT DES SCORES MULTIDIMENSIONNELS ---
     if grid_store and DB_URL:
         identified_cities = {}
         probe_points = set()
@@ -396,13 +364,12 @@ def get_activities_route():
                                 "poly_obj": Polygon(inverted_outline) 
                             }
                     if len(identified_cities) >= 70: break
-
         except Exception as e:
             print(f"⚠️ Erreur Batch DB: {e}")
 
-        # 3. Calcul précis des statistiques
+        # 3. Calcul précis et MULTIDIMENSIONNEL
         final_cities_list = []
-        scores_to_save = [] # NOUVEAU : Liste pour stocker nos données avant envoi
+        scores_to_save = []
         
         for city_name, city_data in identified_cities.items():
             try:
@@ -410,41 +377,92 @@ def get_activities_route():
                 prepared_poly = prep(poly_geom)
                 min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
                 
-                count_inside = 0
-                city_acts = set() # NOUVEAU : Pour fusionner toutes les activités de cette ville
+                # Regrouper les blocs et activités pour cette ville
+                city_blocks = set()
+                city_acts_indices = set()
                 
-                # NOUVEAU : On récupère aussi les données g_data (qui contient notre set d'activités)
                 for (clat, clon), g_data in grid_store.items():
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
                         if prepared_poly.contains(Point(clat, clon)):
-                            count_inside += 1
-                            city_acts.update(g_data['acts']) # On ajoute les IDs d'activités au set
+                            city_blocks.add((clat, clon))
+                            city_acts_indices.update(g_data['acts'])
                 
-                if count_inside > 0:
-                    area_conquered_m2 = count_inside * (grid_meters**2)
-                    pct = (area_conquered_m2 / city_data['area_m2']) * 100
-                    final_pct = round(min(pct, 100), 2)
-                    activities_count = len(city_acts) # NOUVEAU : Le compte exact sans doublon !
-                    
-                    final_cities_list.append({
-                        "name": city_name,
-                        "outline": city_data['outline'],
-                        "stats": {
-                            "blocks": count_inside,
-                            "percent": final_pct,
-                            "activities": activities_count
-                        }
-                    })
+                if not city_blocks: continue
+                
+                # Stats Globales pour l'affichage Carte (Frontend)
+                count_inside = len(city_blocks)
+                area_conquered_m2 = count_inside * (grid_meters**2)
+                final_pct = round(min((area_conquered_m2 / city_data['area_m2']) * 100, 100), 2)
+                
+                final_cities_list.append({
+                    "name": city_name,
+                    "outline": city_data['outline'],
+                    "stats": {
+                        "blocks": count_inside,
+                        "percent": final_pct,
+                        "activities": len(city_acts_indices)
+                    }
+                })
 
-                    # NOUVEAU : Si on a identifié l'utilisateur, on prépare la sauvegarde de son score
-                    if athlete_id:
+                if not athlete_id: continue
+
+                # --- NOUVEAU TIER S : Calcul par Sport et par Période + Kilomètres ---
+                # stats_dim[sport][period] = {'blocks': set(), 'acts': set(), 'dist': 0.0}
+                stats_dim = defaultdict(lambda: defaultdict(lambda: {'blocks': set(), 'acts': set(), 'dist': 0.0}))
+                
+                for act_idx in city_acts_indices:
+                    # On retrouve l'activité via son index global
+                    # Attention: 'data["coords"]' contient les points UNIQUEMENT SI elle a passé les filtres actuels de la carte
+                    # C'est pourquoi on relit dans 'activities' pour la BDD globale
+                    act = activities[act_idx]
+                    sport = act['type']
+                    
+                    dt_act = datetime.strptime(act['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+                    act_year, act_week, _ = dt_act.isocalendar()
+                    act_period = f"{act_year}-W{act_week:02d}"
+                    is_current_week = (act_period == current_period)
+
+                    # --- 1. Calcul de la distance dans la ville ---
+                    act_pts = polyline.decode(act['polyline'])
+                    line = LineString([(lon, lat) for lat, lon in act_pts])
+                    dist_km = 0.0
+                    try:
+                        line_inside = line.intersection(poly_geom)
+                        if not line_inside.is_empty:
+                            line_meters = transform(project, line_inside)
+                            dist_km = line_meters.length / 1000.0
+                    except: pass # Ignore les géométries complexes défaillantes
+
+                    # --- 2. Déterminer les blocs touchés par CETTE activité dans CETTE ville ---
+                    act_blocks_all = get_cells_from_polyline(act_pts, grid_size_deg)
+                    act_blocks_in_city = act_blocks_all.intersection(city_blocks)
+
+                    # --- 3. On dispatch dans les catégories ---
+                    keys_to_update = [('all', 'all'), (sport, 'all')]
+                    if is_current_week:
+                        keys_to_update.extend([('all', current_period), (sport, current_period)])
+                        
+                    for k_sp, k_per in keys_to_update:
+                        stats_dim[k_sp][k_per]['blocks'].update(act_blocks_in_city)
+                        stats_dim[k_sp][k_per]['acts'].add(act_idx)
+                        stats_dim[k_sp][k_per]['dist'] += dist_km
+
+                # Conversion pour Supabase
+                for sp, periods in stats_dim.items():
+                    for per, s_data in periods.items():
+                        b_count = len(s_data['blocks'])
+                        p_val = round(min(((b_count * (grid_meters**2)) / city_data['area_m2']) * 100, 100), 2)
+                        
                         scores_to_save.append({
                             "ath_id": athlete_id,
                             "c_name": city_name,
                             "g_size": grid_meters,
-                            "b_count": count_inside,
-                            "pct": final_pct,
-                            "act_count": activities_count
+                            "sport": sp,
+                            "period": per,
+                            "b_count": b_count,
+                            "pct": p_val,
+                            "act_count": len(s_data['acts']),
+                            "dist_km": round(s_data['dist'], 2)
                         })
 
             except Exception as e:
@@ -452,198 +470,147 @@ def get_activities_route():
 
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
 
-        # --- NOUVEAU : ENVOI DES SCORES VERS SUPABASE ---
         if scores_to_save:
             try:
                 engine = create_engine(DB_URL, poolclass=NullPool)
                 with engine.connect() as conn:
-                    # L'UPSERT magique
+                    # UPSERT multi-dimensions
                     upsert_query = text("""
-                        INSERT INTO city_scores (athlete_id, city_name, grid_size, blocks_count, percent, activities_count, last_updated)
-                        VALUES (:ath_id, :c_name, :g_size, :b_count, :pct, :act_count, CURRENT_TIMESTAMP)
-                        ON CONFLICT (athlete_id, city_name, grid_size) DO UPDATE 
+                        INSERT INTO city_scores (athlete_id, city_name, grid_size, sport, period, blocks_count, percent, activities_count, distance_km, last_updated)
+                        VALUES (:ath_id, :c_name, :g_size, :sport, :period, :b_count, :pct, :act_count, :dist_km, CURRENT_TIMESTAMP)
+                        ON CONFLICT (athlete_id, city_name, grid_size, sport, period) DO UPDATE 
                         SET blocks_count = EXCLUDED.blocks_count,
                             percent = EXCLUDED.percent,
                             activities_count = EXCLUDED.activities_count,
+                            distance_km = EXCLUDED.distance_km,
                             last_updated = CURRENT_TIMESTAMP;
                     """)
-                    # On envoie toutes les villes d'un seul coup
                     for score in scores_to_save:
                         conn.execute(upsert_query, score)
                     conn.commit()
             except Exception as e:
-                print(f"Erreur sauvegarde scores: {e}")
-        # ------------------------------------------------
+                print(f"Erreur sauvegarde scores Supabase: {e}")
 
     API_RESULT_CACHE[token][cache_key] = data
     return jsonify(data)
 
 @app.route('/api/keep-alive')
 def keep_alive():
-    if not DB_URL:
-        return jsonify({"error": "Database URL non configurée"}), 500
-    
+    if not DB_URL: return jsonify({"error": "Database URL non configurée"}), 500
     try:
-        # On utilise NullPool comme dans le reste de ton code Vercel
         engine = create_engine(DB_URL, poolclass=NullPool)
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         return jsonify({"status": "Supabase is awake!"}), 200
     except Exception as e:
-        print(f"Erreur Keep-Alive: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ==========================================
-# ROUTE POUR NETTOYER LES INACTIFS (> 15 JOURS)
-# ==========================================
 @app.route('/api/cleanup-users')
 def cleanup_users():
-    # Sécurité : Vérifie que c'est bien Vercel (ou toi) qui appelle cette route
     cron_secret = os.getenv('CRON_SECRET')
     auth_header = request.headers.get('Authorization')
-    
-    if auth_header != f"Bearer {cron_secret}":
-        return jsonify({"error": "Non autorisé"}), 401
-
-    if not DB_URL:
-        return jsonify({"error": "Database URL non configurée"}), 500
+    if auth_header != f"Bearer {cron_secret}": return jsonify({"error": "Non autorisé"}), 401
+    if not DB_URL: return jsonify({"error": "Database URL non configurée"}), 500
 
     try:
         engine = create_engine(DB_URL, poolclass=NullPool)
         revoked_count = 0
-        
         with engine.connect() as conn:
-            # 1. Trouver les utilisateurs inactifs depuis plus de 15 jours
-            query = text("""
-                SELECT athlete_id, access_token 
-                FROM strava_users 
-                WHERE last_login_date < NOW() - INTERVAL '15 days'
-            """)
+            query = text("SELECT athlete_id, access_token FROM strava_users WHERE last_login_date < NOW() - INTERVAL '15 days'")
             inactive_users = conn.execute(query).fetchall()
 
-            # 2. Révoquer et supprimer
             for row in inactive_users:
-                try:
-                    requests.post(
-                        "https://www.strava.com/oauth/deauthorize",
-                        headers={'Authorization': f'Bearer {row.access_token}'},
-                        timeout=5
-                    )
-                except:
-                    pass # Si l'API Strava plante, on continue pour ne pas bloquer la boucle
-                
-                # On le retire de la base
+                try: requests.post("https://www.strava.com/oauth/deauthorize", headers={'Authorization': f'Bearer {row.access_token}'}, timeout=5)
+                except: pass 
                 conn.execute(text("DELETE FROM strava_users WHERE athlete_id = :id"), {"id": row.athlete_id})
                 conn.commit()
                 revoked_count += 1
-        
         return jsonify({"status": "Nettoyage terminé", "comptes_supprimes": revoked_count}), 200
-
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
 # ==========================================
-# ROUTES POUR LE LEADERBOARD COMMUNAUTAIRE
+# ROUTES LEADERBOARD COMMUNAUTAIRE
 # ==========================================
 
 @app.route('/leaderboard')
 def leaderboard_page():
-    """Route pour afficher la page HTML du leaderboard."""
-    if 'access_token' not in session:
-        return redirect(url_for('login_page'))
+    if 'access_token' not in session: return redirect(url_for('login_page'))
     return render_template('leaderboard.html')
 
 @app.route('/api/global_stats_leaderboard')
 def get_global_stats_leaderboard():
-    """Route qui renvoie le classement des villes (les plus courues, etc.)"""
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
     
     grid_size = request.args.get('grid_size', 250, type=int)
-    
-    if not DB_URL:
-        return jsonify({"error": "Base de données non configurée"}), 500
+    if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
 
     try:
         engine = create_engine(DB_URL, poolclass=NullPool)
         with engine.connect() as conn:
-            # On récupère toutes les villes, triées par nombre de joueurs
+            # NOUVEAU TIER S : On filtre spécifiquement sur sport='all' et period='all' pour ne pas fausser le global !
             query = text("""
                 SELECT city_name, 
                        COUNT(DISTINCT athlete_id) as users_count, 
                        SUM(activities_count) as total_acts
                 FROM city_scores
-                WHERE grid_size = :grid_size
+                WHERE grid_size = :grid_size AND sport = 'all' AND period = 'all'
                 GROUP BY city_name
                 ORDER BY users_count DESC
             """)
             res = conn.execute(query, {"grid_size": grid_size}).fetchall()
             
-            cities_data = []
-            for row in res:
-                cities_data.append({
-                    "name": row.city_name,
-                    "users": row.users_count,
-                    "activities": int(row.total_acts) if row.total_acts else 0
-                })
-            
+            cities_data = [{"name": r.city_name, "users": r.users_count, "activities": int(r.total_acts) if r.total_acts else 0} for r in res]
             return jsonify({"cities": cities_data}), 200
-
     except Exception as e:
         print(f"Erreur global_stats_leaderboard: {e}")
         return jsonify({"error": str(e)}), 500
 
-
 @app.route('/api/city_leaderboard')
 def get_city_leaderboard():
-    """Route qui renvoie le classement de tous les joueurs pour une ville donnée."""
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
     city = request.args.get('city')
     grid_size = request.args.get('grid_size', 250, type=int)
 
-    if not city:
-        return jsonify({"error": "Nom de la ville manquant"}), 400
-        
-    if not DB_URL:
-        return jsonify({"error": "Base de données non configurée"}), 500
+    if not city: return jsonify({"error": "Nom de la ville manquant"}), 400
+    if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
 
     try:
         engine = create_engine(DB_URL, poolclass=NullPool)
         with engine.connect() as conn:
-            
-            # 1. Calculer les statistiques globales de cette ville précise
+            # NOUVEAU TIER S : Filtre 'all' / 'all' pour les stats globales
             stats_query = text("""
                 SELECT COUNT(DISTINCT athlete_id) as total_users, SUM(activities_count) as total_activities
                 FROM city_scores
-                WHERE city_name = :city AND grid_size = :grid_size
+                WHERE city_name = :city AND grid_size = :grid_size AND sport = 'all' AND period = 'all'
             """)
             stats_res = conn.execute(stats_query, {"city": city, "grid_size": grid_size}).fetchone()
             
             total_users = stats_res.total_users if stats_res and stats_res.total_users else 0
             total_activities = int(stats_res.total_activities) if stats_res and stats_res.total_activities else 0
 
-            # 2. Récupérer TOUS les joueurs pour cette ville avec une jointure
-            # Le tri par défaut est fait sur le pourcentage
+            # NOUVEAU TIER S : On récupère aussi distance_km
             board_query = text("""
-                SELECT u.athlete_name, c.percent, c.blocks_count, c.activities_count
+                SELECT u.athlete_name, c.percent, c.blocks_count, c.activities_count, c.distance_km
                 FROM city_scores c
                 JOIN strava_users u ON c.athlete_id = u.athlete_id
-                WHERE c.city_name = :city AND c.grid_size = :grid_size
+                WHERE c.city_name = :city AND c.grid_size = :grid_size AND c.sport = 'all' AND c.period = 'all'
                 ORDER BY c.percent DESC, c.blocks_count DESC
             """)
             board_res = conn.execute(board_query, {"city": city, "grid_size": grid_size}).fetchall()
             
             leaderboard = []
-            for idx, row in enumerate(board_res):
-                # Si le joueur n'a pas encore de nom (pas reconnecté récemment)
-                name = row.athlete_name if row.athlete_name else f"Explorateur Anonyme"
+            for row in board_res:
+                name = row.athlete_name if row.athlete_name else "Explorateur Anonyme"
                 leaderboard.append({
                     "name": name,
                     "percent": row.percent,
                     "blocks": row.blocks_count,
-                    "activities": row.activities_count
+                    "activities": row.activities_count,
+                    "distance_km": row.distance_km # Intégré pour ton futur frontend !
                 })
 
             return jsonify({
