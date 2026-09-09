@@ -218,10 +218,6 @@
                         <span class="lbl">Coureurs</span>
                     </div>
                     <div class="kpi-block">
-                        <span class="val" id="kpi-distance">-</span>
-                        <span class="lbl">Km Parcourus</span>
-                    </div>
-                    <div class="kpi-block">
                         <span class="val" id="kpi-activities">-</span>
                         <span class="lbl">Sorties</span>
                     </div>
@@ -236,7 +232,6 @@
                             <th>Athlète</th>
                             <th onclick="sortLeaderboard('percent')" id="th-percent" class="active-sort th-right">Surface (%) ▾</th>
                             <th onclick="sortLeaderboard('blocks')" id="th-blocks" class="th-right">Blocs</th>
-                            <th onclick="sortLeaderboard('distance_km')" id="th-distance_km" class="th-right">Distance (km)</th>
                             <th onclick="sortLeaderboard('activities')" id="th-activities" class="th-right">Activités</th>
                         </tr>
                     </thead>
@@ -389,9 +384,6 @@
                     document.getElementById('current-city-name').textContent = city;
                     document.getElementById('kpi-explorers').textContent = data.global_stats.total_explorers.toLocaleString();
                     document.getElementById('kpi-activities').textContent = data.global_stats.total_activities.toLocaleString();
-                    
-                    const totalKm = currentLeaderboard.reduce((sum, player) => sum + player.distance_km, 0);
-                    document.getElementById('kpi-distance').textContent = Math.round(totalKm).toLocaleString();
 
                     cityHero.style.display = 'flex'; table.style.display = 'table'; emptyState.style.display = 'none';
                     renderLeaderboardTable();
@@ -406,7 +398,6 @@
             document.getElementById('th-percent').className = 'th-right'; document.getElementById('th-percent').textContent = 'Surface (%)';
             document.getElementById('th-blocks').className = 'th-right'; document.getElementById('th-blocks').textContent = 'Blocs explorés';
             document.getElementById('th-activities').className = 'th-right'; document.getElementById('th-activities').textContent = 'Total Activités';
-            document.getElementById('th-distance_km').className = 'th-right'; document.getElementById('th-distance_km').textContent = 'Distance (km)';
 
             const activeTh = document.getElementById(`th-${key}`);
             activeTh.classList.add('active-sort');
@@ -435,7 +426,6 @@
                     <td class="td-name">${player.name}</td>
                     <td class="td-stat ${currentSort === 'percent' ? 'td-highlight' : ''}">${player.percent}%</td>
                     <td class="td-stat ${currentSort === 'blocks' ? 'td-highlight' : ''}">${player.blocks.toLocaleString()}</td>
-                    <td class="td-stat ${currentSort === 'distance_km' ? 'td-highlight' : ''}">${player.distance_km}</td>
                     <td class="td-stat ${currentSort === 'activities' ? 'td-highlight' : ''}">${player.activities.toLocaleString()}</td>
                 `;
                 tbody.appendChild(tr);
