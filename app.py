@@ -373,7 +373,7 @@ def get_activities_route():
                         WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
                     """)
                     
-                    result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
+                    resresult_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
@@ -385,7 +385,10 @@ def get_activities_route():
                             else:
                                 continue
                             
+                            # Format pour Shapely (calculs) -> [lon, lat]
                             poly_shapely = Polygon(coords_lonlat).buffer(0)
+                            
+                            # Format pour Leaflet (affichage) -> [lat, lon] inversé
                             leaflet_outline = [[p[1], p[0]] for p in coords_lonlat]
                             
                             identified_cities[row.nom_commune] = {
