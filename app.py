@@ -593,14 +593,16 @@ def get_global_stats_leaderboard():
     try:
         engine = create_engine(DB_URL, poolclass=NullPool)
         with engine.connect() as conn:
+            # On ajoute SUM(blocks_count) et on affine le ORDER BY en SQL
             query = text("""
                 SELECT city_name, 
                        COUNT(DISTINCT athlete_id) as users_count, 
-                       SUM(activities_count) as total_acts
+                       SUM(activities_count) as total_acts,
+                       SUM(blocks_count) as total_blocks
                 FROM city_scores
                 WHERE grid_size = :grid_size AND sport = :sport AND period = :period
                 GROUP BY city_name
-                ORDER BY users_count DESC
+                ORDER BY users_count DESC, total_blocks DESC
             """)
             res = conn.execute(query, {"grid_size": grid_size, "sport": sport_filter, "period": period_filter}).fetchall()
             
@@ -609,10 +611,10 @@ def get_global_stats_leaderboard():
                 cities_data.append({
                     "name": row.city_name,
                     "users": row.users_count,
-                    "activities": int(row.total_acts) if row.total_acts else 0
+                    "activities": int(row.total_acts) if row.total_acts else 0,
+                    "blocks": int(row.total_blocks) if row.total_blocks else 0 # On transmet les blocs cumulés
                 })
             
-            # Récupération dynamique des sports pour le menu déroulant du leaderboard
             sport_query = text("SELECT DISTINCT sport FROM city_scores WHERE sport != 'all'")
             sports_res = conn.execute(sport_query).fetchall()
             available_sports = [r.sport for r in sports_res]
@@ -622,7 +624,6 @@ def get_global_stats_leaderboard():
     except Exception as e:
         print(f"Erreur global_stats_leaderboard: {e}")
         return jsonify({"error": str(e)}), 500
-
 
 @app.route('/api/city_leaderboard')
 def get_city_leaderboard():
