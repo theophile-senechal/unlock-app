@@ -169,7 +169,6 @@
             </select>
         </div>
         
-        <!-- NOUVEAU : Filtre Période -->
         <div class="filter-group">
             <span class="filter-label">Période</span>
             <select id="period-select" onchange="loadGlobalStats()">
@@ -178,13 +177,11 @@
             </select>
         </div>
 
-        <!-- NOUVEAU : Filtre Sport -->
         <div class="filter-group">
             <span class="filter-label">Sport</span>
             <select id="sport-select" onchange="loadGlobalStats()">
                 <option value="all" selected>Tous les sports</option>
-                <option value="Run">Course à pied</option>
-                <option value="Ride">Vélo</option>
+                <!-- Les autres sports seront insérés ici par JS -->
             </select>
         </div>
 
@@ -220,7 +217,6 @@
                         <span class="val" id="kpi-explorers">-</span>
                         <span class="lbl">Coureurs</span>
                     </div>
-                    <!-- NOUVEAU : KPI Distance -->
                     <div class="kpi-block">
                         <span class="val" id="kpi-distance">-</span>
                         <span class="lbl">Km Parcourus</span>
@@ -240,7 +236,6 @@
                             <th>Athlète</th>
                             <th onclick="sortLeaderboard('percent')" id="th-percent" class="active-sort th-right">Surface (%) ▾</th>
                             <th onclick="sortLeaderboard('blocks')" id="th-blocks" class="th-right">Blocs</th>
-                            <!-- NOUVEAU : Colonne Distance -->
                             <th onclick="sortLeaderboard('distance_km')" id="th-distance_km" class="th-right">Distance (km)</th>
                             <th onclick="sortLeaderboard('activities')" id="th-activities" class="th-right">Activités</th>
                         </tr>
@@ -257,11 +252,19 @@
     </div>
 
     <script>
+        const SPORT_TRANSLATIONS = {
+            'Run': 'Course à pied', 'Ride': 'Vélo', 'Swim': 'Natation', 'Hike': 'Randonnée',
+            'Walk': 'Marche', 'AlpineSki': 'Ski Alpin', 'BackcountrySki': 'Ski de Rando',
+            'WeightTraining': 'Musculation', 'Workout': 'Entraînement', 'VirtualRide': 'Vélo Virtuel',
+            'VirtualRun': 'Course Virtuelle', 'GravelRide': 'Gravel', 'TrailRun': 'Trail',
+            'E-BikeRide': 'Vélo Électrique', 'Velomobile': 'Vélomobile', 'NordicSki': 'Ski de Fond',
+            'Snowshoe': 'Raquettes'
+        };
+
         let allCities = [];
         let currentLeaderboard = [];
         let currentSort = 'percent';
 
-        // Helper pour récupérer tous les filtres actuels
         function getFilters() {
             return {
                 gridSize: document.getElementById('grid-select').value,
@@ -275,10 +278,26 @@
             const filters = getFilters();
             
             try {
-                // NOUVEAU : On envoie la période et le sport à l'API
                 const res = await fetch(`/api/global_stats_leaderboard?grid_size=${filters.gridSize}&period=${filters.period}&sport=${filters.sport}`);
                 const data = await res.json();
                 
+                // PEUPLER DYNAMIQUEMENT LE MENU DES SPORTS
+                if (data.available_sports) {
+                    const sportSelect = document.getElementById('sport-select');
+                    const currentSport = sportSelect.value;
+                    
+                    while (sportSelect.options.length > 1) { sportSelect.remove(1); }
+                    
+                    data.available_sports.forEach(code => {
+                        let opt = document.createElement('option');
+                        opt.value = code;
+                        const translatedName = SPORT_TRANSLATIONS[code] ? SPORT_TRANSLATIONS[code] : code;
+                        opt.textContent = translatedName;
+                        if (code === currentSport) opt.selected = true;
+                        sportSelect.appendChild(opt);
+                    });
+                }
+
                 if (data.cities) {
                     allCities = data.cities;
                     const dataList = document.getElementById('city-suggestions');
@@ -297,7 +316,6 @@
                     } else if (allCities.length > 0) {
                         selectCity(allCities[0].name);
                     } else {
-                        // Si aucun résultat pour ce filtre (ex: personne n'a couru cette semaine)
                         document.getElementById('city-hero').style.display = 'none';
                         document.getElementById('leaderboard-table').style.display = 'none';
                         document.getElementById('empty-state').style.display = 'flex';
@@ -363,7 +381,6 @@
 
             showLoader();
             try {
-                // NOUVEAU : On passe la période et le sport
                 const res = await fetch(`/api/city_leaderboard?city=${encodeURIComponent(city)}&grid_size=${filters.gridSize}&period=${filters.period}&sport=${filters.sport}`);
                 const data = await res.json();
                 
@@ -373,7 +390,6 @@
                     document.getElementById('kpi-explorers').textContent = data.global_stats.total_explorers.toLocaleString();
                     document.getElementById('kpi-activities').textContent = data.global_stats.total_activities.toLocaleString();
                     
-                    // Calcul du total des km pour la ville (somme de tous les joueurs)
                     const totalKm = currentLeaderboard.reduce((sum, player) => sum + player.distance_km, 0);
                     document.getElementById('kpi-distance').textContent = Math.round(totalKm).toLocaleString();
 
@@ -403,7 +419,7 @@
             tbody.innerHTML = '';
             
             const sortedData = [...currentLeaderboard].sort((a, b) => {
-                if (b[currentSort] === a[currentSort]) return b.blocks - a.blocks; // Départage par blocs
+                if (b[currentSort] === a[currentSort]) return b.blocks - a.blocks;
                 return b[currentSort] - a[currentSort];
             });
 
