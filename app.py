@@ -373,7 +373,7 @@ def get_activities_route():
                         WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
                     """)
                     
-                    resresult_proxy = conn.execute(query, {"wkt": wkt_multipoint})
+                    result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
