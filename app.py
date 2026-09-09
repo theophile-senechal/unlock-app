@@ -376,6 +376,11 @@ def get_activities_route():
                         WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
                     """)
                     
+                    # FIX #1 : on exécute la requête paramétrée UNE SEULE FOIS
+                    # et on itère directement sur son résultat (result_proxy),
+                    # au lieu de relancer conn.execute(query) sans le paramètre :wkt
+                    # (ce qui provoquait une exception silencieuse et laissait
+                    # identified_cities vide).
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
                     for row in result_proxy:
@@ -391,6 +396,10 @@ def get_activities_route():
                             identified_cities[row.nom_commune] = {
                                 "name": row.nom_commune,
                                 "area_m2": row.area_m2,
+                                # FIX #2 : on stocke bien "outline" (utilisé plus bas
+                                # dans final_cities_list.append), qui n'était jamais
+                                # enregistré auparavant.
+                                "outline": row.outline,
                                 "poly": Polygon(coords).buffer(0)
                             }
                     if len(identified_cities) >= 70: break
@@ -403,6 +412,8 @@ def get_activities_route():
         
         for city_name, city_data in identified_cities.items():
             try:
+                # FIX #2 (suite) : la clé correcte est "poly", pas "poly_obj"
+                # (qui n'existait pas et déclenchait un KeyError silencieux).
                 poly_geom = city_data['poly']
                 prepared_poly = prep(poly_geom)
                 min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
@@ -412,11 +423,11 @@ def get_activities_route():
                 
                 for (clat, clon), acts_set in grid_store_db.items():
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                        # On passe bien (longitude, latitude) pour matcher le polygone
+                        # On passe (longitude, latitude) pour correspondre au polygone
                         if prepared_poly.contains(Point(clon, clat)):
                             city_blocks.add((clat, clon))
                             city_acts_indices.update(acts_set)
-                
+                    
                 if not city_blocks: continue
                 
                 count_inside = len(city_blocks)
@@ -615,6 +626,7 @@ def get_global_stats_leaderboard():
                     "activities": int(row.total_acts) if row.total_acts else 0
                 })
             
+            # Récupération dynamique des sports pour le menu déroulant du leaderboard
             sport_query = text("SELECT DISTINCT sport FROM city_scores WHERE sport != 'all'")
             sports_res = conn.execute(sport_query).fetchall()
             available_sports = [r.sport for r in sports_res]
