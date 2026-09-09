@@ -346,7 +346,7 @@ def get_activities_route():
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
 
-    # --- CALCUL DES VILLES ET ENREGISTREMENT MULTIDIMENSIONNEL (Sport / Période / Blocs) ---
+    # --- CALCUL DES VILLES ET ENREGISTREMENT MULTIDIMENSIONNEL ---
     
     if grid_store_db and DB_URL and athlete_id:
         identified_cities = {}
@@ -385,10 +385,7 @@ def get_activities_route():
                             else:
                                 continue
                             
-                            # Format pour Shapely [lon, lat]
                             poly_shapely = Polygon(coords_lonlat).buffer(0)
-                            
-                            # Format pour Leaflet inversé en [lat, lon]
                             leaflet_outline = [[p[1], p[0]] for p in coords_lonlat]
                             
                             identified_cities[row.nom_commune] = {
