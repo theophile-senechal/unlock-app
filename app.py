@@ -379,17 +379,23 @@ def get_activities_route():
                         if row.nom_commune not in identified_cities:
                             geom = json.loads(row.outline)
                             if geom['type'] == 'Polygon':
-                                coords = [[p[0], p[1]] for p in geom['coordinates'][0]]
+                                coords_lonlat = geom['coordinates'][0]
                             elif geom['type'] == 'MultiPolygon':
-                                coords = [[p[0], p[1]] for p in geom['coordinates'][0][0]]
+                                coords_lonlat = geom['coordinates'][0][0]
                             else:
                                 continue
+                            
+                            # Format pour Shapely [lon, lat]
+                            poly_shapely = Polygon(coords_lonlat).buffer(0)
+                            
+                            # Format pour Leaflet inversé en [lat, lon]
+                            leaflet_outline = [[p[1], p[0]] for p in coords_lonlat]
                             
                             identified_cities[row.nom_commune] = {
                                 "name": row.nom_commune,
                                 "area_m2": row.area_m2,
-                                "outline": row.outline,
-                                "poly": Polygon(coords).buffer(0)
+                                "outline": leaflet_outline,
+                                "poly": poly_shapely
                             }
                     if len(identified_cities) >= 70: break
 
