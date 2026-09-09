@@ -2,14 +2,27 @@ import os
 import requests
 import polyline
 import json
-from flask import Flask, redirect, request, jsonify, session, render_template, url_for
+
+from flask import (
+    Flask,
+    redirect,
+    request,
+    jsonify,
+    session,
+    render_template,
+    url_for
+)
+
 from dotenv import load_dotenv
 from datetime import datetime
+
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
+
 from collections import defaultdict
+
 from sqlalchemy import create_engine, text
-from sqlalchemy.pool import NullPool  # <--- IMPORT INDISPENSABLE POUR VERCEL
+from sqlalchemy.pool import NullPool
 
 
 # ============================================================
@@ -19,11 +32,14 @@ from sqlalchemy.pool import NullPool  # <--- IMPORT INDISPENSABLE POUR VERCEL
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
+app.secret_key = os.getenv(
+    'SECRET_KEY',
+    'dev_secret_key_123'
+)
 
 
 # ============================================================
-# 2. CONFIGURATION DATABASE (SUPABASE)
+# 2. CONFIGURATION DATABASE
 # ============================================================
 
 DB_URL = os.getenv('DATABASE_URL')
@@ -35,6 +51,7 @@ DB_URL = os.getenv('DATABASE_URL')
 
 CLIENT_ID = os.getenv('STRAVA_CLIENT_ID')
 CLIENT_SECRET = os.getenv('STRAVA_CLIENT_SECRET')
+
 REDIRECT_URI = os.getenv(
     'STRAVA_REDIRECT_URI',
     'http://localhost:5000/callback'
@@ -62,7 +79,9 @@ SPORT_TRANSLATIONS = {
     'Snowshoe': 'Raquettes'
 }
 
-GPS_SPORTS = list(SPORT_TRANSLATIONS.keys())
+GPS_SPORTS = list(
+    SPORT_TRANSLATIONS.keys()
+)
 
 
 # ============================================================
@@ -78,6 +97,7 @@ API_RESULT_CACHE = {}
 # ============================================================
 
 def get_cells_from_polyline(pts, grid_size_deg):
+
     cells = set()
 
     if not pts:
@@ -87,57 +107,102 @@ def get_cells_from_polyline(pts, grid_size_deg):
 
     def to_key(lat, lon):
         return (
-            round(round(lat / grid_size_deg) * grid_size_deg, 6),
-            round(round(lon / grid_size_deg) * grid_size_deg, 6)
+            round(
+                round(lat / grid_size_deg)
+                * grid_size_deg,
+                6
+            ),
+            round(
+                round(lon / grid_size_deg)
+                * grid_size_deg,
+                6
+            )
         )
 
-    cells.add(to_key(prev_lat, prev_lon))
+    cells.add(
+        to_key(
+            prev_lat,
+            prev_lon
+        )
+    )
 
-    for i in range(1, len(pts)):
+    for i in range(
+        1,
+        len(pts)
+    ):
+
         curr_lat, curr_lon = pts[i]
 
         dist = (
-            (curr_lat - prev_lat) ** 2 +
+            (curr_lat - prev_lat) ** 2
+            +
             (curr_lon - prev_lon) ** 2
         ) ** 0.5
 
         if dist > grid_size_deg * 0.7:
-            num_steps = int(dist / (grid_size_deg * 0.5))
 
-            for j in range(1, num_steps + 1):
-                frac = j / (num_steps + 1)
+            num_steps = int(
+                dist /
+                (grid_size_deg * 0.5)
+            )
+
+            for j in range(
+                1,
+                num_steps + 1
+            ):
+
+                frac = (
+                    j /
+                    (num_steps + 1)
+                )
 
                 cells.add(
                     to_key(
-                        prev_lat + (curr_lat - prev_lat) * frac,
-                        prev_lon + (curr_lon - prev_lon) * frac
+                        prev_lat +
+                        (
+                            curr_lat -
+                            prev_lat
+                        ) * frac,
+
+                        prev_lon +
+                        (
+                            curr_lon -
+                            prev_lon
+                        ) * frac
                     )
                 )
 
-        cells.add(to_key(curr_lat, curr_lon))
+        cells.add(
+            to_key(
+                curr_lat,
+                curr_lon
+            )
+        )
 
-        prev_lat, prev_lon = curr_lat, curr_lon
+        prev_lat = curr_lat
+        prev_lon = curr_lon
 
     return cells
 
 
 def get_current_iso_period():
-    """
-    Retourne la période ISO courante sous la forme YYYY-Wxx.
-    """
-    current_year, current_week, _ = datetime.now().isocalendar()
-    return f"{current_year}-W{current_week:02d}"
+
+    year, week, _ = (
+        datetime.now().isocalendar()
+    )
+
+    return (
+        f"{year}-W{week:02d}"
+    )
 
 
 def get_current_week_display():
-    """
-    Retourne la semaine courante sous la forme :
-    DD/MM/YYYY - DD/MM/YYYY
 
-    Semaine ISO : lundi -> dimanche.
-    """
     today = datetime.now()
-    iso_year, iso_week, _ = today.isocalendar()
+
+    iso_year, iso_week, _ = (
+        today.isocalendar()
+    )
 
     week_start = datetime.fromisocalendar(
         iso_year,
@@ -151,13 +216,17 @@ def get_current_week_display():
         7
     )
 
-    return f"{week_start:%d/%m/%Y} - {week_end:%d/%m/%Y}"
+    return (
+        f"{week_start:%d/%m/%Y} - "
+        f"{week_end:%d/%m/%Y}"
+    )
 
+
+# ============================================================
+# 7. ACTIVITÉS STRAVA
+# ============================================================
 
 def get_strava_activities_cached(token):
-    """
-    Charge les activités Strava une seule fois par token.
-    """
 
     if token in RAW_DATA_CACHE:
         return RAW_DATA_CACHE[token]
@@ -165,13 +234,16 @@ def get_strava_activities_cached(token):
     all_activities = []
 
     headers = {
-        'Authorization': f'Bearer {token}'
+        'Authorization':
+            f'Bearer {token}'
     }
 
     page = 1
 
     while True:
+
         try:
+
             r = requests.get(
                 "https://www.strava.com/api/v3/athlete/activities",
                 headers=headers,
@@ -190,7 +262,9 @@ def get_strava_activities_cached(token):
             if not data:
                 break
 
-            all_activities.extend(data)
+            all_activities.extend(
+                data
+            )
 
             page += 1
 
@@ -205,38 +279,67 @@ def get_strava_activities_cached(token):
     for act in all_activities:
 
         if (
-            act.get('type') in GPS_SPORTS
-            and act.get('map', {}).get('summary_polyline')
+            act.get('type')
+            in GPS_SPORTS
+            and
+            act.get('map', {}).get(
+                'summary_polyline'
+            )
         ):
+
             cleaned_data.append({
-                'id': act.get('id'),
-                'type': act['type'],
-                'start_date_local': act['start_date_local'],
-                'polyline': act['map']['summary_polyline'],
-                'distance': act.get('distance', 0)
+
+                'id':
+                    act.get('id'),
+
+                'type':
+                    act['type'],
+
+                'start_date_local':
+                    act['start_date_local'],
+
+                'polyline':
+                    act['map'][
+                        'summary_polyline'
+                    ],
+
+                'distance':
+                    act.get(
+                        'distance',
+                        0
+                    )
             })
 
-    RAW_DATA_CACHE[token] = cleaned_data
+    RAW_DATA_CACHE[token] = (
+        cleaned_data
+    )
 
     return cleaned_data
 
 
 # ============================================================
-# 7. ROUTES STANDARD
+# 8. ROUTES STANDARD
 # ============================================================
 
 @app.route('/')
 def index():
 
     if 'access_token' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(
+            url_for('login_page')
+        )
 
-    return render_template('index.html')
+    return render_template(
+        'index.html'
+    )
 
 
 @app.route('/login')
 def login_page():
-    return render_template('login.html')
+
+    return render_template(
+        'login.html'
+    )
 
 
 @app.route('/auth')
@@ -255,44 +358,68 @@ def auth():
 @app.route('/logout')
 def logout():
 
-    token = session.get('access_token')
+    token = session.get(
+        'access_token'
+    )
 
     if token:
 
         try:
+
             requests.post(
                 "https://www.strava.com/api/v3/oauth/deauthorize",
                 headers={
-                    'Authorization': f'Bearer {token}'
+                    'Authorization':
+                        f'Bearer {token}'
                 },
                 timeout=5
             )
 
         except Exception as e:
+
             print(
-                f"Erreur lors de la révocation Strava : {e}"
+                "Erreur lors de la "
+                f"révocation Strava : {e}"
             )
 
-        RAW_DATA_CACHE.pop(token, None)
-        API_RESULT_CACHE.pop(token, None)
+        RAW_DATA_CACHE.pop(
+            token,
+            None
+        )
+
+        API_RESULT_CACHE.pop(
+            token,
+            None
+        )
 
     session.clear()
 
-    return redirect(url_for('login_page'))
+    return redirect(
+        url_for('login_page')
+    )
 
 
 @app.route('/callback')
 def callback():
 
-    code = request.args.get('code')
+    code = request.args.get(
+        'code'
+    )
 
     res = requests.post(
         "https://www.strava.com/oauth/token",
         data={
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'code': code,
-            'grant_type': 'authorization_code'
+            'client_id':
+                CLIENT_ID,
+
+            'client_secret':
+                CLIENT_SECRET,
+
+            'code':
+                code,
+
+            'grant_type':
+                'authorization_code'
         }
     )
 
@@ -300,11 +427,18 @@ def callback():
 
         data = res.json()
 
-        token = data.get('access_token')
+        token = data.get(
+            'access_token'
+        )
 
-        athlete_info = data.get('athlete', {})
+        athlete_info = data.get(
+            'athlete',
+            {}
+        )
 
-        athlete_id = athlete_info.get('id')
+        athlete_id = athlete_info.get(
+            'id'
+        )
 
         firstname = athlete_info.get(
             'firstname',
@@ -316,11 +450,20 @@ def callback():
             ''
         )
 
-        athlete_name = f"{firstname} {lastname}".strip()
+        athlete_name = (
+            f"{firstname} {lastname}"
+            .strip()
+        )
 
-        session['access_token'] = token
+        session[
+            'access_token'
+        ] = token
 
-        if athlete_id and token and DB_URL:
+        if (
+            athlete_id
+            and token
+            and DB_URL
+        ):
 
             try:
 
@@ -348,19 +491,27 @@ def callback():
                             CURRENT_TIMESTAMP,
                             :ath_name
                         )
-                        ON CONFLICT (athlete_id) DO UPDATE
-                        SET access_token = EXCLUDED.access_token,
-                            login_count = strava_users.login_count + 1,
-                            last_login_date = CURRENT_TIMESTAMP,
-                            athlete_name = EXCLUDED.athlete_name;
+                        ON CONFLICT (athlete_id)
+                        DO UPDATE SET
+                            access_token =
+                                EXCLUDED.access_token,
+                            login_count =
+                                strava_users.login_count + 1,
+                            last_login_date =
+                                CURRENT_TIMESTAMP,
+                            athlete_name =
+                                EXCLUDED.athlete_name;
                     """)
 
                     conn.execute(
                         query,
                         {
-                            "ath_id": athlete_id,
-                            "token": token,
-                            "ath_name": athlete_name
+                            "ath_id":
+                                athlete_id,
+                            "token":
+                                token,
+                            "ath_name":
+                                athlete_name
                         }
                     )
 
@@ -369,53 +520,73 @@ def callback():
             except Exception as e:
 
                 print(
-                    f"Erreur d'enregistrement utilisateur: {e}"
+                    "Erreur d'enregistrement "
+                    f"utilisateur: {e}"
                 )
 
         return redirect('/')
 
-    return "Erreur lors de l'authentification avec Strava"
+    return (
+        "Erreur lors de "
+        "l'authentification avec Strava"
+    )
 
 
 @app.route('/stats')
 def stats_page():
 
     if 'access_token' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(
+            url_for('login_page')
+        )
 
-    return render_template('stats.html')
+    return render_template(
+        'stats.html'
+    )
 
 
 @app.route('/story')
 def story_page():
 
     if 'access_token' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(
+            url_for('login_page')
+        )
 
-    return render_template('story.html')
+    return render_template(
+        'story.html'
+    )
 
 
 @app.route('/timelapse')
 def timelapse_page():
 
     if 'access_token' not in session:
-        return redirect(url_for('login_page'))
+        return redirect(
+            url_for('login_page')
+        )
 
-    return render_template('timelapse.html')
+    return render_template(
+        'timelapse.html'
+    )
 
 
 # ============================================================
-# 8. API : HISTORIQUE DES STATS
+# 9. API HISTORIQUE
 # ============================================================
 
 @app.route('/api/stats_history')
 def get_stats_history():
 
-    token = session.get('access_token')
+    token = session.get(
+        'access_token'
+    )
 
     if not token:
+
         return jsonify({
-            "error": "Login required"
+            "error":
+                "Login required"
         }), 401
 
     grid_meters = int(
@@ -450,12 +621,19 @@ def get_stats_history():
             API_RESULT_CACHE[token][cache_key]
         )
 
-    activities = get_strava_activities_cached(token)
+    activities = (
+        get_strava_activities_cached(
+            token
+        )
+    )
 
-    grid_size_deg = grid_meters / 111320
+    grid_size_deg = (
+        grid_meters / 111320
+    )
 
     activities.sort(
-        key=lambda x: x['start_date_local']
+        key=lambda x:
+            x['start_date_local']
     )
 
     monthly_data = {}
@@ -475,7 +653,9 @@ def get_stats_history():
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
-        y_str = str(dt.year)
+        y_str = str(
+            dt.year
+        )
 
         m_key = dt.strftime(
             "%Y-%m"
@@ -483,9 +663,13 @@ def get_stats_history():
 
         sport = act['type']
 
-        available_years.add(y_str)
+        available_years.add(
+            y_str
+        )
 
-        available_sports.add(sport)
+        available_sports.add(
+            sport
+        )
 
         if (
             sel_year != 'all'
@@ -500,6 +684,7 @@ def get_stats_history():
             continue
 
         if m_key not in monthly_data:
+
             monthly_data[m_key] = {
                 'new': 0,
                 'routine': 0
@@ -520,13 +705,17 @@ def get_stats_history():
 
                 global_seen.add(b)
 
-                monthly_data[m_key]['new'] += 1
+                monthly_data[m_key][
+                    'new'
+                ] += 1
 
                 total_blocks += 1
 
             else:
 
-                monthly_data[m_key]['routine'] += 1
+                monthly_data[m_key][
+                    'routine'
+                ] += 1
 
     labels = sorted(
         monthly_data.keys()
@@ -540,9 +729,13 @@ def get_stats_history():
 
     for m in labels:
 
-        running += monthly_data[m]['new']
+        running += (
+            monthly_data[m]['new']
+        )
 
-        conquest.append(running)
+        conquest.append(
+            running
+        )
 
         explore.append(
             monthly_data[m]['new']
@@ -553,37 +746,63 @@ def get_stats_history():
         )
 
     result = {
-        "labels": labels,
-        "conquest": conquest,
-        "exploration": explore,
-        "routine": routine,
-        "total_blocks": total_blocks,
-        "available_years": sorted(
-            list(available_years),
-            reverse=True
-        ),
-        "available_sports": sorted(
-            list(available_sports)
-        )
+
+        "labels":
+            labels,
+
+        "conquest":
+            conquest,
+
+        "exploration":
+            explore,
+
+        "routine":
+            routine,
+
+        "total_blocks":
+            total_blocks,
+
+        "available_years":
+            sorted(
+                list(
+                    available_years
+                ),
+                reverse=True
+            ),
+
+        "available_sports":
+            sorted(
+                list(
+                    available_sports
+                )
+            )
     }
 
-    API_RESULT_CACHE[token][cache_key] = result
+    API_RESULT_CACHE[token][
+        cache_key
+    ] = result
 
-    return jsonify(result)
+    return jsonify(
+        result
+    )
 
 
 # ============================================================
-# 9. API ACTIVITÉS / CARTE / COMMUNES
+# 10. API ACTIVITÉS / CARTE / COMMUNES
 # ============================================================
 
 @app.route('/api/activities')
 def get_activities_route():
 
-    token = session.get('access_token')
+    token = session.get(
+        'access_token'
+    )
 
     if not token:
+
         return jsonify({
-            "error": "Login required"
+            "error":
+                "Login required"
         }), 401
 
     athlete_id = None
@@ -606,12 +825,14 @@ def get_activities_route():
                 res = conn.execute(
                     text("""
                         UPDATE strava_users
-                        SET last_login_date = CURRENT_TIMESTAMP
+                        SET last_login_date =
+                            CURRENT_TIMESTAMP
                         WHERE access_token = :token
                         RETURNING athlete_id
                     """),
                     {
-                        "token": token
+                        "token":
+                            token
                     }
                 ).fetchone()
 
@@ -623,7 +844,8 @@ def get_activities_route():
         except Exception as e:
 
             print(
-                f"Erreur màj silencieuse: {e}"
+                "Erreur màj silencieuse: "
+                f"{e}"
             )
 
     # --------------------------------------------------------
@@ -662,29 +884,54 @@ def get_activities_route():
             API_RESULT_CACHE[token][cache_key]
         )
 
-    activities = get_strava_activities_cached(token)
+    activities = (
+        get_strava_activities_cached(
+            token
+        )
+    )
 
-    grid_size_deg = grid_meters / 111320
+    grid_size_deg = (
+        grid_meters / 111320
+    )
 
     data = {
+
         "coords": [],
+
         "grid_cells": [],
-        "grid_size_used": grid_size_deg,
-        "available_years": set(),
-        "available_sports": {},
-        "top_municipalities": [],
+
+        "grid_size_used":
+            grid_size_deg,
+
+        "available_years":
+            set(),
+
+        "available_sports":
+            {},
+
+        "top_municipalities":
+            [],
+
         "stats": {
-            "total_distance": 0,
-            "activity_count": 0,
-            "cells_conquered": 0
+
+            "total_distance":
+                0,
+
+            "activity_count":
+                0,
+
+            "cells_conquered":
+                0
         }
     }
 
-    # --------------------------------------------------------
-    # IMPORTANT :
-    # On conserve le fonctionnement de ta version qui
-    # fonctionnait avant les modifications.
-    # --------------------------------------------------------
+    # ========================================================
+    # OPTIMISATION N°1
+    #
+    # On calcule les blocs de chaque activité UNE SEULE FOIS.
+    # ========================================================
+
+    activity_cache = []
 
     grid_store = {}
 
@@ -695,17 +942,25 @@ def get_activities_route():
             "%Y-%m-%dT%H:%M:%SZ"
         )
 
-        y_str = str(dt.year)
+        y_str = str(
+            dt.year
+        )
 
         sport = act['type']
 
-        data["available_years"].add(
+        data[
+            "available_years"
+        ].add(
             y_str
         )
 
-        if sport not in data["available_sports"]:
+        if sport not in data[
+            "available_sports"
+        ]:
 
-            data["available_sports"][sport] = (
+            data[
+                "available_sports"
+            ][sport] = (
                 SPORT_TRANSLATIONS.get(
                     sport,
                     sport
@@ -713,7 +968,51 @@ def get_activities_route():
             )
 
         # ----------------------------------------------------
-        # On ne met dans grid_store QUE les activités filtrées
+        # Décodage + blocs UNE seule fois
+        # ----------------------------------------------------
+
+        pts = polyline.decode(
+            act['polyline']
+        )
+
+        if len(pts) < 2:
+            continue
+
+        blocks = get_cells_from_polyline(
+            pts,
+            grid_size_deg
+        )
+
+        act_ym = dt.strftime(
+            "%Y-%m"
+        )
+
+        activity_cache.append({
+            "act":
+                act,
+
+            "dt":
+                dt,
+
+            "year":
+                y_str,
+
+            "sport":
+                sport,
+
+            "pts":
+                pts,
+
+            "blocks":
+                blocks,
+
+            "period":
+                f"{dt.isocalendar().year}"
+                f"-W{dt.isocalendar().week:02d}"
+        })
+
+        # ----------------------------------------------------
+        # CARTE : uniquement selon les filtres
         # ----------------------------------------------------
 
         if (
@@ -724,19 +1023,8 @@ def get_activities_route():
             or sel_sport == sport
         ):
 
-            pts = polyline.decode(
-                act['polyline']
-            )
-
-            data["coords"].append(pts)
-
-            blocks = get_cells_from_polyline(
-                pts,
-                grid_size_deg
-            )
-
-            act_ym = dt.strftime(
-                "%Y-%m"
+            data["coords"].append(
+                pts
             )
 
             for b in blocks:
@@ -744,33 +1032,51 @@ def get_activities_route():
                 if b not in grid_store:
 
                     grid_store[b] = {
-                        'cnt': 0,
-                        'first': act_ym,
-                        'last': act_ym
+                        'cnt':
+                            0,
+
+                        'first':
+                            act_ym,
+
+                        'last':
+                            act_ym
                     }
 
                 grid_store[b]['cnt'] += 1
 
                 if (
                     act_ym
-                    < grid_store[b]['first']
+                    <
+                    grid_store[b]['first']
                 ):
-                    grid_store[b]['first'] = act_ym
+
+                    grid_store[b][
+                        'first'
+                    ] = act_ym
 
                 if (
                     act_ym
-                    > grid_store[b]['last']
+                    >
+                    grid_store[b]['last']
                 ):
-                    grid_store[b]['last'] = act_ym
 
-            data["stats"]["total_distance"] += (
-                act['distance'] / 1000
+                    grid_store[b][
+                        'last'
+                    ] = act_ym
+
+            data["stats"][
+                "total_distance"
+            ] += (
+                act['distance']
+                / 1000
             )
 
-            data["stats"]["activity_count"] += 1
+            data["stats"][
+                "activity_count"
+            ] += 1
 
     # --------------------------------------------------------
-    # Cellules de la carte
+    # Cellules
     # --------------------------------------------------------
 
     data["grid_cells"] = [
@@ -784,18 +1090,24 @@ def get_activities_route():
         for k, v in grid_store.items()
     ]
 
-    data["stats"]["cells_conquered"] = len(
+    data["stats"][
+        "cells_conquered"
+    ] = len(
         grid_store
     )
 
     data["available_years"] = sorted(
-        list(data["available_years"]),
+        list(
+            data["available_years"]
+        ),
         reverse=True
     )
 
     data["available_sports"] = dict(
         sorted(
-            data["available_sports"].items(),
+            data[
+                "available_sports"
+            ].items(),
             key=lambda x: x[1]
         )
     )
@@ -804,7 +1116,11 @@ def get_activities_route():
     # CALCUL DES VILLES
     # ========================================================
 
-    if grid_store and DB_URL:
+    if (
+        grid_store
+        and DB_URL
+        and athlete_id
+    ):
 
         identified_cities = {}
 
@@ -830,7 +1146,7 @@ def get_activities_route():
         batch_size = 50
 
         # ----------------------------------------------------
-        # 2. Recherche des communes
+        # 2. Récupération des communes
         # ----------------------------------------------------
 
         try:
@@ -868,10 +1184,10 @@ def get_activities_route():
                                nom_commune,
                                ST_Area(
                                    geometry::geography
-                               ) as area_m2,
+                               ) AS area_m2,
                                ST_AsGeoJSON(
                                    geometry
-                               ) as outline
+                               ) AS outline
                         FROM communes
                         WHERE ST_Intersects(
                             geometry,
@@ -885,14 +1201,15 @@ def get_activities_route():
                     result_proxy = conn.execute(
                         query,
                         {
-                            "wkt": wkt_multipoint
+                            "wkt":
+                                wkt_multipoint
                         }
                     )
 
                     # ------------------------------------------------
                     # IMPORTANT :
-                    # C'est la logique de ton ancienne version
-                    # qui fonctionnait pour les contours.
+                    # On conserve le système de contour
+                    # de ta version qui fonctionnait.
                     # ------------------------------------------------
 
                     for row in result_proxy:
@@ -921,8 +1238,12 @@ def get_activities_route():
                             ):
 
                                 inverted_outline = [
-                                    [p[1], p[0]]
-                                    for p in geojson_geom[
+                                    [
+                                        p[1],
+                                        p[0]
+                                    ]
+                                    for p in
+                                    geojson_geom[
                                         'coordinates'
                                     ][0]
                                 ]
@@ -936,64 +1257,87 @@ def get_activities_route():
                                 == 'MultiPolygon'
                             ):
 
+                                # On conserve la logique originale
+                                # qui fonctionnait avec ton Leaflet.
                                 inverted_outline = [
-                                    [p[1], p[0]]
-                                    for p in geojson_geom[
+                                    [
+                                        p[1],
+                                        p[0]
+                                    ]
+                                    for p in
+                                    geojson_geom[
                                         'coordinates'
                                     ][0][0]
                                 ]
 
                             else:
-                                continue
 
-                            # ----------------------------------------
-                            # STOCKAGE
-                            # ----------------------------------------
+                                continue
 
                             identified_cities[
                                 row.nom_commune
                             ] = {
-                                "name": row.nom_commune,
-                                "area_m2": row.area_m2,
-                                "outline": inverted_outline,
-                                "poly_obj": Polygon(
-                                    inverted_outline
-                                )
+
+                                "name":
+                                    row.nom_commune,
+
+                                "area_m2":
+                                    row.area_m2,
+
+                                "outline":
+                                    inverted_outline,
+
+                                "poly_obj":
+                                    Polygon(
+                                        inverted_outline
+                                    )
                             }
 
                         except Exception as e:
 
                             print(
-                                f"Erreur traitement commune "
-                                f"{row.nom_commune}: {e}"
+                                "Erreur traitement "
+                                f"commune {row.nom_commune}: "
+                                f"{e}"
                             )
 
                     if len(
                         identified_cities
                     ) >= 70:
+
                         break
 
         except Exception as e:
 
             print(
-                f"⚠️ Erreur Batch DB: {e}"
+                "⚠️ Erreur Batch DB: "
+                f"{e}"
             )
 
         # ========================================================
-        # 3. CALCUL DES STATISTIQUES DES VILLES
+        # OPTIMISATION N°2
+        #
+        # Pour chaque commune, on calcule UNE SEULE FOIS les
+        # blocs qui appartiennent à cette commune.
         # ========================================================
 
         final_cities_list = []
 
         scores_to_save = []
 
-        for city_name, city_data in identified_cities.items():
+        current_period = (
+            get_current_iso_period()
+        )
+
+        for city_name, city_data in (
+            identified_cities.items()
+        ):
 
             try:
 
-                poly_geom = city_data[
-                    'poly_obj'
-                ]
+                poly_geom = (
+                    city_data['poly_obj']
+                )
 
                 prepared_poly = prep(
                     poly_geom
@@ -1003,12 +1347,15 @@ def get_activities_route():
                     poly_geom.bounds
                 )
 
-                count_inside = 0
+                # ------------------------------------------------
+                # CALCUL UNE SEULE FOIS DES BLOCS DE LA COMMUNE
+                # ------------------------------------------------
 
-                for (
-                    clat,
-                    clon
-                ) in grid_store.keys():
+                city_block_coords = set()
+
+                for clat, clon in (
+                    grid_store.keys()
+                ):
 
                     if (
                         min_lat <= clat <= max_lat
@@ -1016,162 +1363,159 @@ def get_activities_route():
                         min_lon <= clon <= max_lon
                     ):
 
-                        # --------------------------------------------
-                        # CONSERVÉ TEL QU'AVANT
-                        # --------------------------------------------
-
                         if prepared_poly.contains(
-                            Point(clat, clon)
+                            Point(
+                                clat,
+                                clon
+                            )
                         ):
 
-                            count_inside += 1
+                            city_block_coords.add(
+                                (
+                                    clat,
+                                    clon
+                                )
+                            )
 
-                if count_inside <= 0:
+                if not city_block_coords:
                     continue
 
-                # ----------------------------------------------------
-                # Statistiques ville
-                # ----------------------------------------------------
+                count_inside = len(
+                    city_block_coords
+                )
+
+                # ------------------------------------------------
+                # Pourcentage
+                # ------------------------------------------------
 
                 area_conquered_m2 = (
                     count_inside
-                    * (grid_meters ** 2)
+                    *
+                    (grid_meters ** 2)
                 )
 
-                pct = (
-                    area_conquered_m2
-                    / city_data['area_m2']
-                ) * 100
+                final_pct = round(
+                    min(
+                        (
+                            area_conquered_m2
+                            /
+                            city_data['area_m2']
+                        )
+                        * 100,
+                        100
+                    ),
+                    2
+                )
+
+                # ------------------------------------------------
+                # Activités
+                # ------------------------------------------------
 
                 final_cities_list.append({
-                    "name": city_name,
-                    "outline": city_data[
-                        'outline'
-                    ],
+
+                    "name":
+                        city_name,
+
+                    "outline":
+                        city_data['outline'],
+
                     "stats": {
-                        "blocks": count_inside,
-                        "percent": round(
-                            min(pct, 100),
-                            2
-                        )
+
+                        "blocks":
+                            count_inside,
+
+                        "percent":
+                            final_pct,
+
+                        "activities":
+                            0
                     }
                 })
 
-                # ====================================================
-                # CALCUL MULTIDIMENSIONNEL POUR CITY_SCORES
-                # ====================================================
+                # ==================================================
+                # OPTIMISATION N°3
+                #
+                # On ne redécode plus aucune polyline ici.
+                # On réutilise activity_cache.
+                # ==================================================
 
                 stats_dim = defaultdict(
-                    lambda: defaultdict(
-                        lambda: {
-                            'blocks': set(),
-                            'acts': set()
-                        }
-                    )
+                    lambda:
+                        defaultdict(
+                            lambda: {
+                                'blocks':
+                                    set(),
+
+                                'acts':
+                                    set()
+                            }
+                        )
                 )
 
-                for act in activities:
+                city_activity_count = 0
 
-                    dt_act = datetime.strptime(
-                        act['start_date_local'],
-                        "%Y-%m-%dT%H:%M:%SZ"
+                for activity_data in (
+                    activity_cache
+                ):
+
+                    act = activity_data[
+                        'act'
+                    ]
+
+                    sport = activity_data[
+                        'sport'
+                    ]
+
+                    act_blocks_all = (
+                        activity_data[
+                            'blocks'
+                        ]
                     )
 
-                    sport = act['type']
-
-                    # --------------------------------------------
-                    # ACTIVITÉ FILTRÉE
-                    # --------------------------------------------
-
-                    if (
-                        sel_year != 'all'
-                        and str(dt_act.year)
-                        != sel_year
-                    ):
-                        continue
-
-                    if (
-                        sel_sport != 'all'
-                        and sport != sel_sport
-                    ):
-                        continue
-
-                    act_pts = polyline.decode(
-                        act['polyline']
-                    )
-
-                    act_blocks_all = get_cells_from_polyline(
-                        act_pts,
-                        grid_size_deg
+                    act_period = (
+                        activity_data[
+                            'period'
+                        ]
                     )
 
                     # ------------------------------------------------
-                    # On reprend les blocs réellement présents
-                    # dans la commune
+                    # Intersection activité / commune
                     # ------------------------------------------------
-
-                    city_block_coords = set()
-
-                    for (
-                        clat,
-                        clon
-                    ) in grid_store.keys():
-
-                        if (
-                            min_lat <= clat <= max_lat
-                            and
-                            min_lon <= clon <= max_lon
-                        ):
-
-                            if prepared_poly.contains(
-                                Point(clat, clon)
-                            ):
-
-                                city_block_coords.add(
-                                    (
-                                        clat,
-                                        clon
-                                    )
-                                )
 
                     act_blocks_in = (
                         act_blocks_all
-                        .intersection(
-                            city_block_coords
-                        )
+                        &
+                        city_block_coords
                     )
 
                     if not act_blocks_in:
                         continue
 
+                    city_activity_count += 1
+
                     # ------------------------------------------------
-                    # Période ISO de l'activité
+                    # Activité courante ?
                     # ------------------------------------------------
-
-                    act_year, act_week, _ = (
-                        dt_act.isocalendar()
-                    )
-
-                    act_period = (
-                        f"{act_year}-W{act_week:02d}"
-                    )
-
-                    current_period = (
-                        get_current_iso_period()
-                    )
 
                     is_current = (
                         act_period
-                        == current_period
+                        ==
+                        current_period
                     )
 
                     # ------------------------------------------------
-                    # Dimensions disponibles
+                    # Dimensions
                     # ------------------------------------------------
 
                     keys = [
-                        ('all', 'all'),
-                        (sport, 'all')
+                        (
+                            'all',
+                            'all'
+                        ),
+                        (
+                            sport,
+                            'all'
+                        )
                     ]
 
                     if is_current:
@@ -1188,13 +1532,10 @@ def get_activities_route():
                         ])
 
                     # ------------------------------------------------
-                    # Ajout des blocs / activités
+                    # Ajout des blocs
                     # ------------------------------------------------
 
-                    for (
-                        k_sp,
-                        k_per
-                    ) in keys:
+                    for k_sp, k_per in keys:
 
                         stats_dim[
                             k_sp
@@ -1206,9 +1547,6 @@ def get_activities_route():
                             act_blocks_in
                         )
 
-                        # ID de l'activité.
-                        # Ici on utilise l'ID Strava lorsque disponible,
-                        # ce qui évite de dépendre uniquement de l'index.
                         stats_dim[
                             k_sp
                         ][
@@ -1216,19 +1554,38 @@ def get_activities_route():
                         ][
                             'acts'
                         ].add(
-                            act.get('id')
+                            act.get(
+                                'id',
+                                id(act)
+                            )
                         )
 
-                # ====================================================
-                # ENREGISTREMENT DES SCORES
-                # ====================================================
+                # ------------------------------------------------
+                # Mise à jour du nombre d'activités
+                # ------------------------------------------------
 
-                for sp, periods in stats_dim.items():
+                final_cities_list[-1][
+                    "stats"
+                ][
+                    "activities"
+                ] = city_activity_count
 
-                    for per, s_data in periods.items():
+                # ==================================================
+                # Sauvegarde des scores
+                # ==================================================
+
+                for sp, periods in (
+                    stats_dim.items()
+                ):
+
+                    for per, s_data in (
+                        periods.items()
+                    ):
 
                         b_cnt = len(
-                            s_data['blocks']
+                            s_data[
+                                'blocks'
+                            ]
                         )
 
                         p_val = round(
@@ -1236,9 +1593,16 @@ def get_activities_route():
                                 (
                                     (
                                         b_cnt
-                                        * (grid_meters ** 2)
+                                        *
+                                        (
+                                            grid_meters
+                                            ** 2
+                                        )
                                     )
-                                    / city_data['area_m2']
+                                    /
+                                    city_data[
+                                        'area_m2'
+                                    ]
                                 )
                                 * 100,
                                 100
@@ -1247,30 +1611,50 @@ def get_activities_route():
                         )
 
                         scores_to_save.append({
-                            "ath_id": athlete_id,
-                            "c_name": city_name,
-                            "g_size": grid_meters,
-                            "sport": sp,
-                            "period": per,
-                            "b_count": b_cnt,
-                            "pct": p_val,
-                            "act_count": len(
-                                s_data['acts']
-                            )
+
+                            "ath_id":
+                                athlete_id,
+
+                            "c_name":
+                                city_name,
+
+                            "g_size":
+                                grid_meters,
+
+                            "sport":
+                                sp,
+
+                            "period":
+                                per,
+
+                            "b_count":
+                                b_cnt,
+
+                            "pct":
+                                p_val,
+
+                            "act_count":
+                                len(
+                                    s_data[
+                                        'acts'
+                                    ]
+                                )
                         })
 
             except Exception as e:
 
                 print(
-                    f"Erreur calcul stats ville "
-                    f"{city_name}: {e}"
+                    f"Erreur calcul stats "
+                    f"ville {city_name}: {e}"
                 )
 
         # --------------------------------------------------------
-        # Top communes local
+        # Top communes
         # --------------------------------------------------------
 
-        data["top_municipalities"] = sorted(
+        data[
+            "top_municipalities"
+        ] = sorted(
             final_cities_list,
             key=lambda x:
                 x['stats']['blocks'],
@@ -1333,28 +1717,36 @@ def get_activities_route():
                                 CURRENT_TIMESTAMP;
                     """)
 
-                    for score in scores_to_save:
+                    # ------------------------------------------------
+                    # On envoie toutes les lignes avec executemany
+                    # au lieu de faire une requête SQL par score.
+                    # ------------------------------------------------
 
-                        conn.execute(
-                            upsert_query,
-                            score
-                        )
+                    conn.execute(
+                        upsert_query,
+                        scores_to_save
+                    )
 
                     conn.commit()
 
             except Exception as e:
 
                 print(
-                    f"Erreur sauvegarde scores: {e}"
+                    "Erreur sauvegarde scores: "
+                    f"{e}"
                 )
 
-    API_RESULT_CACHE[token][cache_key] = data
+    API_RESULT_CACHE[token][
+        cache_key
+    ] = data
 
-    return jsonify(data)
+    return jsonify(
+        data
+    )
 
 
 # ============================================================
-# 10. KEEP-ALIVE
+# 11. KEEP ALIVE
 # ============================================================
 
 @app.route('/api/keep-alive')
@@ -1363,7 +1755,8 @@ def keep_alive():
     if not DB_URL:
 
         return jsonify({
-            "error": "Database URL non configurée"
+            "error":
+                "Database URL non configurée"
         }), 500
 
     try:
@@ -1380,7 +1773,8 @@ def keep_alive():
             )
 
         return jsonify({
-            "status": "Supabase is awake!"
+            "status":
+                "Supabase is awake!"
         }), 200
 
     except Exception as e:
@@ -1390,12 +1784,13 @@ def keep_alive():
         )
 
         return jsonify({
-            "error": str(e)
+            "error":
+                str(e)
         }), 500
 
 
 # ============================================================
-# 11. NETTOYAGE DES UTILISATEURS INACTIFS
+# 12. NETTOYAGE UTILISATEURS
 # ============================================================
 
 @app.route('/api/cleanup-users')
@@ -1409,16 +1804,22 @@ def cleanup_users():
         'Authorization'
     )
 
-    if auth_header != f"Bearer {cron_secret}":
+    if (
+        auth_header
+        !=
+        f"Bearer {cron_secret}"
+    ):
 
         return jsonify({
-            "error": "Non autorisé"
+            "error":
+                "Non autorisé"
         }), 401
 
     if not DB_URL:
 
         return jsonify({
-            "error": "Database URL non configurée"
+            "error":
+                "Database URL non configurée"
         }), 500
 
     try:
@@ -1467,7 +1868,8 @@ def cleanup_users():
                         WHERE athlete_id = :id
                     """),
                     {
-                        "id": row.athlete_id
+                        "id":
+                            row.athlete_id
                     }
                 )
 
@@ -1476,20 +1878,25 @@ def cleanup_users():
                 revoked_count += 1
 
         return jsonify({
-            "status": "Nettoyage terminé",
+
+            "status":
+                "Nettoyage terminé",
+
             "comptes_supprimes":
                 revoked_count
+
         }), 200
 
     except Exception as e:
 
         return jsonify({
-            "error": str(e)
+            "error":
+                str(e)
         }), 500
 
 
 # ============================================================
-# 12. LEADERBOARD COMMUNAUTAIRE
+# 13. PAGE LEADERBOARD
 # ============================================================
 
 @app.route('/leaderboard')
@@ -1507,7 +1914,7 @@ def leaderboard_page():
 
 
 # ============================================================
-# 13. LEADERBOARD GLOBAL
+# 14. LEADERBOARD GLOBAL
 # ============================================================
 
 @app.route('/api/global_stats_leaderboard')
@@ -1520,7 +1927,8 @@ def get_global_stats_leaderboard():
     if not token:
 
         return jsonify({
-            "error": "Login required"
+            "error":
+                "Login required"
         }), 401
 
     grid_size = request.args.get(
@@ -1539,13 +1947,13 @@ def get_global_stats_leaderboard():
         'all'
     )
 
-    # --------------------------------------------------------
-    # Gestion semaine en cours
-    # --------------------------------------------------------
-
     period_display = None
 
-    if period_filter == 'current_week':
+    if (
+        period_filter
+        ==
+        'current_week'
+    ):
 
         period_filter = (
             get_current_iso_period()
@@ -1571,33 +1979,30 @@ def get_global_stats_leaderboard():
 
         with engine.connect() as conn:
 
-            # ------------------------------------------------
-            # IMPORTANT :
-            # users_count = nombre d'athlètes
-            #
-            # total_blocks = somme des blocs explorés
-            # par les athlètes de la ville
-            #
-            # Tri :
-            # 1. athlètes DESC
-            # 2. blocs cumulés DESC
-            # 3. nom ASC uniquement si tout est égal
-            # ------------------------------------------------
-
             query = text("""
                 SELECT
                     city_name,
-                    COUNT(DISTINCT athlete_id)
-                        AS users_count,
-                    SUM(blocks_count)
-                        AS total_blocks,
-                    SUM(activities_count)
-                        AS total_acts
+
+                    COUNT(
+                        DISTINCT athlete_id
+                    ) AS users_count,
+
+                    SUM(
+                        blocks_count
+                    ) AS total_blocks,
+
+                    SUM(
+                        activities_count
+                    ) AS total_acts
+
                 FROM city_scores
+
                 WHERE grid_size = :grid_size
                   AND sport = :sport
                   AND period = :period
+
                 GROUP BY city_name
+
                 ORDER BY
                     users_count DESC,
                     total_blocks DESC,
@@ -1623,28 +2028,31 @@ def get_global_stats_leaderboard():
             for row in res:
 
                 cities_data.append({
+
                     "name":
                         row.city_name,
 
                     "users":
-                        int(row.users_count)
+                        int(
+                            row.users_count
+                        )
                         if row.users_count
                         else 0,
 
                     "blocks":
-                        int(row.total_blocks)
+                        int(
+                            row.total_blocks
+                        )
                         if row.total_blocks
                         else 0,
 
                     "activities":
-                        int(row.total_acts)
+                        int(
+                            row.total_acts
+                        )
                         if row.total_acts
                         else 0
                 })
-
-            # ------------------------------------------------
-            # Sports disponibles
-            # ------------------------------------------------
 
             sport_query = text("""
                 SELECT DISTINCT sport
@@ -1662,10 +2070,6 @@ def get_global_stats_leaderboard():
                 for r in sports_res
             ]
 
-            # ------------------------------------------------
-            # Réponse
-            # ------------------------------------------------
-
             return jsonify({
 
                 "cities":
@@ -1682,16 +2086,18 @@ def get_global_stats_leaderboard():
     except Exception as e:
 
         print(
-            f"Erreur global_stats_leaderboard: {e}"
+            "Erreur global_stats_leaderboard: "
+            f"{e}"
         )
 
         return jsonify({
-            "error": str(e)
+            "error":
+                str(e)
         }), 500
 
 
 # ============================================================
-# 14. LEADERBOARD D'UNE VILLE
+# 15. LEADERBOARD D'UNE VILLE
 # ============================================================
 
 @app.route('/api/city_leaderboard')
@@ -1704,7 +2110,8 @@ def get_city_leaderboard():
     if not token:
 
         return jsonify({
-            "error": "Login required"
+            "error":
+                "Login required"
         }), 401
 
     city = request.args.get(
@@ -1727,13 +2134,13 @@ def get_city_leaderboard():
         'all'
     )
 
-    # --------------------------------------------------------
-    # Gestion semaine en cours
-    # --------------------------------------------------------
-
     period_display = None
 
-    if period_filter == 'current_week':
+    if (
+        period_filter
+        ==
+        'current_week'
+    ):
 
         period_filter = (
             get_current_iso_period()
@@ -1766,17 +2173,18 @@ def get_city_leaderboard():
 
         with engine.connect() as conn:
 
-            # ------------------------------------------------
-            # KPIs de la ville
-            # ------------------------------------------------
-
             stats_query = text("""
                 SELECT
-                    COUNT(DISTINCT athlete_id)
-                        AS total_users,
-                    SUM(activities_count)
-                        AS total_activities
+                    COUNT(
+                        DISTINCT athlete_id
+                    ) AS total_users,
+
+                    SUM(
+                        activities_count
+                    ) AS total_activities
+
                 FROM city_scores
+
                 WHERE city_name = :city
                   AND grid_size = :grid_size
                   AND sport = :sport
@@ -1811,14 +2219,13 @@ def get_city_leaderboard():
                 int(
                     stats_res.total_activities
                 )
-                if stats_res
-                and stats_res.total_activities
+                if (
+                    stats_res
+                    and
+                    stats_res.total_activities
+                )
                 else 0
             )
-
-            # ------------------------------------------------
-            # Classement des athlètes de la ville
-            # ------------------------------------------------
 
             board_query = text("""
                 SELECT
@@ -1826,14 +2233,18 @@ def get_city_leaderboard():
                     c.percent,
                     c.blocks_count,
                     c.activities_count
+
                 FROM city_scores c
+
                 JOIN strava_users u
                     ON c.athlete_id =
                        u.athlete_id
+
                 WHERE c.city_name = :city
                   AND c.grid_size = :grid_size
                   AND c.sport = :sport
                   AND c.period = :period
+
                 ORDER BY
                     c.percent DESC,
                     c.blocks_count DESC,
@@ -1864,7 +2275,8 @@ def get_city_leaderboard():
                 name = (
                     row.athlete_name
                     if row.athlete_name
-                    else "Explorateur Anonyme"
+                    else
+                    "Explorateur Anonyme"
                 )
 
                 leaderboard.append({
@@ -1880,12 +2292,7 @@ def get_city_leaderboard():
 
                     "activities":
                         row.activities_count
-
                 })
-
-            # ------------------------------------------------
-            # Réponse
-            # ------------------------------------------------
 
             return jsonify({
 
@@ -1898,7 +2305,9 @@ def get_city_leaderboard():
                 "global_stats": {
 
                     "total_explorers":
-                        int(total_users),
+                        int(
+                            total_users
+                        ),
 
                     "total_activities":
                         total_activities
@@ -1915,16 +2324,18 @@ def get_city_leaderboard():
     except Exception as e:
 
         print(
-            f"Erreur city_leaderboard: {e}"
+            "Erreur city_leaderboard: "
+            f"{e}"
         )
 
         return jsonify({
-            "error": str(e)
+            "error":
+                str(e)
         }), 500
 
 
 # ============================================================
-# 15. LANCEMENT
+# 16. LANCEMENT
 # ============================================================
 
 if __name__ == '__main__':
@@ -1933,4 +2344,3 @@ if __name__ == '__main__':
         debug=True,
         port=5000
     )
-
