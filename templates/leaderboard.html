@@ -210,7 +210,8 @@
             <div class="city-hero" id="city-hero" style="display: none;">
                 <div class="city-title-wrapper">
                     <h2 id="current-city-name">Nantes</h2>
-                    <p>Classement des meilleurs explorateurs</p>
+                    <!-- Ajout d'un ID pour afficher dynamiquement la plage de dates si "Semaine en cours" est actif -->
+                    <p id="city-subtitle">Classement des meilleurs explorateurs</p>
                 </div>
                 <div class="city-kpis">
                     <div class="kpi-block">
@@ -268,6 +269,27 @@
             };
         }
 
+        // Fonction utilitaire pour calculer le Lundi et le Dimanche de la semaine en cours au format dd/mm/aaaa
+        function getCurrentWeekDates() {
+            const now = new Date();
+            const day = now.getDay();
+            // Ajustement pour que la semaine commence un Lundi (si day === 0 c'est Dimanche, donc -6 jours)
+            const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1);
+            
+            const monday = new Date(now.setDate(diffToMonday));
+            const sunday = new Date(monday);
+            sunday.setDate(monday.getDate() + 6);
+
+            const formatDate = (d) => {
+                const dd = String(d.getDate()).padStart(2, '0');
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const yyyy = d.getFullYear();
+                return `${dd}/${mm}/${yyyy}`;
+            };
+
+            return `${formatDate(monday)} - ${formatDate(sunday)}`;
+        }
+
         async function loadGlobalStats() {
             showLoader();
             const filters = getFilters();
@@ -276,7 +298,6 @@
                 const res = await fetch(`/api/global_stats_leaderboard?grid_size=${filters.gridSize}&period=${filters.period}&sport=${filters.sport}`);
                 const data = await res.json();
                 
-                // PEUPLER DYNAMIQUEMENT LE MENU DES SPORTS
                 if (data.available_sports) {
                     const sportSelect = document.getElementById('sport-select');
                     const currentSport = sportSelect.value;
@@ -368,10 +389,18 @@
             const table = document.getElementById('leaderboard-table');
             const emptyState = document.getElementById('empty-state');
             const cityHero = document.getElementById('city-hero');
+            const citySubtitle = document.getElementById('city-subtitle');
             
             if (!city) {
                 cityHero.style.display = 'none'; table.style.display = 'none'; emptyState.style.display = 'flex';
                 return;
+            }
+
+            // GESTION DU SOUS-TITRE (Date de la semaine en cours ou texte par défaut)
+            if (filters.period === 'current_week') {
+                citySubtitle.textContent = `Semaine du ${getCurrentWeekDates()}`;
+            } else {
+                citySubtitle.textContent = "Classement des meilleurs explorateurs";
             }
 
             showLoader();
