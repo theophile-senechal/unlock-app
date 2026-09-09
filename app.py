@@ -5,10 +5,8 @@ import json
 from flask import Flask, redirect, request, jsonify, session, render_template, url_for
 from dotenv import load_dotenv
 from datetime import datetime
-from shapely.geometry import Point, Polygon, LineString
+from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
-import pyproj
-from shapely.ops import transform
 from collections import defaultdict
 from sqlalchemy import create_engine, text
 from sqlalchemy.pool import NullPool  # <--- IMPORT INDISPENSABLE POUR VERCEL
@@ -306,7 +304,6 @@ def get_activities_route():
     grid_store_map = {}
     grid_store_db = defaultdict(set)
     
-    project = pyproj.Transformer.from_crs(4326, 3857, always_xy=True).transform
     current_year, current_week, _ = datetime.now().isocalendar()
     current_period = f"{current_year}-W{current_week:02d}"
 
@@ -445,7 +442,7 @@ def get_activities_route():
                     }
                 })
 
-                stats_dim = defaultdict(lambda: defaultdict(lambda: {'blocks': set(), 'acts': set(), 'dist': 0.0}))
+                stats_dim = defaultdict(lambda: defaultdict(lambda: {'blocks': set(), 'acts': set()}))
 
                 for act_idx in city_acts_indices:
                     act = activities[act_idx]
@@ -456,14 +453,6 @@ def get_activities_route():
                     is_current = (act_period == current_period)
 
                     act_pts = polyline.decode(act['polyline'])
-                    line = LineString([(lon, lat) for lat, lon in act_pts])
-                    dist_km = 0.0
-                    try:
-                        line_in = line.intersection(poly_geom)
-                        if not line_in.is_empty:
-                            dist_km = transform(project, line_in).length / 1000.0
-                    except: pass
-
                     act_blocks_all = get_cells_from_polyline(act_pts, grid_size_deg)
                     act_blocks_in = act_blocks_all.intersection(city_blocks)
 
@@ -473,7 +462,6 @@ def get_activities_route():
                     for k_sp, k_per in keys:
                         stats_dim[k_sp][k_per]['blocks'].update(act_blocks_in)
                         stats_dim[k_sp][k_per]['acts'].add(act_idx)
-                        stats_dim[k_sp][k_per]['dist'] += dist_km
 
                 for sp, periods in stats_dim.items():
                     for per, s_data in periods.items():
@@ -487,8 +475,7 @@ def get_activities_route():
                             "period": per,
                             "b_count": b_cnt,
                             "pct": p_val,
-                            "act_count": len(s_data['acts']),
-                            "dist_km": round(s_data['dist'], 2)
+                            "act_count": len(s_data['acts'])
                         })
 
             except Exception as e:
@@ -501,13 +488,12 @@ def get_activities_route():
                 engine = create_engine(DB_URL, poolclass=NullPool)
                 with engine.connect() as conn:
                     upsert_query = text("""
-                        INSERT INTO city_scores (athlete_id, city_name, grid_size, sport, period, blocks_count, percent, activities_count, distance_km, last_updated)
-                        VALUES (:ath_id, :c_name, :g_size, :sport, :period, :b_count, :pct, :act_count, :dist_km, CURRENT_TIMESTAMP)
+                        INSERT INTO city_scores (athlete_id, city_name, grid_size, sport, period, blocks_count, percent, activities_count, last_updated)
+                        VALUES (:ath_id, :c_name, :g_size, :sport, :period, :b_count, :pct, :act_count, CURRENT_TIMESTAMP)
                         ON CONFLICT (athlete_id, city_name, grid_size, sport, period) DO UPDATE 
                         SET blocks_count = EXCLUDED.blocks_count,
                             percent = EXCLUDED.percent,
                             activities_count = EXCLUDED.activities_count,
-                            distance_km = EXCLUDED.distance_km,
                             last_updated = CURRENT_TIMESTAMP;
                     """)
                     for score in scores_to_save:
@@ -673,7 +659,7 @@ def get_city_leaderboard():
             total_activities = int(stats_res.total_activities) if stats_res and stats_res.total_activities else 0
 
             board_query = text("""
-                SELECT u.athlete_name, c.percent, c.blocks_count, c.activities_count, c.distance_km
+                SELECT u.athlete_name, c.percent, c.blocks_count, c.activities_count
                 FROM city_scores c
                 JOIN strava_users u ON c.athlete_id = u.athlete_id
                 WHERE c.city_name = :city AND c.grid_size = :grid_size AND c.sport = :sport AND c.period = :period
@@ -688,8 +674,7 @@ def get_city_leaderboard():
                     "name": name,
                     "percent": row.percent,
                     "blocks": row.blocks_count,
-                    "activities": row.activities_count,
-                    "distance_km": row.distance_km
+                    "activities": row.activities_count
                 })
 
             return jsonify({
