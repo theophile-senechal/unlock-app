@@ -196,7 +196,7 @@
         <!-- PANNEAU GAUCHE -->
         <div class="global-panel">
             <div class="card">
-                <div class="card-title">👥 Villes les plus courues</div>
+                <div class="card-title">👥 Villes avec le plus d'athlètes</div>
                 <ul class="top-list" id="top-users-list"></ul>
             </div>
             <div class="card">
@@ -210,7 +210,6 @@
             <div class="city-hero" id="city-hero" style="display: none;">
                 <div class="city-title-wrapper">
                     <h2 id="current-city-name">Nantes</h2>
-                    <!-- Ajout d'un ID pour afficher dynamiquement la plage de dates si "Semaine en cours" est actif -->
                     <p id="city-subtitle">Classement des meilleurs explorateurs</p>
                 </div>
                 <div class="city-kpis">
@@ -269,11 +268,9 @@
             };
         }
 
-        // Fonction utilitaire pour calculer le Lundi et le Dimanche de la semaine en cours au format dd/mm/aaaa
         function getCurrentWeekDates() {
             const now = new Date();
             const day = now.getDay();
-            // Ajustement pour que la semaine commence un Lundi (si day === 0 c'est Dimanche, donc -6 jours)
             const diffToMonday = now.getDate() - day + (day === 0 ? -6 : 1);
             
             const monday = new Date(now.setDate(diffToMonday));
@@ -337,7 +334,14 @@
                         document.getElementById('empty-state').style.display = 'flex';
                     }
 
-                    const topUsers = [...allCities].sort((a, b) => b.users - a.users).slice(0, 10);
+                    // Tri principal par athlètes, et départage par blocs cumulés si ex aequo
+                    const topUsers = [...allCities].sort((a, b) => {
+                        if (b.users === a.users) {
+                            return b.blocks - a.blocks;
+                        }
+                        return b.users - a.users;
+                    }).slice(0, 10);
+                    
                     renderTopList('top-users-list', topUsers, 'users', 'athlètes');
 
                     const topActs = [...allCities].sort((a, b) => b.activities - a.activities).slice(0, 10);
@@ -396,7 +400,6 @@
                 return;
             }
 
-            // GESTION DU SOUS-TITRE (Date de la semaine en cours ou texte par défaut)
             if (filters.period === 'current_week') {
                 citySubtitle.textContent = `Semaine du ${getCurrentWeekDates()}`;
             } else {
