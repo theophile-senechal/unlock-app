@@ -378,7 +378,7 @@ def get_activities_route():
                     
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
-                    for row in conn.execute(query):
+                    for row in result_proxy:
                         if row.nom_commune not in identified_cities:
                             geom = json.loads(row.outline)
                             if geom['type'] == 'Polygon':
@@ -403,7 +403,7 @@ def get_activities_route():
         
         for city_name, city_data in identified_cities.items():
             try:
-                poly_geom = city_data['poly_obj']
+                poly_geom = city_data['poly']
                 prepared_poly = prep(poly_geom)
                 min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
                 
@@ -412,11 +412,11 @@ def get_activities_route():
                 
                 for (clat, clon), acts_set in grid_store_db.items():
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                        # On passe (longitude, latitude) pour correspondre au polygone
+                        # On passe bien (longitude, latitude) pour matcher le polygone
                         if prepared_poly.contains(Point(clon, clat)):
                             city_blocks.add((clat, clon))
                             city_acts_indices.update(acts_set)
-                    
+                
                 if not city_blocks: continue
                 
                 count_inside = len(city_blocks)
@@ -615,7 +615,6 @@ def get_global_stats_leaderboard():
                     "activities": int(row.total_acts) if row.total_acts else 0
                 })
             
-            # Récupération dynamique des sports pour le menu déroulant du leaderboard
             sport_query = text("SELECT DISTINCT sport FROM city_scores WHERE sport != 'all'")
             sports_res = conn.execute(sport_query).fetchall()
             available_sports = [r.sport for r in sports_res]
