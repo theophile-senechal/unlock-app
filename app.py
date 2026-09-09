@@ -378,21 +378,20 @@ def get_activities_route():
                     
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     
-                    for row in result_proxy:
+                    for row in conn.execute(query):
                         if row.nom_commune not in identified_cities:
-                            geojson_geom = json.loads(row.outline)
-                            inverted_outline = []
-                            if geojson_geom['type'] == 'Polygon':
-                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0]]
-                            elif geojson_geom['type'] == 'MultiPolygon':
-                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0][0]]
+                            geom = json.loads(row.outline)
+                            if geom['type'] == 'Polygon':
+                                coords = [[p[0], p[1]] for p in geom['coordinates'][0]]
+                            elif geom['type'] == 'MultiPolygon':
+                                coords = [[p[0], p[1]] for p in geom['coordinates'][0][0]]
+                            else:
+                                continue
                             
-                            # .buffer(0) protège contre les géométries invalides d'OSM
                             identified_cities[row.nom_commune] = {
                                 "name": row.nom_commune,
                                 "area_m2": row.area_m2,
-                                "outline": inverted_outline,
-                                "poly_obj": Polygon(inverted_outline).buffer(0) 
+                                "poly": Polygon(coords).buffer(0)
                             }
                     if len(identified_cities) >= 70: break
 
@@ -413,10 +412,11 @@ def get_activities_route():
                 
                 for (clat, clon), acts_set in grid_store_db.items():
                     if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                        if prepared_poly.contains(Point(clat, clon)):
+                        # On passe (longitude, latitude) pour correspondre au polygone
+                        if prepared_poly.contains(Point(clon, clat)):
                             city_blocks.add((clat, clon))
                             city_acts_indices.update(acts_set)
-                
+                    
                 if not city_blocks: continue
                 
                 count_inside = len(city_blocks)
