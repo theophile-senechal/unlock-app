@@ -376,53 +376,87 @@ def get_activities_route():
                     result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
                     for row in result_proxy:
                         if row.nom_commune not in identified_cities:
-                            geom = json.loads(row.outline)
+                            try:
+                                geom = json.loads(row.outline)
 
-                            if geom['type'] == 'Polygon':
-                                # Coordonnées au format GeoJSON : [longitude, latitude]
-                                coords_lonlat = geom['coordinates'][0]
+                                # ==========================================
+                                # POLYGON
+                                # ==========================================
+                                if geom['type'] == 'Polygon':
 
-                                # Géométrie Shapely pour les calculs
-                                poly_shapely = Polygon(coords_lonlat).buffer(0)
+                                    # Coordonnées GeoJSON = [lon, lat]
+                                    polygon_coords = geom['coordinates'][0]
 
-                            elif geom['type'] == 'MultiPolygon':
-                                # On conserve l'ensemble des polygones de la commune
-                                from shapely.geometry import MultiPolygon
+                                    # Géométrie Shapely pour les calculs
+                                    poly_shapely = Polygon(polygon_coords).buffer(0)
 
-                                polygons = []
+                                    # Coordonnées Leaflet = [lat, lon]
+                                    leaflet_outline = [
+                                        [point[1], point[0]]
+                                        for point in polygon_coords
+                                    ]
 
-                                for polygon_coords in geom['coordinates']:
-                                    if polygon_coords and polygon_coords[0]:
-                                        polygon = Polygon(polygon_coords[0]).buffer(0)
+                                # ==========================================
+                                # MULTIPOLYGON
+                                # ==========================================
+                                elif geom['type'] == 'MultiPolygon':
 
-                                        if not polygon.is_empty:
-                                            polygons.append(polygon)
+                                    from shapely.geometry import MultiPolygon
 
-                                if not polygons:
+                                    shapely_polygons = []
+                                    leaflet_outline = []
+
+                                    for polygon in geom['coordinates']:
+
+                                        if not polygon or not polygon[0]:
+                                            continue
+
+                                        # Anneau extérieur du polygone
+                                        exterior = polygon[0]
+
+                                        # --- Shapely ---
+                                        shapely_polygon = Polygon(exterior).buffer(0)
+
+                                        if not shapely_polygon.is_empty:
+                                            shapely_polygons.append(shapely_polygon)
+
+                                        # --- Leaflet ---
+                                        leaflet_polygon = [
+                                            [point[1], point[0]]
+                                            for point in exterior
+                                        ]
+
+                                        leaflet_outline.append([leaflet_polygon])
+
+                                    if not shapely_polygons:
+                                        continue
+
+                                    # Géométrie complète pour les calculs
+                                    poly_shapely = MultiPolygon(shapely_polygons).buffer(0)
+
+                                else:
                                     continue
 
-                                # Géométrie Shapely complète pour les calculs
-                                poly_shapely = MultiPolygon(polygons).buffer(0)
+                                # ==========================================
+                                # SAUVEGARDE
+                                # ==========================================
+                                identified_cities[row.nom_commune] = {
+                                    "name": row.nom_commune,
+                                    "area_m2": row.area_m2,
 
-                            else:
-                                continue
+                                    # Format attendu par Leaflet
+                                    "outline": leaflet_outline,
 
-                            identified_cities[row.nom_commune] = {
-                                "name": row.nom_commune,
-                                "area_m2": row.area_m2,
+                                    # Format utilisé par Shapely
+                                    "poly": poly_shapely
+                                }
 
-                                # IMPORTANT :
-                                # On conserve le GeoJSON original pour Leaflet
-                                "outline": row.outline,
-
-                                # Géométrie Shapely utilisée uniquement pour les calculs
-                                "poly": poly_shapely
-                            }
+                            except Exception as e:
+                                print(f"Erreur géométrie commune {row.nom_commune}: {e}")
 
                     if len(identified_cities) >= 70:break
 
 
-                    
         except Exception as e:
             print(f"⚠️ Erreur Batch DB: {e}")
 
