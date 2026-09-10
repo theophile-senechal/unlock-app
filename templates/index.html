@@ -442,32 +442,15 @@
                 });
             }
             
-            // --- MISE À JOUR AUTOMATIQUE DE LA VILLE SÉLECTIONNÉE ---
-            if (currentData.top_municipalities && currentData.top_municipalities.length > 0) {
-                let targetCity = null;
-                if (currentSelectedCityName) {
-                    targetCity = currentData.top_municipalities.find(c => c.name === currentSelectedCityName);
-                }
-                if (!targetCity) {
-                    targetCity = currentData.top_municipalities[0];
-                }
-                currentSelectedCityName = targetCity.name;
-                document.getElementById('city-search').value = targetCity.name;
-                displayActiveCity(targetCity);
-            } else {
-                currentSelectedCityName = null;
-                document.getElementById('city-search').value = '';
-                document.getElementById('city-info-box').style.display = 'none';
+            if (!currentSelectedCityName && currentData.top_municipalities.length > 0) {
+                currentSelectedCityName = currentData.top_municipalities[0].name;
             }
-            // --------------------------------------------------------
 
             renderData();
         } catch (err) { console.error(err); } finally {
             setTimeout(() => { loader.style.display = 'none'; }, 600);
         }
     }
-
-         
 
     function onCitySearch() {
         const inputVal = document.getElementById('city-search').value;
