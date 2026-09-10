@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -7,279 +7,245 @@
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏆</text></svg>">
     
-    <!-- Google Font Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        bordeaux: '#6d071a',
-                        'off-white': '#fdfdfb',
-                        bg: '#f4f4f5'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
-    
     <style>
-        body { 
-            background-color: var(--bg); 
-            font-family: 'Inter', sans-serif; 
-            margin: 0; 
+        :root { --bordeaux: #6d071a; --green: #4caf50; --off-white: #fdfdfb; --bg: #f4f5f7; --card-bg: #ffffff; --text-dark: #2c2c2c; }
+        
+        html, body { height: 100%; margin: 0; }
+        body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text-dark); display: flex; flex-direction: column; overflow-y: auto; }
+
+        .header { 
+            background: #fff; padding: 15px 30px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            border-bottom: 1px solid #eee; flex-shrink: 0;
+        }
+        .header h1 { margin: 0; font-size: 1.4rem; color: var(--bordeaux); letter-spacing: -0.5px; }
+        .back-btn { text-decoration: none; color: #666; font-weight: 600; font-size: 0.9rem; background: #f0f0f0; padding: 8px 16px; border-radius: 20px; transition: 0.2s; white-space: nowrap; }
+        .back-btn:hover { background: #e0e0e0; color: #333; }
+
+        /* BARRE DE FILTRES RESPONSIVE */
+        .filter-bar {
+            background: #fff; padding: 12px 30px;
+            display: flex; gap: 15px; align-items: center; justify-content: flex-start; flex-wrap: wrap;
+            border-bottom: 1px solid #eee;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+            position: sticky; top: 0; z-index: 100; flex-shrink: 0;
+        }
+        
+        .filter-group { display: flex; align-items: center; gap: 8px; }
+        .filter-label { font-size: 0.75rem; font-weight: 700; color: #888; text-transform: uppercase; white-space: nowrap; letter-spacing: 0.5px; }
+
+        select, input[type="text"] { 
+            padding: 8px 12px; border-radius: 8px; border: 1px solid #ddd; background: #f9f9f9; 
+            font-weight: 600; color: var(--text-dark); outline: none; font-size: 0.85rem; cursor: pointer; 
+            transition: all 0.2s ease; font-family: 'Inter', sans-serif;
+        }
+        select:hover, input[type="text"]:hover { border-color: #bbb; }
+        select:focus, input[type="text"]:focus { border-color: var(--bordeaux); background: #fff; box-shadow: 0 0 0 3px rgba(109,7,26,0.1); }
+        
+        .search-wrapper { position: relative; display: flex; align-items: center; width: 100%; max-width: 250px; margin-left: auto;}
+        .search-wrapper svg { position: absolute; left: 10px; color: #888; width: 16px; height: 16px; pointer-events: none; }
+        .search-wrapper input { padding-left: 32px; cursor: text; width: 100%; box-sizing: border-box;}
+
+        .container { 
+            flex-grow: 1; width: 100%; max-width: 1400px; margin: 20px auto; padding: 0 30px; box-sizing: border-box;
+            display: grid; grid-template-columns: 320px 1fr; gap: 25px; align-items: start; 
         }
 
-        /* LOGO ORIGINAL EXACT */
-        .logo { 
-            font-weight: 800; 
-            font-size: 1.4rem; 
-            color: #6d071a; 
-            letter-spacing: -1px; 
-            line-height: 1;
+        .global-panel { 
+            display: flex; flex-direction: column; gap: 20px; 
+            position: sticky; top: 90px; 
+            max-height: calc(100vh - 120px); overflow-y: auto; scrollbar-width: none; 
         }
-
-        /* Scrollbar masquée pour le panel gauche */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        /* Scrollbar custom pour le tableau */
-        .custom-scrollbar::-webkit-scrollbar { width: 8px; height: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f9f9f9; border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 8px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #6d071a; }
-
-        /* Animation Barre Loader */
-        @keyframes loadingTrack {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(250%); }
-        }
-        .progress-bar-fill {
-            animation: loadingTrack 1.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-        }
-
-        /* Classes gérées par le JS pour les tops (Panneau gauche) */
-        .top-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: all 0.2s; border-radius: 8px; margin-bottom: 2px;}
-        .top-item:hover { background: rgba(109,7,26,0.04); transform: translateX(4px); }
+        .global-panel::-webkit-scrollbar { display: none; }
+        
+        .card { background: var(--card-bg); padding: 22px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02); }
+        .card-title { font-size: 1.05rem; font-weight: 800; margin-bottom: 15px; color: #333; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #f4f5f7; padding-bottom: 12px; }
+        
+        .top-list { list-style: none; padding: 0; margin: 0; }
+        .top-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 10px; border-bottom: 1px solid #f5f5f5; cursor: pointer; transition: all 0.2s; border-radius: 8px; margin-bottom: 2px; }
+        .top-item:hover { background: rgba(109,7,26,0.03); transform: translateX(4px); }
         .top-item:last-child { border-bottom: none; }
         
-        .top-rank { font-weight: 800; color: #9ca3af; width: 28px; font-size: 0.85rem; }
-        .top-name { font-weight: 700; color: #374151; flex-grow: 1; font-size: 0.9rem; }
-        .top-val { font-weight: 800; color: #6d071a; font-size: 0.85rem; background: rgba(109, 7, 26, 0.06); padding: 4px 10px; border-radius: 20px; }
+        .top-rank { font-weight: 800; color: #aaa; width: 28px; font-size: 0.85rem; }
+        .top-name { font-weight: 700; color: var(--text-dark); flex-grow: 1; font-size: 0.9rem; }
+        .top-val { font-weight: 800; color: var(--bordeaux); font-size: 0.85rem; background: rgba(109, 7, 26, 0.06); padding: 4px 10px; border-radius: 20px; }
 
-        /* Classes gérées par le JS pour le Leaderboard Table (Panneau droit) */
-        .leaderboard-table th { 
-            padding: 16px 20px; font-size: 0.75rem; font-weight: 800; color: #9ca3af; text-transform: uppercase; 
-            border-bottom: 2px solid #f3f4f6; cursor: pointer; transition: 0.2s; white-space: nowrap; 
-            background: rgba(255,255,255,0.95); position: sticky; top: 0; z-index: 10; letter-spacing: 0.5px; 
+        .city-panel { display: flex; flex-direction: column; gap: 20px; flex-grow: 1; min-width: 0; }
+
+        .city-hero { background: linear-gradient(135deg, var(--bordeaux) 0%, #4a0411 100%); color: white; display: flex; justify-content: space-between; align-items: center; padding: 25px 30px; border-radius: 16px; box-shadow: 0 10px 30px rgba(109,7,26,0.2); }
+        .city-title-wrapper h2 { margin: 0; font-size: 2.2rem; letter-spacing: -1px; line-height: 1.1; }
+        .city-title-wrapper p { margin: 6px 0 0 0; opacity: 0.85; font-size: 0.95rem; font-weight: 500; }
+        
+        .city-kpis { display: flex; gap: 15px; }
+        .kpi-block { text-align: center; background: rgba(255,255,255,0.1); padding: 10px 20px; border-radius: 12px; backdrop-filter: blur(5px); min-width: 90px; }
+        .kpi-block .val { display: block; font-size: 1.6rem; font-weight: 800; line-height: 1.2; }
+        .kpi-block .lbl { font-size: 0.65rem; text-transform: uppercase; font-weight: 700; opacity: 0.8; letter-spacing: 1px; }
+
+        .leaderboard-wrapper { 
+            display: flex; flex-direction: column; 
+            background: var(--card-bg); border-radius: 16px; 
+            box-shadow: 0 4px 20px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02);
+            max-height: calc(100vh - 260px); 
+            overflow-y: auto; overflow-x: auto;
         }
-        .leaderboard-table th::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 100%; height: 2px; background: transparent; transition: 0.2s; }
-        .leaderboard-table th:hover { color: #6d071a; }
-        .leaderboard-table th.active-sort { color: #6d071a; }
-        .leaderboard-table th.active-sort::after { background: #6d071a; }
+        
+        .leaderboard-wrapper::-webkit-scrollbar { width: 8px; height: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-track { background: #f9f9f9; border-radius: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 8px; }
+        .leaderboard-wrapper::-webkit-scrollbar-thumb:hover { background: var(--bordeaux); }
+
+        .leaderboard-table { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; }
+        
+        .leaderboard-table th { 
+            padding: 18px 15px; font-size: 0.75rem; font-weight: 800; color: #888; text-transform: uppercase; 
+            border-bottom: 2px solid #eee; cursor: pointer; transition: 0.2s; white-space: nowrap; 
+            background: #fff; position: sticky; top: 0; z-index: 10; letter-spacing: 0.5px; 
+        }
+        .leaderboard-table th::after { content: ''; position: absolute; left: 0; bottom: -2px; width: 100%; height: 2px; background: #eee; }
+        .leaderboard-table th:hover { color: var(--bordeaux); }
+        .leaderboard-table th.active-sort { color: var(--bordeaux); }
+        .leaderboard-table th.active-sort::after { background: var(--bordeaux); }
         .th-right { text-align: right; }
 
-        .leaderboard-table td { padding: 14px 20px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
-        .leaderboard-table tr:hover td { background: rgba(109,7,26,0.02); }
+        .leaderboard-table td { padding: 15px; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
+        .leaderboard-table tr:hover td { background: rgba(109,7,26,0.015); }
         .leaderboard-table tr:last-child td { border-bottom: none; }
         
-        .td-rank { font-weight: 800; color: #9ca3af; width: 50px; text-align: center; }
-        .rank-1 { color: #eab308; font-size: 1.4rem; } /* Or */
-        .rank-2 { color: #9ca3af; font-size: 1.2rem; } /* Argent */
-        .rank-3 { color: #d97706; font-size: 1.1rem; } /* Bronze */
+        .td-rank { font-weight: 800; color: #999; width: 50px; text-align: center; }
+        .rank-1 { color: #FFD700; font-size: 1.4rem; }
+        .rank-2 { color: #C0C0C0; font-size: 1.2rem; }
+        .rank-3 { color: #CD7F32; font-size: 1.1rem; }
         
-        .td-name { font-weight: 700; color: #374151; font-size: 0.95rem; white-space: nowrap; }
-        .td-stat { font-weight: 700; color: #6b7280; text-align: right; font-feature-settings: "tnum"; }
-        .td-highlight { color: #6d071a; font-weight: 800; font-size: 1.05rem; }
+        .td-name { font-weight: 700; color: var(--text-dark); font-size: 1rem; white-space: nowrap; }
+        .td-stat { font-weight: 700; color: #555; text-align: right; font-feature-settings: "tnum"; font-variant-numeric: tabular-nums; }
+        .td-highlight { color: var(--bordeaux); font-weight: 800; font-size: 1.05rem; }
+
+        .empty-state { margin: auto; text-align: center; padding: 60px 20px; color: #888; }
+        .empty-state svg { width: 48px; height: 48px; color: #ddd; margin-bottom: 15px; }
+        .empty-state p { margin: 0; font-size: 1.1rem; font-weight: 600; }
+
+        #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
+        .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
+        .loader-text { color: var(--bordeaux); font-weight: 800; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; font-size: 0.9rem; }
+        .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
+        .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
+        @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
+
+        @media (max-width: 1024px) {
+            .container { display: flex; flex-direction: column-reverse; padding: 0 15px; gap: 20px; margin-bottom: 30px; }
+            .global-panel { position: static; max-height: none; overflow-y: visible; }
+            .filter-bar { flex-direction: column; align-items: stretch; gap: 12px; }
+            .filter-group { flex-direction: column; align-items: stretch; width: 100%; gap: 6px; }
+            .search-wrapper { max-width: 100%; margin-left: 0; }
+            .city-hero { flex-direction: column; text-align: center; gap: 20px; padding: 20px; }
+            .city-kpis { justify-content: center; width: 100%; gap: 10px; flex-wrap: wrap; }
+            .kpi-block { flex: 1; padding: 10px; min-width: 45%; }
+            .leaderboard-wrapper { max-height: none; overflow-y: visible; }
+            .leaderboard-table th { top: 220px; padding: 15px 10px; font-size: 0.7rem; }
+            .leaderboard-table td { padding: 12px 10px; font-size: 0.85rem; }
+        }
     </style>
 </head>
+<body>
 
-<body class="h-full flex flex-col text-gray-800 bg-[#f4f4f5] overflow-y-auto overflow-x-hidden">
-
-    <!-- ======================================================== -->
-    <!--                       LOADER                             -->
-    <!-- ======================================================== -->
-    <div id="loader" class="fixed inset-0 bg-[#fdfdfb] z-[9999] flex flex-col items-center justify-center transition-opacity duration-300">
-        <div class="flex flex-col items-center text-center px-6">
-            <span class="text-3xl mb-4">🏆</span>
-            <div class="loader-text text-xs font-bold tracking-[0.2em] text-[#6d071a] uppercase mb-5">
-                Actualisation des scores...
-            </div>
-            <div class="w-48 h-1.5 bg-neutral-200/70 rounded-full overflow-hidden relative">
-                <div class="progress-bar-fill absolute inset-y-0 w-20 bg-[#6d071a] rounded-full"></div>
-            </div>
+    <div id="loader">
+        <div class="loader-content">
+            <div class="loader-text">Actualisation des scores...</div>
+            <div class="progress-bar"><div class="progress-fill"></div></div>
         </div>
-
-        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" rel="noopener noreferrer" 
-           class="absolute bottom-7 flex items-center gap-2 text-xs font-semibold text-[#6d071a]/70 hover:text-[#6d071a] transition-all">
-            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
-            <span>Théophile Sénéchal</span>
-        </a>
     </div>
 
-    <!-- ======================================================== -->
-    <!--                       HEADER                             -->
-    <!-- ======================================================== -->
-    <header class="relative z-[90] bg-white border-b border-gray-200 px-5 md:px-8 py-3.5 flex items-center justify-between shadow-sm shrink-0">
-        <div class="logo flex items-center gap-1.5">
-            UNLOCK <span class="text-gray-400 font-medium text-lg tracking-normal">Leaderboard</span>
+    <div class="header">
+        <h1>UNLOCK Leaderboard</h1>
+        <a href="/" class="back-btn">← Retour Carte</a>
+    </div>
+
+    <div class="filter-bar">
+        <div class="filter-group">
+            <span class="filter-label">Grille</span>
+            <select id="grid-select" onchange="loadGlobalStats()">
+                <option value="100">100m x 100m</option>
+                <option value="250" selected>250m x 250m</option>
+            </select>
         </div>
         
-        <a href="/" class="flex items-center gap-1.5 px-4 py-2 bg-gray-50 hover:bg-gray-100 border border-gray-200/80 hover:border-gray-300 text-gray-600 rounded-xl text-xs font-semibold transition shadow-sm whitespace-nowrap">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            <span class="hidden sm:inline">Retour Carte</span>
-            <span class="sm:hidden">Carte</span>
-        </a>
-    </header>
-
-    <!-- ======================================================== -->
-    <!--                       FILTRES                            -->
-    <!-- ======================================================== -->
-    <div class="sticky top-0 z-[80] bg-white/80 backdrop-blur-md border-b border-gray-200/60 shadow-sm px-5 md:px-8 py-3 flex flex-col md:flex-row gap-4 items-center justify-between shrink-0">
-        
-        <!-- Left group: Selects -->
-        <div class="flex flex-wrap items-center justify-center md:justify-start gap-4 w-full md:w-auto">
-            <!-- Grid Select -->
-            <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold tracking-wider text-gray-500 uppercase">Grille</span>
-                <div class="relative">
-                    <select id="grid-select" onchange="loadGlobalStats()" class="appearance-none bg-white border border-gray-200 text-gray-700 text-xs font-semibold py-2 pl-3 pr-8 rounded-xl shadow-sm hover:border-gray-300 focus:outline-none focus:border-[#6d071a] focus:ring-2 focus:ring-[#6d071a]/10 transition cursor-pointer min-w-[120px]">
-                        <option value="100">100m x 100m</option>
-                        <option value="250" selected>250m x 250m</option>
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Period Select -->
-            <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold tracking-wider text-gray-500 uppercase">Période</span>
-                <div class="relative">
-                    <select id="period-select" onchange="loadGlobalStats()" class="appearance-none bg-white border border-gray-200 text-gray-700 text-xs font-semibold py-2 pl-3 pr-8 rounded-xl shadow-sm hover:border-gray-300 focus:outline-none focus:border-[#6d071a] focus:ring-2 focus:ring-[#6d071a]/10 transition cursor-pointer min-w-[140px]">
-                        <option value="all" selected>Historique Global</option>
-                        <option value="current_week">Semaine en cours</option>
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Sport Select -->
-            <div class="flex items-center gap-2">
-                <span class="text-[10px] font-bold tracking-wider text-gray-500 uppercase">Sport</span>
-                <div class="relative">
-                    <select id="sport-select" onchange="loadGlobalStats()" class="appearance-none bg-white border border-gray-200 text-gray-700 text-xs font-semibold py-2 pl-3 pr-8 rounded-xl shadow-sm hover:border-gray-300 focus:outline-none focus:border-[#6d071a] focus:ring-2 focus:ring-[#6d071a]/10 transition cursor-pointer min-w-[130px]">
-                        <option value="all" selected>Tous les sports</option>
-                    </select>
-                    <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                    </div>
-                </div>
-            </div>
+        <div class="filter-group">
+            <span class="filter-label">Période</span>
+            <select id="period-select" onchange="loadGlobalStats()">
+                <option value="all" selected>Historique Global</option>
+                <option value="current_week">Semaine en cours</option>
+            </select>
         </div>
 
-        <!-- Right group: City Search -->
-        <div class="relative w-full md:w-[260px] flex-shrink-0">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400 pointer-events-none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-            <input type="text" id="city-search" list="city-suggestions" placeholder="Saisissez une ville..." onchange="handleCitySearch()"
-                   class="w-full pl-9 pr-3 py-2 text-xs font-semibold text-gray-800 bg-white border border-gray-200 rounded-xl shadow-sm placeholder-gray-400 focus:outline-none focus:border-[#6d071a] focus:ring-2 focus:ring-[#6d071a]/10 transition">
+        <div class="filter-group">
+            <span class="filter-label">Sport</span>
+            <select id="sport-select" onchange="loadGlobalStats()">
+                <option value="all" selected>Tous les sports</option>
+                <!-- Les autres sports seront insérés ici par JS -->
+            </select>
+        </div>
+
+        <div class="filter-group search-wrapper">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            <input type="text" id="city-search" list="city-suggestions" placeholder="Saisissez une ville..." onchange="handleCitySearch()">
             <datalist id="city-suggestions"></datalist>
         </div>
     </div>
 
-    <!-- ======================================================== -->
-    <!--                       CONTENU PRINCIPAL                  -->
-    <!-- ======================================================== -->
-    <main class="flex-grow w-full max-w-7xl mx-auto px-4 py-6 md:py-8 flex flex-col lg:flex-row gap-6 md:gap-8 mb-10">
-        
-        <!-- PANNEAU GAUCHE (Tops Globaux) -->
-        <div class="w-full lg:w-[340px] flex-shrink-0 flex flex-col gap-6 lg:sticky lg:top-[90px] lg:max-h-[calc(100vh-120px)] overflow-y-auto no-scrollbar pb-6">
-            
-            <div class="bg-white/90 backdrop-blur-md border border-[#6d071a]/15 shadow-[0_8px_30px_rgba(109,7,26,0.06)] rounded-2xl p-5">
-                <h2 class="text-sm font-extrabold text-gray-800 flex items-center gap-2 border-b border-gray-100 pb-3 mb-2">
-                    <span>👥</span> Villes avec le plus d'athlètes
-                </h2>
-                <ul id="top-users-list" class="m-0 p-0 list-none"></ul>
+    <div class="container">
+        <!-- PANNEAU GAUCHE -->
+        <div class="global-panel">
+            <div class="card">
+                <div class="card-title">👥 Villes avec le plus d'athlètes</div>
+                <ul class="top-list" id="top-users-list"></ul>
             </div>
-            
-            <div class="bg-white/90 backdrop-blur-md border border-[#6d071a]/15 shadow-[0_8px_30px_rgba(109,7,26,0.06)] rounded-2xl p-5">
-                <h2 class="text-sm font-extrabold text-gray-800 flex items-center gap-2 border-b border-gray-100 pb-3 mb-2">
-                    <span>🔥</span> Villes les plus actives
-                </h2>
-                <ul id="top-acts-list" class="m-0 p-0 list-none"></ul>
+            <div class="card">
+                <div class="card-title">🔥 Villes les plus actives</div>
+                <ul class="top-list" id="top-acts-list"></ul>
             </div>
-
         </div>
 
-        <!-- PANNEAU DROITE (Ville & Leaderboard) -->
-        <div class="flex-grow flex flex-col gap-6 min-w-0">
-            
-            <!-- CITY HERO (Glassmorphism + Gradient) -->
-            <div id="city-hero" style="display: none;" class="bg-gradient-to-br from-[#6d071a] to-[#4a0411] text-white rounded-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between items-center gap-6 shadow-xl relative overflow-hidden">
-                <!-- Décoration fond -->
-                <div class="absolute top-0 right-0 -mt-4 -mr-4 w-32 h-32 bg-white opacity-5 rounded-full blur-2xl"></div>
-                <div class="absolute bottom-0 left-10 w-24 h-24 bg-black opacity-20 rounded-full blur-xl"></div>
-                
-                <div class="text-center md:text-left z-10">
-                    <h2 id="current-city-name" class="text-3xl md:text-4xl font-extrabold tracking-tight mb-1">Nantes</h2>
-                    <p id="city-subtitle" class="text-white/80 font-medium text-sm">Classement des meilleurs explorateurs</p>
+        <!-- PANNEAU DROITE -->
+        <div class="city-panel">
+            <div class="city-hero" id="city-hero" style="display: none;">
+                <div class="city-title-wrapper">
+                    <h2 id="current-city-name">Nantes</h2>
+                    <p id="city-subtitle">Classement des meilleurs explorateurs</p>
                 </div>
-                
-                <div class="flex gap-3 w-full md:w-auto justify-center z-10">
-                    <div class="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-3 text-center min-w-[100px] flex-1">
-                        <span id="kpi-explorers" class="block text-2xl font-extrabold">-</span>
-                        <span class="text-[10px] uppercase font-bold text-white/70 tracking-wider">Coureurs</span>
+                <div class="city-kpis">
+                    <div class="kpi-block">
+                        <span class="val" id="kpi-explorers">-</span>
+                        <span class="lbl">Coureurs</span>
                     </div>
-                    <div class="bg-white/10 backdrop-blur-md border border-white/10 rounded-xl p-3 text-center min-w-[100px] flex-1">
-                        <span id="kpi-activities" class="block text-2xl font-extrabold">-</span>
-                        <span class="text-[10px] uppercase font-bold text-white/70 tracking-wider">Sorties</span>
+                    <div class="kpi-block">
+                        <span class="val" id="kpi-activities">-</span>
+                        <span class="lbl">Sorties</span>
                     </div>
                 </div>
             </div>
 
-            <!-- LEADERBOARD TABLE WRAPPER -->
-            <div class="bg-white/90 backdrop-blur-md border border-[#6d071a]/15 shadow-[0_8px_30px_rgba(109,7,26,0.06)] rounded-2xl overflow-hidden flex flex-col flex-grow">
+            <div class="leaderboard-wrapper">
+                <table class="leaderboard-table" id="leaderboard-table" style="display: none;">
+                    <thead>
+                        <tr>
+                            <th>Rang</th>
+                            <th>Athlète</th>
+                            <th onclick="sortLeaderboard('percent')" id="th-percent" class="active-sort th-right">Surface (%) ▾</th>
+                            <th onclick="sortLeaderboard('blocks')" id="th-blocks" class="th-right">Blocs</th>
+                            <th onclick="sortLeaderboard('activities')" id="th-activities" class="th-right">Activités</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leaderboard-body"></tbody>
+                </table>
                 
-                <div class="overflow-x-auto custom-scrollbar">
-                    <table class="leaderboard-table w-full text-left border-collapse" id="leaderboard-table" style="display: none;">
-                        <thead>
-                            <tr>
-                                <th>Rang</th>
-                                <th>Athlète</th>
-                                <th onclick="sortLeaderboard('percent')" id="th-percent" class="active-sort th-right">Surface (%) ▾</th>
-                                <th onclick="sortLeaderboard('blocks')" id="th-blocks" class="th-right">Blocs</th>
-                                <th onclick="sortLeaderboard('activities')" id="th-activities" class="th-right">Activités</th>
-                            </tr>
-                        </thead>
-                        <tbody id="leaderboard-body"></tbody>
-                    </table>
+                <div id="empty-state" class="empty-state">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <p>Recherchez ou cliquez sur une ville pour afficher son classement.</p>
                 </div>
-                
-                <!-- EMPTY STATE -->
-                <div id="empty-state" class="flex flex-col items-center justify-center p-16 text-center text-gray-400">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="w-12 h-12 mb-4 opacity-50"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    <p class="text-sm font-semibold">Recherchez ou cliquez sur une ville pour afficher son classement.</p>
-                </div>
-
             </div>
         </div>
+    </div>
 
-    </main>
-
-    <!-- ======================================================== -->
-    <!--                     LOGIQUE JAVASCRIPT                   -->
-    <!-- ======================================================== -->
     <script>
         const SPORT_TRANSLATIONS = {
             'Run': 'Course à pied', 'Ride': 'Vélo', 'Swim': 'Natation', 'Hike': 'Randonnée',

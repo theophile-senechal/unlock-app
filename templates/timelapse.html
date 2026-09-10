@@ -1,107 +1,91 @@
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>UNLOCK | Time Lapse</title>
-    
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
     
-    <!-- Google Font Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        bordeaux: '#6d071a',
-                        'off-white': '#fdfdfb',
-                        bg: '#f4f4f5'
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif']
-                    }
-                }
-            }
-        }
-    </script>
-
-    <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
+        /* THÈME CLAIR */
         :root { 
             --bordeaux: #6d071a; 
             --off-white: #fdfdfb; 
+            --bg-color: #f0f2f5; 
+            --text-color: #333; 
+            --panel-white: rgba(255, 255, 255, 0.95); 
         }
         
-        body { 
-            margin: 0; 
-            font-family: 'Inter', sans-serif; 
-            background: #f0f2f5; 
-            height: 100vh; 
-            overflow: hidden; 
+        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* HEADER FLOTTANT */
+        .header { 
+            padding: 20px 30px; display: flex; align-items: flex-start; justify-content: space-between; 
+            position: absolute; top: 0; width: 100%; z-index: 1000; box-sizing: border-box; 
+            pointer-events: none; /* Laisse passer les clics vers la carte */
+        }
+        .header > * { pointer-events: auto; } /* Réactive les boutons */
+
+        /* --- BOUTON RETOUR (DESIGN ADAPTATIF) --- */
+        .back-btn { 
+            background: var(--panel-white); color: #555; padding: 0 20px; 
+            border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 0.9rem; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08); transition: all 0.2s;
+            display: flex; align-items: center; gap: 8px; backdrop-filter: blur(5px);
+            height: 44px; /* Hauteur fixe */
+            border: 1px solid rgba(0,0,0,0.05);
+        }
+        .back-btn:hover { color: var(--bordeaux); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
+        .back-btn svg { width: 20px; height: 20px; stroke-width: 2.5; }
+        
+        /* GROUPE DE CONTRÔLES */
+        .controls-top { 
+            display: flex; gap: 10px; background: var(--panel-white); padding: 5px; 
+            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); backdrop-filter: blur(5px);
+        }
+        
+        select, input { 
+            background: #f9f9f9; border: 1px solid #eee; color: #333; padding: 0 12px; 
+            border-radius: 8px; outline: none; font-weight: 600; font-family: 'Inter', sans-serif;
+            font-size: 0.85rem; height: 34px; /* Hauteur uniforme */
+        }
+        select:focus, input:focus { border-color: var(--bordeaux); background: #fff; }
+
+        /* CARTE */
+        #map { width: 100%; height: 100%; z-index: 1; }
+        .leaflet-tile { filter: brightness(0.92) contrast(0.95); }
+
+        /* TIMELINE UI (BAS) */
+        .timeline-container {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); 
+            width: 90%; max-width: 850px; z-index: 1000;
+            display: flex; align-items: center; gap: 20px;
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            padding: 15px 25px; border-radius: 20px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.5);
+            transition: all 0.3s ease;
         }
 
-        /* CARTE LEAFLET */
-        #map { width: 100%; height: 100%; position: absolute; inset: 0; z-index: 1; }
-        .leaflet-tile { filter: brightness(0.95) contrast(0.96); }
+        .play-btn {
+            background: var(--bordeaux); color: white; border: none; width: 45px; height: 45px; border-radius: 50%;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            transition: transform 0.2s, box-shadow 0.2s; flex-shrink: 0;
+            box-shadow: 0 4px 10px rgba(109, 7, 26, 0.3);
+        }
+        .play-btn:hover { transform: scale(1.05); }
 
-        /* Contrôles Leaflet Custom */
-        .leaflet-control-zoom {
-            border: none !important;
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1) !important;
-            border-radius: 12px !important;
-            overflow: hidden !important;
-            margin-right: 18px !important;
-            margin-top: 80px !important; /* Décalé pour ne pas chevaucher les filtres */
-        }
-        .leaflet-control-zoom a {
-            background-color: rgba(255, 255, 255, 0.9) !important;
-            backdrop-filter: blur(10px) !important;
-            color: #2c2c2c !important;
-            width: 36px !important;
-            height: 36px !important;
-            line-height: 36px !important;
-            font-weight: 700 !important;
-            border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
-            transition: all 0.2s ease !important;
-        }
-        .leaflet-control-zoom a:hover {
-            background-color: #6d071a !important;
-            color: #ffffff !important;
-        }
+        .slider-wrapper { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--bordeaux); height: 5px; background: #eee; border-radius: 3px; }
 
-        /* CUSTOM RANGE SLIDER (Premium UI) */
-        input[type=range] {
-            -webkit-appearance: none;
-            width: 100%;
-            background: transparent;
+        .date-display {
+            display: flex; flex-direction: column; align-items: flex-end; min-width: 80px; text-align: right;
+            border-left: 1px solid #eee; padding-left: 15px;
         }
-        input[type=range]:focus { outline: none; }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 18px; width: 18px;
-            border-radius: 50%;
-            background: var(--bordeaux);
-            cursor: pointer;
-            margin-top: -7px;
-            box-shadow: 0 2px 8px rgba(109,7,26,0.4);
-            border: 2px solid white;
-            transition: transform 0.1s;
-        }
-        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.15); }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px;
-            cursor: pointer;
-            background: rgba(0,0,0,0.1);
-            border-radius: 4px;
-        }
+        .date-month { font-size: 1.1rem; font-weight: 800; line-height: 1; color: var(--bordeaux); text-transform: uppercase; }
+        .date-year { font-size: 0.8rem; font-weight: 600; color: #999; margin-top: 2px; }
 
         /* LOADER */
         #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
@@ -110,285 +94,287 @@
         .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
         .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
         @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
+        .loader-signature { position: absolute; bottom: 30px; display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--bordeaux); opacity: 0.6; text-decoration: none; font-weight: 600; transition: opacity 0.3s, transform 0.3s; }
+        .loader-signature:hover { opacity: 1; transform: translateY(-2px); }
+        .loader-icon { width: 14px; height: 14px; fill: currentColor; }
+
+        /* ========================================= */
+        /* ---        DESIGN MOBILE (Sleek)      --- */
+        /* ========================================= */
+        @media (max-width: 768px) {
+            .header { padding: 15px; }
+
+            /* 1. BOUTON RETOUR -> CERCLE ICONE */
+            .back-btn {
+                width: 42px; height: 42px; /* Carré */
+                border-radius: 50%; /* Cercle */
+                padding: 0; justify-content: center; /* Centrer icone */
+                background: white; /* Fond bien blanc */
+            }
+            .back-btn span { display: none; } /* Cacher texte */
+            .back-btn svg { margin: 0; }
+
+            /* 2. FILTRES COMPACTS & ALIGNÉS */
+            .controls-top {
+                background: none; box-shadow: none; padding: 0;
+                display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+            }
+            
+            /* Style des selects sur mobile pour être discrets */
+            select, input {
+                background: rgba(255, 255, 255, 0.95);
+                backdrop-filter: blur(4px);
+                border: 1px solid rgba(0,0,0,0.1);
+                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                font-size: 0.75rem;
+                height: 32px;
+                width: auto; /* Largeur auto selon contenu */
+                max-width: 140px;
+            }
+
+            /* 3. TIMELINE MOBILE */
+            .timeline-container {
+                width: 90%; bottom: 25px;
+                padding: 10px 15px; gap: 10px;
+                flex-wrap: nowrap; /* Garder sur une ligne */
+            }
+            .play-btn { width: 40px; height: 40px; }
+            .date-display { padding-left: 10px; min-width: auto; }
+            .date-month { font-size: 0.9rem; }
+            .date-year { font-size: 0.7rem; }
+        }
     </style>
 </head>
-<body class="relative w-full h-screen select-none">
+<body>
 
-    <!-- ======================================================== -->
-    <!--                       LOADER                             -->
-    <!-- ======================================================== -->
-    <div id="loader" class="transition-opacity duration-300">
-        <div class="loader-content px-6">
-            <span class="text-3xl mb-4">⏱️</span>
-            <div class="loader-text text-xs">Chargement de l'historique...</div>
+    <div id="loader">
+        <div class="loader-content">
+            <div class="loader-text">Chargement de l'historique...</div>
             <div class="progress-bar"><div class="progress-fill"></div></div>
         </div>
         
-        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" rel="noopener noreferrer" 
-           class="absolute bottom-7 flex items-center gap-2 text-xs font-semibold text-[#6d071a]/70 hover:text-[#6d071a] transition-all">
-            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
+        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="loader-signature">
+            <svg class="loader-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+            </svg>
             <span>Théophile Sénéchal</span>
         </a>
     </div>
 
-    <!-- ======================================================== -->
-    <!--                       CARTE                              -->
-    <!-- ======================================================== -->
-    <div id="map"></div>
-
-    <!-- ======================================================== -->
-    <!--                 HEADER & CONTROLS (FLOAT)                -->
-    <!-- ======================================================== -->
-    <div class="absolute top-0 inset-x-0 p-4 md:p-6 flex justify-between items-start z-[1000] pointer-events-none">
-        
-        <!-- Bouton Retour -->
-        <a href="/" class="pointer-events-auto flex items-center gap-1.5 px-4 py-2.5 bg-white/90 backdrop-blur-md border border-gray-200/80 hover:border-[#6d071a] hover:text-[#6d071a] text-gray-600 rounded-xl text-xs font-semibold transition-all shadow-[0_8px_30px_rgba(0,0,0,0.06)]">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
-            <span class="hidden sm:inline">Retour Carte</span>
-            <span class="sm:hidden">Retour</span>
+    <div class="header">
+        <a href="/" class="back-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12"></line>
+                <polyline points="12 19 5 12 12 5"></polyline>
+            </svg>
+            <span>Retour</span>
         </a>
         
-        <!-- Contrôles Droite (Glassmorphism) -->
-        <div class="flex flex-col items-end gap-2.5 pointer-events-auto">
-            
-            <div class="relative w-36">
-                <select id="speed-selector" onchange="changeSpeed()" class="w-full appearance-none bg-white/90 backdrop-blur-md border border-gray-200/80 text-gray-700 text-xs font-semibold py-2.5 pl-3 pr-8 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] hover:border-[#6d071a] focus:outline-none focus:ring-2 focus:ring-[#6d071a]/10 transition cursor-pointer">
-                    <option value="600">Vitesse : Lente</option>
-                    <option value="300" selected>Vitesse : Normale</option>
-                    <option value="100">Vitesse : Rapide</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                </div>
-            </div>
+        <div class="controls-top">
+            <select id="speed-selector" onchange="changeSpeed()">
+                <option value="600">Vitesse : Lente</option>
+                <option value="300" selected>Vitesse : Normale</option>
+                <option value="100">Vitesse : Rapide</option>
+            </select>
 
-            <div class="relative w-36">
-                <select id="grid-selector" onchange="loadData()" class="w-full appearance-none bg-white/90 backdrop-blur-md border border-gray-200/80 text-gray-700 text-xs font-semibold py-2.5 pl-3 pr-8 rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] hover:border-[#6d071a] focus:outline-none focus:ring-2 focus:ring-[#6d071a]/10 transition cursor-pointer">
-                    <option value="100">Grille : 100m</option>
-                    <option value="250" selected>Grille : 250m</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-gray-400">
-                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                </div>
-            </div>
+            <select id="grid-selector" onchange="loadData()">
+                <option value="100">Grille : 100m</option>
+                <option value="250" selected>Grille : 250m</option>
+            </select>
             
-            <div class="relative w-36">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" class="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400 pointer-events-none"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
-                <input type="text" id="city-input" list="city-list" placeholder="Zoom ville..." onchange="focusCity()" autocomplete="off"
-                       class="w-full pl-8 pr-3 py-2 bg-white/90 backdrop-blur-md border border-gray-200/80 text-gray-800 text-xs font-semibold rounded-xl shadow-[0_8px_30px_rgba(0,0,0,0.06)] placeholder-gray-400 focus:outline-none focus:border-[#6d071a] focus:ring-2 focus:ring-[#6d071a]/10 transition">
-                <datalist id="city-list"></datalist>
-            </div>
-            
+            <input type="text" id="city-input" list="city-list" placeholder="🔍 Ville..." onchange="focusCity()" autocomplete="off">
+            <datalist id="city-list"></datalist>
         </div>
     </div>
 
-    <!-- ======================================================== -->
-    <!--                TIMELINE LECTEUR (BOTTOM FLOAT)           -->
-    <!-- ======================================================== -->
-    <div class="absolute bottom-6 md:bottom-10 left-1/2 -translate-x-1/2 w-[92%] max-w-3xl z-[1000] bg-white/85 backdrop-blur-md border border-[#6d071a]/15 shadow-[0_12px_40px_rgba(109,7,26,0.12)] rounded-2xl p-4 md:p-5 flex items-center gap-4 md:gap-6 pointer-events-auto">
-        
-        <!-- Bouton Play -->
-        <button onclick="togglePlay()" id="btn-play" class="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#6d071a] text-white flex items-center justify-center shadow-[0_4px_15px_rgba(109,7,26,0.4)] hover:scale-105 hover:bg-[#8a0d24] transition-all flex-shrink-0 focus:outline-none">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+    <div id="map"></div>
+
+    <div class="timeline-container">
+        <button class="play-btn" onclick="togglePlay()" id="btn-play">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         </button>
         
-        <!-- Curseur Range -->
-        <div class="flex-grow flex flex-col justify-center">
+        <div class="slider-wrapper">
             <input type="range" id="time-slider" min="0" max="100" value="0" step="1" oninput="updateTimeFromSlider()">
         </div>
 
-        <!-- Affichage Date -->
-        <div class="flex flex-col items-end min-w-[70px] md:min-w-[90px] border-l border-gray-200/80 pl-3 md:pl-5 text-right">
-            <span id="disp-month" class="text-lg md:text-xl font-extrabold leading-none text-[#6d071a] uppercase tracking-tight">---</span>
-            <span id="disp-year" class="text-[10px] md:text-xs font-bold text-gray-500 mt-1">----</span>
+        <div class="date-display">
+            <span id="disp-month" class="date-month">---</span>
+            <span id="disp-year" class="date-year">----</span>
         </div>
     </div>
 
-    <!-- ======================================================== -->
-    <!--        SIGNATURE FLOTTANTE PC (GLASSMORPHISM)            -->
-    <!-- ======================================================== -->
-    <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" rel="noopener noreferrer" 
-       class="hidden lg:flex absolute bottom-6 left-6 z-[1000] items-center gap-2 bg-white/85 backdrop-blur-md border border-[#6d071a]/15 shadow-[0_8px_30px_rgba(109,7,26,0.08)] rounded-xl px-4 py-2 text-xs font-semibold text-gray-600 hover:text-[#6d071a] transition-all duration-200 group pointer-events-auto">
-        <svg class="w-3.5 h-3.5 fill-gray-400 group-hover:fill-[#6d071a] transition-colors" viewBox="0 0 24 24"><path d="M19 3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14m-.5 15.5v-5.3a3.26 3.26 0 0 0-3.26-3.26c-.85 0-1.84.52-2.28 1.3v-1.11h-2.79v8.37h2.79v-4.93c0-.77.62-1.4 1.39-1.4a1.4 1.4 0 0 1 1.4 1.4v4.93h2.75M6.88 8.56a1.68 1.68 0 0 0 1.68-1.68c0-.93-.75-1.69-1.68-1.69a1.69 1.69 0 0 0-1.69 1.69c0 .93.76 1.68 1.69 1.68m1.39 9.94v-8.37H5.5v8.37h2.77z"/></svg>
-        <span>Développé par <strong class="font-bold text-gray-800 group-hover:text-[#6d071a]">Théophile Sénéchal</strong></span>
-    </a>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', { 
+            zoomControl: false, 
+            attributionControl: false,
+            preferCanvas: true 
+        }).setView([46.603354, 1.888334], 6);
 
-<!-- ============================================================ -->
-<!--               LEAFLET & SCRIPT METIER D'ORIGINE              -->
-<!--               (100% INTACT ET NON MODIFIE)                   -->
-<!-- ============================================================ -->
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-    const map = L.map('map', { 
-        zoomControl: false, 
-        attributionControl: false,
-        preferCanvas: true 
-    }).setView([47.65, -2.75], 8); // Zoom ajusté sur la Bretagne/Pays de la Loire par défaut
-
-    L.control.zoom({ position: 'topright' }).addTo(map);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
-    
-    const gridLayer = L.layerGroup().addTo(map);
-    const borderLayer = L.layerGroup().addTo(map);
-
-    let currentData = null;
-    let allMonths = [];
-    let isPlaying = false;
-    let playInterval = null;
-    let currentCityOutline = null;
-    let currentSpeed = 300; 
-    
-    async function loadData() {
-        const gridSize = document.getElementById('grid-selector').value;
-        const loader = document.getElementById('loader');
-        loader.style.display = 'flex';
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
         
-        try {
-            const res = await fetch(`/api/activities?year=all&grid_size=${gridSize}&sport_type=all`);
-            currentData = await res.json();
-            processDates();
-            populateCities();
-            if (allMonths.length > 0) setSliderTo(allMonths.length - 1);
-            loader.style.display = 'none';
-        } catch(e) { 
-            console.error(e); 
-            loader.style.display = 'none';
+        const gridLayer = L.layerGroup().addTo(map);
+        const borderLayer = L.layerGroup().addTo(map);
+
+        let currentData = null;
+        let allMonths = [];
+        let isPlaying = false;
+        let playInterval = null;
+        let currentCityOutline = null;
+        let currentSpeed = 300; 
+        
+        async function loadData() {
+            const gridSize = document.getElementById('grid-selector').value;
+            const loader = document.getElementById('loader');
+            loader.style.display = 'flex';
+            
+            try {
+                const res = await fetch(`/api/activities?year=all&grid_size=${gridSize}&sport_type=all`);
+                currentData = await res.json();
+                processDates();
+                populateCities();
+                if (allMonths.length > 0) setSliderTo(allMonths.length - 1);
+                loader.style.display = 'none';
+            } catch(e) { 
+                console.error(e); 
+                loader.style.display = 'none';
+            }
         }
-    }
 
-    function processDates() {
-        if (!currentData.grid_cells) return;
-        const dates = new Set();
-        currentData.grid_cells.forEach(c => { if(c[3]) dates.add(c[3]); });
-        allMonths = Array.from(dates).sort();
-        const slider = document.getElementById('time-slider');
-        slider.max = allMonths.length - 1;
-        slider.value = allMonths.length - 1;
-    }
+        function processDates() {
+            if (!currentData.grid_cells) return;
+            const dates = new Set();
+            currentData.grid_cells.forEach(c => { if(c[3]) dates.add(c[3]); });
+            allMonths = Array.from(dates).sort();
+            const slider = document.getElementById('time-slider');
+            slider.max = allMonths.length - 1;
+            slider.value = allMonths.length - 1;
+        }
 
-    function populateCities() {
-        const list = document.getElementById('city-list');
-        list.innerHTML = '';
-        if (currentData.top_municipalities) {
-            currentData.top_municipalities.sort((a,b) => b.stats.blocks - a.stats.blocks).forEach(c => {
-                let opt = document.createElement('option');
-                opt.value = c.name;
-                list.appendChild(opt);
+        function populateCities() {
+            const list = document.getElementById('city-list');
+            list.innerHTML = '';
+            if (currentData.top_municipalities) {
+                currentData.top_municipalities.sort((a,b) => b.stats.blocks - a.stats.blocks).forEach(c => {
+                    let opt = document.createElement('option');
+                    opt.value = c.name;
+                    list.appendChild(opt);
+                });
+            }
+        }
+
+        function render(maxIndex) {
+            const limitDate = allMonths[maxIndex];
+            if (!limitDate) return;
+
+            const [y, m] = limitDate.split('-');
+            const dateObj = new Date(parseInt(y), parseInt(m)-1);
+            const monthName = dateObj.toLocaleString('fr-FR', { month: 'short' }).toUpperCase();
+            
+            document.getElementById('disp-month').textContent = monthName;
+            document.getElementById('disp-year').textContent = y;
+
+            gridLayer.clearLayers();
+
+            // --- LISSAGE VISUEL (EXTRAPOLATION) ---
+            const SMOOTHING_FACTOR = 1.1; // 10% de débordement pour boucher les trous
+
+            currentData.grid_cells.forEach(cell => {
+                const [lat, lon, count, firstSeen] = cell;
+                
+                if (firstSeen <= limitDate) {
+                    if (currentCityOutline && !isPointInPolygon([lat, lon], currentCityOutline)) return;
+
+                    const size = currentData.grid_size_used * SMOOTHING_FACTOR;
+                    const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
+                    
+                    L.rectangle(bounds, { 
+                        color: "#6d071a", // Même couleur que le fond
+                        weight: 1,        // Contour de 1px pour lier visuellement
+                        opacity: 1, 
+                        fillOpacity: 0.8,
+                        interactive: false // Optimisation performance
+                    }).addTo(gridLayer);
+                }
             });
         }
-    }
 
-    function render(maxIndex) {
-        const limitDate = allMonths[maxIndex];
-        if (!limitDate) return;
-
-        const [y, m] = limitDate.split('-');
-        const dateObj = new Date(parseInt(y), parseInt(m)-1);
-        const monthName = dateObj.toLocaleString('fr-FR', { month: 'short' }).toUpperCase();
-        
-        document.getElementById('disp-month').textContent = monthName;
-        document.getElementById('disp-year').textContent = y;
-
-        gridLayer.clearLayers();
-
-        // --- LISSAGE VISUEL (EXTRAPOLATION) ---
-        const SMOOTHING_FACTOR = 1.1; // 10% de débordement pour boucher les trous
-
-        currentData.grid_cells.forEach(cell => {
-            const [lat, lon, count, firstSeen] = cell;
-            
-            if (firstSeen <= limitDate) {
-                if (currentCityOutline && !isPointInPolygon([lat, lon], currentCityOutline)) return;
-
-                const size = currentData.grid_size_used * SMOOTHING_FACTOR;
-                const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
-                
-                L.rectangle(bounds, { 
-                    color: "#6d071a", // Même couleur que le fond
-                    weight: 1,        // Contour de 1px pour lier visuellement
-                    opacity: 1, 
-                    fillOpacity: 0.8,
-                    interactive: false // Optimisation performance
-                }).addTo(gridLayer);
+        function isPointInPolygon(point, vs) {
+            var x = point[0], y = point[1];
+            var inside = false;
+            for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                var xi = vs[i][0], yi = vs[i][1];
+                var xj = vs[j][0], yj = vs[j][1];
+                var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
             }
-        });
-    }
-
-    function isPointInPolygon(point, vs) {
-        var x = point[0], y = point[1];
-        var inside = false;
-        for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-            var xi = vs[i][0], yi = vs[i][1];
-            var xj = vs[j][0], yj = vs[j][1];
-            var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
+            return inside;
         }
-        return inside;
-    }
 
-    function focusCity() {
-        const name = document.getElementById('city-input').value;
-        const city = currentData.top_municipalities.find(c => c.name === name);
-        
-        borderLayer.clearLayers();
-        currentCityOutline = null;
-
-        if (city && city.outline) {
-            currentCityOutline = city.outline;
-            const poly = L.polygon(city.outline, { color: '#333', weight: 2, fill: false }).addTo(borderLayer);
-            map.fitBounds(poly.getBounds(), { padding: [50, 50] });
-        }
-        render(document.getElementById('time-slider').value);
-    }
-
-    function updateTimeFromSlider() {
-        const val = parseInt(document.getElementById('time-slider').value);
-        render(val);
-    }
-
-    function setSliderTo(val) {
-        document.getElementById('time-slider').value = val;
-        render(val);
-    }
-
-    function changeSpeed() {
-        currentSpeed = parseInt(document.getElementById('speed-selector').value);
-        if (isPlaying) {
-            clearInterval(playInterval);
-            playInterval = setInterval(nextStep, currentSpeed);
-        }
-    }
-
-    function nextStep() {
-        const slider = document.getElementById('time-slider');
-        let val = parseInt(slider.value);
-        if (val < parseInt(slider.max)) {
-            slider.value = val + 1;
-            render(val + 1);
-        } else {
-            togglePlay(); 
-        }
-    }
-
-    function togglePlay() {
-        const btn = document.getElementById('btn-play');
-        const slider = document.getElementById('time-slider');
-        
-        if (isPlaying) {
-            clearInterval(playInterval);
-            isPlaying = false;
-            btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-        } else {
-            if (parseInt(slider.value) >= parseInt(slider.max)) slider.value = 0;
+        function focusCity() {
+            const name = document.getElementById('city-input').value;
+            const city = currentData.top_municipalities.find(c => c.name === name);
             
-            isPlaying = true;
-            btn.innerHTML = '<svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
-            
-            playInterval = setInterval(nextStep, currentSpeed);
-        }
-    }
+            borderLayer.clearLayers();
+            currentCityOutline = null;
 
-    loadData();
-</script>
+            if (city && city.outline) {
+                currentCityOutline = city.outline;
+                const poly = L.polygon(city.outline, { color: '#333', weight: 2, fill: false }).addTo(borderLayer);
+                map.fitBounds(poly.getBounds(), { padding: [50, 50] });
+            }
+            render(document.getElementById('time-slider').value);
+        }
+
+        function updateTimeFromSlider() {
+            const val = parseInt(document.getElementById('time-slider').value);
+            render(val);
+        }
+
+        function setSliderTo(val) {
+            document.getElementById('time-slider').value = val;
+            render(val);
+        }
+
+        function changeSpeed() {
+            currentSpeed = parseInt(document.getElementById('speed-selector').value);
+            if (isPlaying) {
+                clearInterval(playInterval);
+                playInterval = setInterval(nextStep, currentSpeed);
+            }
+        }
+
+        function nextStep() {
+            const slider = document.getElementById('time-slider');
+            let val = parseInt(slider.value);
+            if (val < parseInt(slider.max)) {
+                slider.value = val + 1;
+                render(val + 1);
+            } else {
+                togglePlay(); 
+            }
+        }
+
+        function togglePlay() {
+            const btn = document.getElementById('btn-play');
+            const slider = document.getElementById('time-slider');
+            
+            if (isPlaying) {
+                clearInterval(playInterval);
+                isPlaying = false;
+                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
+            } else {
+                if (parseInt(slider.value) >= parseInt(slider.max)) slider.value = 0;
+                
+                isPlaying = true;
+                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
+                
+                playInterval = setInterval(nextStep, currentSpeed);
+            }
+        }
+
+        loadData();
+    </script>
 </body>
 </html>
