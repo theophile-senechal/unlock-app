@@ -491,14 +491,19 @@ def get_activities_route():
                 stats_dim = defaultdict(lambda: defaultdict(lambda: {'blocks': set(), 'acts': set()}))
                 city_activity_count = 0
 
-                # 🚀 OPTIMISATION N°4 : On ne boucle QUE sur les activités impliquées
+                # 🚀 OPTIMISATION N°4 : On ne boucle QUE sur les activités impliquées ET filtrées
                 for act_idx in city_acts_indices:
                     activity_data = activity_cache[act_idx]
                     
                     act = activity_data['act']
                     sport = activity_data['sport']
+                    act_year = activity_data['year']
                     act_blocks_all = activity_data['blocks']
                     act_period = activity_data['period']
+
+                    # 🛑 CORRECTION ICI : On applique les filtres année et sport de la requête !
+                    if sel_year != 'all' and sel_year != act_year: continue
+                    if sel_sport != 'all' and sel_sport != sport: continue
 
                     act_blocks_in = act_blocks_all & city_block_coords
                     if not act_blocks_in: continue
@@ -514,6 +519,11 @@ def get_activities_route():
                         stats_dim[k_sp][k_per]['acts'].add(act.get('id', id(act)))
 
                 final_cities_list[-1]["stats"]["activities"] = city_activity_count
+
+                # Si après filtrage la ville n'a aucune activité pour ce sport/cette année, on l'enlève de la liste (évite le contour vide)
+                if city_activity_count == 0:
+                    final_cities_list.pop()
+                    continue
 
                 for sp, periods in stats_dim.items():
                     for per, s_data in periods.items():
