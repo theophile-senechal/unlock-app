@@ -7,194 +7,165 @@
     
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
     
+    <!-- Google Font Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     
     <style>
-        :root { --bordeaux: #6d071a; --off-white: #fdfdfb; --text-dark: #2c2c2c; --glass: rgba(255, 255, 255, 0.95); }
+        :root { --bordeaux: #6d071a; --off-white: #fdfdfb; --text-dark: #2c2c2c; }
+        
         body { background: var(--off-white); color: var(--text-dark); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
-        header { padding: 12px 30px; display: flex; justify-content: space-between; align-items: center; background: var(--off-white); border-bottom: 1px solid #eee; z-index: 1001; position: relative; }
+        /* HEADER PREMIUM */
+        header { padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); z-index: 1001; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
         .logo { font-weight: 800; font-size: 1.4rem; color: var(--bordeaux); letter-spacing: -1px; }
         
-        /* MENU CONTROLS */
         .controls { display: flex; align-items: center; gap: 10px; transition: all 0.3s ease; }
         
         .burger-menu { display: none; background: none; border: none; cursor: pointer; padding: 5px; }
         .burger-icon { width: 24px; height: 24px; fill: var(--text-dark); }
 
-        .switch-container { display: flex; background: #eee; padding: 4px; border-radius: 10px; gap: 4px; }
-        .switch-btn { padding: 6px 14px; border-radius: 7px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.2s; border: none; color: #888; background: transparent; }
-        .switch-btn.active { background: white; color: var(--bordeaux); box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .btn { padding: 8px 18px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 0.85rem; cursor: pointer; border: none; }
+        .switch-container { display: flex; background: #f3f4f6; padding: 4px; border-radius: 12px; gap: 4px; }
+        .switch-btn { padding: 6px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.2s; border: none; color: #6b7280; background: transparent; }
+        .switch-btn.active { background: white; color: var(--bordeaux); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+        
+        .btn { padding: 8px 18px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 0.85rem; cursor: pointer; border: none; }
         
         .btn-story { 
-            background: white; color: #888; border: 1px solid #ddd;
-            display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+            background: white; color: #6b7280; border: 1px solid #e5e7eb;
+            display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; border-radius: 10px; padding: 8px 14px; font-size: 0.75rem; font-weight: 700;
         }
         .btn-story:hover { border-color: var(--bordeaux); color: var(--bordeaux); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
 
-        .btn-logout { color: #888; border: 1px solid #ddd; background: white; }
-        .btn-logout:hover { border-color: #aaa; color: #555; }
+        .btn-logout { padding: 8px 16px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 0.75rem; color: #6b7280; border: 1px solid #e5e7eb; background: white; transition: 0.2s; }
+        .btn-logout:hover { border-color: var(--bordeaux); background: var(--bordeaux); color: white; }
         
-        /* Lien LinkedIn DANS le menu (caché par défaut sur PC) */
         .linkedin-menu-item { display: none; } 
 
-        select { padding: 8px; border-radius: 8px; border: 1px solid #ddd; background: white; font-weight: 600; color: var(--text-dark); outline: none; font-size: 0.8rem; cursor: pointer; }
+        select, input[type="text"] { 
+            padding: 8px 30px 8px 12px; border-radius: 10px; border: 1px solid #e5e7eb; background: white; 
+            font-weight: 600; color: #374151; outline: none; font-size: 0.75rem; cursor: pointer; 
+            transition: border-color 0.2s; appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center; background-size: 14px;
+        }
+        select:hover, input[type="text"]:hover { border-color: #d1d5db; }
+        select:focus, input[type="text"]:focus { border-color: var(--bordeaux); box-shadow: 0 0 0 3px rgba(109,7,26,0.1); }
         
         #map-wrapper { flex-grow: 1; position: relative; }
         #map { height: 100%; width: 100%; z-index: 1; }
-        .leaflet-tile { filter: brightness(0.92) contrast(0.95); }
+        .leaflet-tile { filter: brightness(0.95) contrast(0.96); }
         
-        /* STATS OVERLAY */
         .stats-overlay { 
             position: absolute; top: 20px; left: 20px; z-index: 1000; 
-            display: flex; flex-direction: column; gap: 12px; 
+            display: flex; flex-direction: column; gap: 15px; 
             max-height: calc(100vh - 40px); overflow-y: auto; scrollbar-width: none; 
             transition: all 0.3s ease;
         }
         .stats-overlay::-webkit-scrollbar { display: none; }
         
+        /* THE GLASSMORPHISM STYLE (Remplace ton ancienne classe) */
         .stat-card {
-            background: var(--glass); backdrop-filter: blur(10px); padding: 15px 20px; border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.1); border: 1px solid rgba(255,255,255,0.6); border-left: 4px solid var(--bordeaux);
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 18px 20px; border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(109,7,26,0.08); border: 1px solid rgba(109,7,26,0.15);
         }
-        .stat-label { font-size: 0.65rem; color: #777; text-transform: uppercase; font-weight: 700; }
-        .stat-value { font-size: 1.3rem; font-weight: 800; color: var(--bordeaux); display: block; }
-        .equivalence-text { font-size: 0.7rem; color: #666; margin-top: 5px; font-weight: 500; font-style: italic; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 5px; }
+        .stat-label { font-size: 0.65rem; color: #6b7280; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
+        .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--bordeaux); display: block; line-height: 1.1; margin-top: 4px; }
+        .equivalence-text { font-size: 0.7rem; color: #6b7280; margin-top: 8px; font-weight: 500; font-style: italic; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 8px; }
 
-        #city-search { width: 100%; margin-top: 8px; padding: 8px 12px; font-size: 0.9rem; border: 1px solid #ccc; border-radius: 8px; background-color: #fff; font-family: 'Inter', sans-serif; box-sizing: border-box; }
-        #city-search:focus { outline: none; border-color: var(--bordeaux); box-shadow: 0 0 0 3px rgba(109, 7, 26, 0.1); }
+        #city-search { width: 100%; margin-top: 10px; padding: 10px 14px; font-size: 0.85rem; border-radius: 10px; background-image: none;}
 
-        .city-table { width: 100%; margin-top: 10px; border-collapse: collapse; font-size: 0.75rem; }
+        .city-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
         .city-table tr { border-bottom: 1px solid rgba(0,0,0,0.05); transition: 0.2s; }
-        .city-table tr:hover { background: rgba(0,0,0,0.02); }
-        .city-table td { padding: 6px 0; vertical-align: middle; }
-        .rank-col { width: 25px; color: #999; font-weight: 800; font-style: italic; }
-        .city-name { font-weight: 600; color: var(--text-dark); }
+        .city-table tr:hover { background: rgba(109,7,26,0.03); }
+        .city-table td { padding: 8px 0; vertical-align: middle; }
+        .rank-col { width: 28px; color: #9ca3af; font-weight: 800; font-style: italic; }
+        .city-name { font-weight: 700; color: #374151; }
         .city-stats { text-align: right; }
         
-        .sort-header { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px; }
-        .sort-controls { display: flex; gap: 5px; }
-        .sort-btn { border: 1px solid #ddd; background: transparent; border-radius: 4px; padding: 2px 6px; font-size: 0.6rem; font-weight: 700; color: #888; cursor: pointer; }
-        .sort-btn.active { background: var(--bordeaux); color: white; border-color: var(--bordeaux); }
+        .sort-header { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 8px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 12px; }
+        .sort-controls { display: flex; gap: 4px; background: #f3f4f6; padding: 3px; border-radius: 8px; }
+        .sort-btn { border: none; background: transparent; border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; color: #6b7280; cursor: pointer; transition: 0.2s; }
+        .sort-btn.active { background: white; color: var(--bordeaux); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+
+        /* DEFILEMENT DU TABLEAU TOP 5 */
+        .table-container { max-height: 160px; overflow-y: auto; padding-right: 5px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
         .legend { 
             position: absolute; bottom: 80px; right: 20px; left: auto; z-index: 1000; 
-            background: var(--glass); backdrop-filter: blur(10px); padding: 12px; 
-            border-radius: 10px; display: none; flex-direction: column; gap: 8px; border: 1px solid rgba(255,255,255,0.3);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 14px; 
+            border-radius: 14px; display: none; flex-direction: column; gap: 10px; border: 1px solid rgba(109,7,26,0.15);
+            box-shadow: 0 8px 30px rgba(109,7,26,0.08);
         }
         .legend-scale { height: 8px; width: 140px; border-radius: 4px; background: linear-gradient(to right, rgba(109, 7, 26, 0.2), rgba(109, 7, 26, 1)); }
-        .legend-labels { display: flex; justify-content: space-between; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; color: #555; }
+        .legend-labels { display: flex; justify-content: space-between; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; color: #6b7280; }
 
         /* LOADER */
         #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
         .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
-        .loader-text { color: var(--bordeaux); font-weight: 700; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; }
+        .loader-text { color: var(--bordeaux); font-weight: 800; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; font-size: 0.8rem;}
         .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
         .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
         @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
         .loader-signature { position: absolute; bottom: 30px; display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--bordeaux); opacity: 0.6; text-decoration: none; font-weight: 600; transition: opacity 0.3s, transform 0.3s; }
         .loader-signature:hover { opacity: 1; transform: translateY(-2px); }
 
-        /* SIGNATURE FLOTTANTE (PC) */
+        /* SIGNATURE FLOTTANTE EXACTEMENT COMME AVANT */
         .dev-badge {
             position: fixed; bottom: 20px; right: 20px; left: auto; z-index: 2000;
-            background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(5px); padding: 8px 16px; border-radius: 10px; 
-            text-decoration: none; color: #555; font-size: 0.75rem; font-weight: 500;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); border: 1px solid rgba(0,0,0,0.05);
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 12px; 
+            text-decoration: none; color: #4b5563; font-size: 0.75rem; font-weight: 600;
+            box-shadow: 0 8px 30px rgba(109,7,26,0.08); border: 1px solid rgba(109,7,26,0.15);
             display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;
         }
-        .dev-badge:hover { transform: translateY(-2px); color: var(--bordeaux); box-shadow: 0 6px 20px rgba(109, 7, 26, 0.15); }
+        .dev-badge:hover { transform: translateY(-2px); color: var(--bordeaux); box-shadow: 0 10px 30px rgba(109, 7, 26, 0.15); border-color: var(--bordeaux); }
         .linkedin-icon { width: 14px; height: 14px; fill: currentColor; }
 
-        /* ========================================= */
-        /* ---        MEDIA QUERIES (MOBILE)     --- */
-        /* ========================================= */
+        /* Leaflet Controls Custom */
+        .leaflet-control-zoom { border: none !important; box-shadow: 0 8px 30px rgba(109,7,26,0.08) !important; border-radius: 12px !important; overflow: hidden !important; margin-right: 20px !important; margin-top: 20px !important; }
+        .leaflet-control-zoom a { background-color: rgba(255, 255, 255, 0.85) !important; backdrop-filter: blur(12px) !important; color: #2c2c2c !important; border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important; }
+        .leaflet-control-zoom a:hover { background-color: #6d071a !important; color: #ffffff !important; }
+        .leaflet-tooltip { background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(109, 7, 26, 0.15) !important; border-radius: 12px !important; padding: 8px 12px !important; box-shadow: 0 8px 30px rgba(109,7,26,0.1) !important; }
+        .leaflet-tooltip-top:before { border-top-color: rgba(255, 255, 255, 0.95) !important; }
+
+        /* MEDIA QUERIES */
         @media (max-width: 1200px) {
             header { padding: 15px 20px; }
             .logo { font-size: 1.3rem; }
-            
-            /* Burger visible */
             .burger-menu { display: block; }
             
-            /* Menu déroulant (Amélioré) */
             .controls {
-                display: block; /* Nécessaire pour l'animation height */
-                position: absolute;
-                top: 60px; left: 0; right: 0;
-                background: var(--off-white);
-                
-                /* Animation de déroulement */
-                max-height: 0;
-                overflow: hidden;
-                padding: 0 20px;
-                border-bottom: none;
-                box-shadow: none;
-                
+                display: block; position: absolute; top: 60px; left: 0; right: 0;
+                background: rgba(255,255,255,0.98); backdrop-filter: blur(15px);
+                max-height: 0; overflow: hidden; padding: 0 20px; border-bottom: none; box-shadow: none;
                 transition: max-height 0.4s ease-in-out, padding 0.4s ease, box-shadow 0.4s ease;
-                flex-direction: column;
-                align-items: stretch; 
-                gap: 15px;
+                flex-direction: column; align-items: stretch; gap: 15px;
             }
-            
-            /* État Ouvert */
-            .controls.mobile-visible { 
-                max-height: 500px;
-                padding: 20px;
-                border-bottom: 1px solid #ddd;
-                box-shadow: 0 10px 20px rgba(0,0,0,0.08);
-            }
+            .controls.mobile-visible { max-height: 500px; padding: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
 
-            /* Switch Tabs (Plus jolis sur mobile) */
-            .switch-container { 
-                justify-content: center; 
-                background: #e8e8e8;
-                padding: 5px;
-                border-radius: 12px;
-                margin-bottom: 5px;
-            }
-            .switch-btn { 
-                flex: 1; /* Prend toute la largeur */
-                text-align: center;
-                padding: 10px;
-                border-radius: 8px;
-                font-size: 0.85rem;
-            }
+            .switch-container { justify-content: center; background: #f3f4f6; padding: 5px; border-radius: 12px; margin-bottom: 5px; }
+            .switch-btn { flex: 1; text-align: center; padding: 10px; border-radius: 8px; font-size: 0.85rem; }
 
-            .btn-story, .btn-logout, .btn { 
-                justify-content: center; padding: 12px; 
-                width: 100%; box-sizing: border-box;
-            }
-            
+            .btn-story, .btn-logout, .btn { justify-content: center; padding: 12px; width: 100%; box-sizing: border-box; }
             select { padding: 12px; width: 100%; box-sizing: border-box; }
 
-            /* Stats en bas */
-            .stats-overlay {
-                top: auto; bottom: 0; left: 10px; right: 10px;
-                max-height: 35vh; z-index: 1000;
-            }
-            .stat-card { padding: 10px 15px; }
+            .stats-overlay { top: auto; bottom: 0; left: 10px; right: 10px; max-height: 38vh; z-index: 1000; gap: 10px;}
+            .stat-card { padding: 12px 15px; border-radius: 16px;}
             
-            /* CACHER LE BADGE FLOTTANT SUR MOBILE */
             .dev-badge { display: none; }
             
-            /* AFFICHER LE LIEN DANS LE MENU */
             .linkedin-menu-item {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 8px;
-                margin-top: 10px;
-                padding-top: 15px;
-                border-top: 1px solid #eee;
-                color: var(--bordeaux);
-                text-decoration: none;
-                font-weight: 700;
-                font-size: 0.85rem;
+                display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; padding-top: 15px;
+                border-top: 1px solid rgba(0,0,0,0.05); color: var(--bordeaux); text-decoration: none; font-weight: 700; font-size: 0.85rem;
             }
-            
-            .legend { bottom: 42vh; right: 10px; padding: 8px; }
+            .legend { bottom: 42vh; right: 10px; padding: 12px; }
         }
     </style>
 </head>
@@ -214,7 +185,7 @@
 <header>
     <div class="logo">UNLOCK</div>
     
-    <button class="burger-menu" onclick="toggleMenu()">
+    <button type="button" class="burger-menu" onclick="toggleMenu()">
         <svg class="burger-icon" viewBox="0 0 24 24">
             <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
         </svg>
@@ -222,8 +193,8 @@
 
     <div class="controls" id="mobile-controls">
         <div class="switch-container">
-            <button class="switch-btn active" onclick="setMode('route')" id="btn-route">TRACÉS</button>
-            <button class="switch-btn" onclick="setMode('grid')" id="btn-grid">BLOCS</button>
+            <button type="button" class="switch-btn active" onclick="setMode('route')" id="btn-route">TRACÉS</button>
+            <button type="button" class="switch-btn" onclick="setMode('grid')" id="btn-grid">BLOCS</button>
         </div>
         
         <select id="sport-select" onchange="updateDashboard()">
@@ -308,11 +279,14 @@
             <div class="sort-header">
                 <span class="stat-label">Top 5</span>
                 <div class="sort-controls">
-                    <button id="sort-blocks" class="sort-btn active" onclick="setSortMode('blocks')">BLOCS</button>
-                    <button id="sort-percent" class="sort-btn" onclick="setSortMode('percent')">%</button>
+                    <button type="button" id="sort-blocks" class="sort-btn active" onclick="setSortMode('blocks')">BLOCS</button>
+                    <button type="button" id="sort-percent" class="sort-btn" onclick="setSortMode('percent')">%</button>
                 </div>
             </div>
-            <table class="city-table" id="top-cities-list"></table>
+            
+            <div class="table-container custom-scrollbar">
+                <table class="city-table" id="top-cities-list"></table>
+            </div>
         </div>
     </div>
 
@@ -378,10 +352,9 @@
         document.getElementById('grid-legend').style.display = mode === 'grid' ? 'flex' : 'none';
         document.getElementById('card-muni').style.display = mode === 'grid' ? 'block' : 'none';
         
-        // --- NOUVEAU : Forcer 250m au clic sur le bouton BLOCS ---
         if (mode === 'grid') {
             const gridSelect = document.getElementById('grid-size-select');
-            if (gridSelect.value !== "250") {
+            if (gridSelect && gridSelect.value !== "250") {
                 gridSelect.value = "250";
                 updateDashboard(); // Recharge les données en 250m
             } else {
@@ -390,7 +363,6 @@
         } else {
             renderData();
         }
-        // ---------------------------------------------------------
         
         if(window.innerWidth < 1200) {
              document.getElementById('mobile-controls').classList.remove('mobile-visible');
@@ -453,14 +425,10 @@
             dataList.innerHTML = '';
             
             if (currentData.top_municipalities) {
-                // MODIFICATION : On ne garde que le TOP 20 pour la recherche
-                // 1. On trie par nombre de blocs pour avoir les "vraies" meilleures villes
-                // 2. On garde les 20 premières
                 const top20 = [...currentData.top_municipalities]
                     .sort((a, b) => b.stats.blocks - a.stats.blocks)
                     .slice(0, 20);
 
-                // 3. On trie ces 20 villes par ordre alphabétique pour l'affichage dans la liste
                 const top20SortedAlpha = top20.sort((a, b) => a.name.localeCompare(b.name));
 
                 top20SortedAlpha.forEach(city => {
@@ -483,7 +451,6 @@
     function onCitySearch() {
         const inputVal = document.getElementById('city-search').value;
         if (!currentData || !currentData.top_municipalities) return;
-        // On cherche dans toutes les municipalités renvoyées par l'API (même hors top 20 si le user tape le nom exact d'une ville qui était dans le json mais pas dans la liste top 20, bien que le json soit limité par le backend)
         const city = currentData.top_municipalities.find(c => c.name.toLowerCase() === inputVal.toLowerCase());
         if (city) {
             currentSelectedCityName = city.name;
@@ -520,7 +487,6 @@
         if (currentSort === 'blocks') { sortedCities.sort((a, b) => b.stats.blocks - a.stats.blocks); } 
         else { sortedCities.sort((a, b) => b.stats.percent - a.stats.percent); }
 
-        // LE TABLEAU RESTE LIMITÉ AU TOP 5
         sortedCities.slice(0, 5).forEach((city, index) => {
             const row = document.createElement('tr');
             const activeStyle = 'color: var(--bordeaux); font-weight: 800; font-size: 0.9rem;';
@@ -564,13 +530,12 @@
                 currentData.grid_cells.forEach(cell => {
                     const [lat, lon, count, firstSeen, lastSeen] = cell;
 
-                    // Formule d'intensité "Ancienne/Meilleure"
                     const intensity = 0.2 + (Math.sqrt(count / maxCount) * 0.6);
                     const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
                     
                     const rect = L.rectangle(bounds, { 
                         color: "var(--bordeaux)", 
-                        weight: 0, // Pas de bordure
+                        weight: 0,
                         fillOpacity: intensity 
                     }).addTo(traceLayer);
 
@@ -584,11 +549,7 @@
                                 Dernier : <strong>${formattedDate}</strong>
                             </div>
                         </div>`,
-                        {
-                            sticky: true,
-                            direction: 'top',
-                            opacity: 0.95
-                        }
+                        { sticky: true, direction: 'top', opacity: 0.95 }
                     );
                 });
             }
@@ -605,4 +566,3 @@
 </script>
 </body>
 </html>
-<!-- Force trigger Vercel -->
