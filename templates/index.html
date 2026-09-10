@@ -57,7 +57,9 @@
         
         #map-wrapper { flex-grow: 1; position: relative; }
         #map { height: 100%; width: 100%; z-index: 1; }
-        .leaflet-tile { filter: brightness(0.95) contrast(0.96); }
+        .leaflet-tile { 
+    filter: grayscale(100%) brightness(1.03) contrast(0.80); 
+}
         
         .stats-overlay { 
             position: absolute; top: 20px; left: 20px; z-index: 1000; 
@@ -333,7 +335,9 @@
 
     const map = L.map('map', { zoomControl: false }).setView([47.65, -2.75], 13);
     L.control.zoom({ position: 'topright' }).addTo(map);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png').addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+}).addTo(map);
 
     const traceLayer = L.layerGroup().addTo(map);
     const muniLayer = L.layerGroup().addTo(map);

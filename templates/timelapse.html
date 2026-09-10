@@ -55,7 +55,9 @@
 
         /* CARTE */
         #map { width: 100%; height: 100%; z-index: 1; }
-        .leaflet-tile { filter: brightness(0.92) contrast(0.95); }
+        .leaflet-tile { 
+    filter: grayscale(100%) brightness(1.03) contrast(0.80); 
+}
 
         /* TIMELINE UI (BAS) */
         .timeline-container {
@@ -211,9 +213,11 @@
             attributionControl: false,
             preferCanvas: true 
         }).setView([46.603354, 1.888334], 6);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19
+}).addTo(map);
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
-        
+
         const gridLayer = L.layerGroup().addTo(map);
         const borderLayer = L.layerGroup().addTo(map);
 
