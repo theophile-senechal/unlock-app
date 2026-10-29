@@ -5,10 +5,12 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 <style>
   .maptools.tl-tools { left: 12px; }
-  .tl-search { width: min(260px, 100%); }
-  .tl-search .input { height: 40px; border-radius: 999px; border-color: transparent; box-shadow: var(--shadow-float); font-size: var(--fs-sm); font-weight: 600; }
+  .tl-search { flex: 1 1 auto; min-width: 0; max-width: 360px; }
+  .tl-search .input { height: 40px; border-radius: 999px; border-color: transparent; box-shadow: var(--shadow-float); font-size: var(--fs-sm); font-weight: 600; text-overflow: ellipsis; }
+  /* iPhone : 16 px minimum dans un champ, sinon Safari zoome toute la page au toucher */
+  @media (max-width: 899px) { .tl-search .input { font-size: 16px; } .tl-search { max-width: none; } }
   .tl-desk { display: none; gap: 8px; }
-  @media (min-width: 900px) { .tl-desk { display: flex; } .tl-mobile { display: none; } .maptools.tl-tools { left: 16px; right: 16px; top: 16px; } }
+  @media (min-width: 900px) { .tl-desk { display: flex; } .iconbtn.tl-mobile { display: none; } .maptools.tl-tools { left: 16px; right: 16px; top: 16px; } }
 
   .dock {
     position: absolute; z-index: 950; left: 12px; right: 12px; bottom: 12px;
@@ -214,10 +216,10 @@
   function setCity(c) {
     borderLayer.clearLayers(); outline = null; cityName = null;
     if (c && c.outline) {
-      outline = c.outline; cityName = c.name; $('city-input').value = c.name;
+      outline = c.outline; cityName = c.name; $('city-input').value = c.name; $('city-input').title = c.name;
       const poly = L.polygon(c.outline, { color: '#4A0412', weight: 2, dashArray: '6 6', fill: false, interactive: false }).addTo(borderLayer);
       map.fitBounds(poly.getBounds(), { padding: [40, 40], paddingBottomRight: [40, 120] });
-    } else { $('city-input').value = ''; }
+    } else { $('city-input').value = ''; $('city-input').title = ''; }
     $('city-clear').hidden = !outline;
   }
   $('city-input').addEventListener('change', (e) => {
