@@ -133,7 +133,9 @@
   };
   document.addEventListener('click', (e) => {
     const open = e.target.closest('[data-sheet-open]');
-    if (open) { e.preventDefault(); U.openSheet(open.dataset.sheetOpen); return; }
+    // Fenêtre absente sur cette page : un lien suit simplement son adresse (ex. « Soutenir » -> Ko-fi)
+    if (open && document.getElementById(open.dataset.sheetOpen)) { e.preventDefault(); U.openSheet(open.dataset.sheetOpen); return; }
+    if (open) return;
     const close = e.target.closest('[data-sheet-close]');
     if (close) { e.preventDefault(); U.closeSheet(close.closest('.sheet') && close.closest('.sheet').id); }
   });

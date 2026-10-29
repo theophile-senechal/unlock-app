@@ -479,6 +479,16 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .panel-heading h1 { font-size: var(--fs-xl); }
 .panel-heading p { color: var(--muted); font-size: var(--fs-sm); margin-top: 4px; }
 
+/* Fenêtre « Soutenir Unlock » */
+.support { display: grid; gap: 12px; color: var(--ink-2); font-size: var(--fs-md); line-height: 1.55; }
+.support p { margin: 0; }
+.support__costs { list-style: none; margin: 0; padding: 12px 14px; display: grid; gap: 10px; border-radius: var(--r-md); background: var(--canvas); }
+.support__costs li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
+.support__costs b { color: var(--ink); font-weight: 650; }
+.support__muted { font-size: var(--fs-sm); color: var(--muted); }
+.support__cta { margin-top: 4px; gap: 8px; }
+.support__thanks { text-align: center; font-size: var(--fs-sm); color: var(--muted); font-style: italic; }
+
 /* ---------- Carte : mode « Communes » (un département) ---------- */
 .iconbtn--sm { width: 32px; height: 32px; }
 .iconbtn--sm svg { width: 16px; height: 16px; }

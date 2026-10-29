@@ -250,6 +250,9 @@
     } else {
       H.push({ ok: null, label: 'Quota de requêtes Strava', help: 'Pas encore de relevé : il apparaît après le prochain appel à Strava.' });
     }
+    if (s.kofi) H.push(s.kofi.enabled
+      ? { ok: true, label: 'Dons Ko-fi', help: '', html: `<small>${fmt(s.kofi.d30)} clic${s.kofi.d30 > 1 ? 's' : ''} sur « Faire un don » ces 30 derniers jours (${fmt(s.kofi.total)} au total)</small>` }
+      : { ok: null, label: 'Dons Ko-fi', help: 'Désactivés : ajoutez KOFI_URL dans Vercel pour afficher « Soutenir Unlock ».' });
     $('health').innerHTML = H.map((h) => `<li><span class="emoji" aria-hidden="true">${h.ok === null ? '⏳' : h.ok ? '✅' : '⚠️'}</span><span><b>${h.label}</b>${h.html || (h.help ? `<small>${h.help}</small>` : '')}</span></li>`).join('');
 
     /* Événements */

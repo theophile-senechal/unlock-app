@@ -48,7 +48,7 @@
 {%- endmacro %}
 
 {% macro footer_links() -%}
-<a href="/cgu">CGU</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a>
+<a href="/cgu">CGU</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a>{% if donations_enabled %}<a href="/soutenir/go" target="_blank" rel="noopener" data-sheet-open="sheet-support">Soutenir</a>{% endif %}
 {%- endmacro %}
 
 {% macro logo_mark(cls='') -%}

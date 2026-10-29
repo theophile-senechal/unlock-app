@@ -52,6 +52,7 @@
       <li><button type="button" class="menu-item" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
       {% if is_admin %}<li><a class="menu-item" href="/admin"><span class="emoji" aria-hidden="true">🛠️</span><span>Tableau de bord<small>Réservé à l'administrateur</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
       {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard"><span class="emoji" aria-hidden="true">🏆</span><span>Classement</span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
+      {% if donations_enabled %}<li><a class="menu-item menu-item--support" href="/soutenir/go" target="_blank" rel="noopener" data-sheet-open="sheet-support"><span class="emoji" aria-hidden="true">🤝</span><span>Soutenir Unlock<small>Aider à couvrir les frais de l'app</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
       <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
       <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
     </ul>
@@ -76,6 +77,32 @@
         <button type="submit" class="btn btn--primary btn--block" style="background:var(--danger)">Supprimer définitivement</button>
         <button type="button" class="btn btn--ghost btn--block" data-sheet-close>Annuler</button>
       </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if donations_enabled %}
+<div class="sheet" id="sheet-support" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="support-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="support-title">Soutenir Unlock</h2>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <div class="support">
+      <p>Unlock est gratuit et sans publicité. Toutes les fonctionnalités sont ouvertes à tous, que vous fassiez un don ou non.</p>
+      <p>Si l'app vous plaît, vos dons servent à couvrir ses frais.</p>
+      <ul class="support__costs">
+        <li><span class="emoji" aria-hidden="true">🔑</span><span><b>L'accès à l'API Strava</b>, un abonnement payant sans lequel Unlock ne peut pas lire vos sorties.</span></li>
+        <li><span class="emoji" aria-hidden="true">🌐</span><span><b>Le nom de domaine</b> (l'adresse du site).</span></li>
+      </ul>
+      <p>L'hébergement et la base de données ne coûtent rien pour l'instant. Au-delà de ces frais, votre don peut aussi m'offrir un gel pour ma prochaine <span class="nobr">sortie <span class="emoji" aria-hidden="true">🏃</span></span></p>
+      <p class="support__muted">Les dons passent par Ko-fi, une plateforme de soutien aux créateurs. Le montant minimum est de 2&nbsp;€. Unlock ne voit jamais vos informations de paiement.</p>
+      <a class="btn btn--primary btn--block support__cta" href="/soutenir/go" target="_blank" rel="noopener">Faire un don sur Ko-fi
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+      <p class="support__thanks">Un don ne débloque aucune fonctionnalité. Merci pour votre soutien !</p>
     </div>
   </div>
 </div>

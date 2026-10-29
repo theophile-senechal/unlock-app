@@ -66,12 +66,12 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 - [ ] Demande en cours chez Strava : confirmer qu'une révocation libère une place sur le quota, et l'attribution Garmin (§4.4).
 
 ### Prochaines fonctionnalités (dans l'ordre)
-1. **Dons via Ko-fi** : ligne « ☕ Soutenir Unlock » dans le menu, lien dans une variable Vercel (remplaçable par Stripe plus tard). Dons libres, sans contrepartie (Strava §5.8) ; montant minimum ~3 € ; phrase dans les CGU.
-2. **Améliorations de l'interface** : à préciser à partir des retours d'usage.
-3. **Unlock Rewind** (bilan de l'année) : à préparer vers mi-novembre pour décembre.
-4. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
+1. **Améliorations de l'interface** : à préciser à partir des retours d'usage.
+2. **Unlock Rewind** (bilan de l'année) : à préparer vers mi-novembre pour décembre.
+3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Dons Ko-fi** : « Soutenir Unlock » dans le menu ☰ et en pied de page, fenêtre d'explication dans l'app puis page Ko-fi dans un nouvel onglet (via `/soutenir/go`, qui compte les clics de façon anonyme, visibles dans `/admin`). Activé uniquement si `KOFI_URL` est renseignée dans Vercel. Dons libres, sans contrepartie (Strava §5.8), minimum 2 € réglé côté Ko-fi. Paragraphes ajoutés aux CGU et à la politique de confidentialité.
 - **Mode « Communes » de la carte** (3e mode après Tracés et Blocs) : toutes les communes d'un département, colorées selon le % exploré (0 % en gris clair), contours de toutes les communes et du département. Panneau : communes explorées / total, à 100 %, plus de 50 %, top 5 départements, top 5 communes, légende. Infobulle au clic (ordinateur, placée à droite / gauche / au-dessus / en dessous selon la place, jamais sous le panneau) ; fiche dans le panneau du bas (mobile). Département par défaut : meilleur % de communes visitées parmi ceux où au moins 5 communes sont visitées (`DEP_MIN_COMMUNES`), sinon le plus de communes visitées. Contours servis par `/api/departement/<code>/geo` (donnée publique, cache CDN 7 jours). Communes identifiées par code INSEE (homonymes distingués), jusqu'à 300 communes analysées.
 - **Mes communes** (Stats, `/api/communes`) : km parcourus *dans* chaque commune, sorties, % exploré, blocs, 1re et dernière visite ; tri par colonne (ordinateur) ou menu « Trier par » (mobile, en cartes) ; recherche ; 10 premières puis « Voir tout ». Filtres année/sport/taille appliqués. Jusqu'à 100 communes, les plus fréquentées d'abord (`MAX_COMMUNES`).
 - **Vos habitudes** (Stats) : sorties par semaine (comparées aux 4 dernières semaines), km par semaine, créneau horaire favori, jour favori, deux graphiques. Les filtres année/sport s'appliquent.

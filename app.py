@@ -41,7 +41,10 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.17'
+# Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
+KOFI_URL = os.getenv('KOFI_URL', '').strip()
+if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
+ASSET_VERSION = '2026.10.18'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -107,6 +110,7 @@ def inject_globals():
     return {
         'nav_items': NAV_ITEMS,
         'linkedin_url': LINKEDIN_URL,
+        'donations_enabled': bool(KOFI_URL),
         'asset_v': ASSET_VERSION,
         'leaderboard_enabled': ENABLE_LEADERBOARD,
         'session_user': 'access_token' in session,
@@ -653,6 +657,14 @@ def timelapse_page():
     return render_template('timelapse.html', active='timelapse')
 
 # ---------- Pages légales ----------
+@app.route('/soutenir/go')
+def support_go():
+    """Bouton « Faire un don » : compte le clic (anonyme) puis redirige vers Ko-fi.
+    Le paiement se fait entièrement sur Ko-fi : Unlock ne voit aucune donnée de paiement."""
+    if not KOFI_URL: return redirect('/')
+    log_event('kofi_click')
+    return redirect(KOFI_URL)
+
 @app.route('/cgu')
 def cgu_page():
     return render_template('legal/cgu.html', legal='cgu')
@@ -1377,6 +1389,9 @@ def admin_stats():
                                 MIN(created_at) AS since
                          FROM app_events WHERE created_at > NOW() - INTERVAL '30 days'""")
         out["flow_30"] = flow[0] if flow else {"arrivals": 0, "departures": 0, "since": None}
+        kc = series("""SELECT COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') AS d30, COUNT(*) AS total
+                       FROM app_events WHERE kind = 'kofi_click'""")
+        out["kofi"] = {"enabled": bool(KOFI_URL), **(kc[0] if kc else {"d30": 0, "total": 0})}
         first = series("SELECT MIN(created_at) AS first_event FROM app_events")
         out["tracking_since"] = first[0]["first_event"] if first else None
         kv = {r["key"]: {"value": r["value"], "updated_at": r["updated_at"]} for r in series("SELECT key, value, updated_at FROM app_kv")}
