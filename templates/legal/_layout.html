@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block body %}
+<div class="app app--scroll">
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Unlock, accueil">
+      <img class="brand__logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="34" height="34">
+      <span class="brand__word">unlock</span>
+    </a>
+    <div class="topbar__spacer"></div>
+    <a class="btn btn--outline btn--sm" href="/">{% if session_user %}Retour à la carte{% else %}Retour{% endif %}</a>
+  </header>
+  <main class="page page--narrow">
+    <nav class="legal-nav" aria-label="Documents légaux">
+      <a href="/cgu"{% if legal == 'cgu' %} aria-current="page"{% endif %}>📜 CGU</a>
+      <a href="/confidentialite"{% if legal == 'privacy' %} aria-current="page"{% endif %}>🔒 Confidentialité</a>
+      <a href="/mentions-legales"{% if legal == 'mentions' %} aria-current="page"{% endif %}>🏛️ Mentions légales</a>
+    </nav>
+    <h1 class="page__title">{% block heading %}{% endblock %}</h1>
+    <p class="prose meta" style="margin-top:10px">Dernière mise à jour : {{ legal_updated }}</p>
+    <article class="prose" style="margin-top:20px">{% block legal %}{% endblock %}</article>
+  </main>
+  <footer class="site-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</footer>
+</div>
+{% endblock %}

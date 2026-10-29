@@ -1,0 +1,26 @@
+{% extends "legal/_layout.html" %}
+{% block title %}Mentions légales · Unlock{% endblock %}
+{% block heading %}Mentions légales{% endblock %}
+{% block legal %}
+<p>Conformément à l'article 6 de la loi n° 2004-575 du 21 juin 2004 pour la confiance dans l'économie numérique (LCEN).</p>
+
+<h2>Éditeur</h2>
+<p>{{ site_owner }}, particulier (projet personnel, non commercial)<br>
+Contact : <a href="{{ linkedin_url }}" target="_blank" rel="noopener">LinkedIn</a></p>
+<p>Directeur de la publication : {{ site_owner }}</p>
+
+<h2>Hébergement</h2>
+<p>Vercel Inc.<br>340 S Lemon Ave #4133, Walnut, CA 91789, États-Unis<br><a href="https://vercel.com" target="_blank" rel="noopener">vercel.com</a></p>
+
+<h2>Données et services tiers</h2>
+<ul>
+  <li>Activités sportives : API Strava. Unlock n'est pas affilié à Strava, Inc.</li>
+  <li>Fonds de carte : © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a>, © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>.</li>
+  <li>Contours des communes : geo.api.gouv.fr, Licence Ouverte Etalab.</li>
+  <li>Police : Sora (SIL Open Font License), hébergées localement.</li>
+  <li>Bibliothèques : Leaflet (BSD-2), Chart.js (MIT), dom-to-image-more (MIT).</li>
+</ul>
+
+<h2>Propriété intellectuelle</h2>
+<p>Le nom Unlock, son logo, son design et son code sont la propriété de {{ site_owner }}. Toute reproduction sans autorisation est interdite.</p>
+{% endblock %}

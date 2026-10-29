@@ -1,488 +1,235 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UNLOCK | Studio Story</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js"></script>
-    
-    <style>
-        /* VARIABLES */
-        :root { 
-            --bordeaux: #6d071a; 
-            --off-white: #fdfdfb;
-            --panel-bg: #ffffff; 
-            --theme-light: #ff4d4d;
-            --theme-dark: #6d071a;
-        }
-        
-        /* LAYOUT PC PAR DÉFAUT (Flexbox) */
-        body { margin: 0; font-family: 'Inter', sans-serif; background: #f0f2f5; height: 100vh; display: flex; overflow: hidden; }
-        
-        /* ÉLÉMENTS MOBILES CACHÉS SUR PC */
-        .mobile-header, .btn-mobile-fab { display: none; }
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Story · Unlock{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<style>
+  .studio { position: relative; min-height: 0; display: grid; grid-template-columns: 1fr; overflow: hidden; }
+  .studio__side { display: none; }
+  .studio__stage {
+    position: relative; min-height: 0; overflow: hidden; display: grid; place-items: center;
+    background: radial-gradient(circle at 1px 1px, #D9D6DC 1px, transparent 0) 0 0 / 18px 18px, var(--canvas);
+    padding: 16px 16px 92px;
+  }
+  .studio__fit { position: relative; }
+  .studio__actions { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 10px; justify-content: center; }
+  .studio__actions .btn { box-shadow: var(--shadow-float); }
+  @media (min-width: 900px) {
+    .studio { grid-template-columns: 360px 1fr; }
+    .studio__side { display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
+    .studio__stage { padding: 32px; }
+    .studio__actions { display: none; }
+  }
+  .studio__side h1 { font-size: var(--fs-2xl); }
+  .studio__side p.lead { color: var(--muted); font-size: var(--fs-sm); margin-top: 6px; }
+  .swatches { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .swatch { border: 2px solid var(--line); background: var(--surface); border-radius: var(--r-md); padding: 10px 6px; display: grid; justify-items: center; gap: 6px; font-weight: 650; font-size: var(--fs-xs); color: var(--ink-2); }
+  .swatch i { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--a) 50%, var(--b) 50%); }
+  .swatch[aria-pressed="true"] { border-color: var(--brand); color: var(--brand); background: var(--brand-50); }
 
-        /* --- SIDEBAR PC (Gauche) --- */
-        .sidebar {
-            width: 350px; background: var(--panel-bg); padding: 30px; 
-            display: flex; flex-direction: column; 
-            border-right: 1px solid #ddd; z-index: 10; 
-            box-shadow: 5px 0 15px rgba(0,0,0,0.05);
-            overflow-y: auto; flex-shrink: 0;
-            box-sizing: border-box;
-        }
-        
-        /* --- PREVIEW PC (Droite) --- */
-        .preview-area {
-            flex-grow: 1; 
-            display: flex; 
-            justify-content: center; 
-            align-items: center;
-            background-image: radial-gradient(#ddd 1px, transparent 1px); 
-            background-size: 20px 20px;
-            overflow: auto; 
-            padding: 20px;
-            position: relative;
-        }
+  /* Story canvas (designed at 450 × 800, scaled to fit) */
+  #story-card {
+    width: 450px; height: 800px; position: absolute; left: 0; top: 0; transform-origin: top left;
+    border-radius: 22px; overflow: hidden; background: #121014; box-shadow: 0 30px 60px -20px rgba(24,22,27,.45);
+    --t-light: #FF5A6E; --t-dark: #8A0920; --t-bg: #3A0410;
+    font-family: var(--font-ui); color: #fff;
+  }
+  #story-card.solid { background: var(--t-bg); }
+  #story-map { position: absolute; inset: 0; background: transparent; }
+  .sc-ui { position: absolute; inset: 0; z-index: 500; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 44px 36px 48px;
+    background: linear-gradient(180deg, rgba(0,0,0,.35) 0%, transparent 18%, transparent 55%, rgba(0,0,0,.75) 100%); }
+  .sc-brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .sc-brand span { font-family: var(--font-display); font-weight: 800; font-size: 30px; letter-spacing: -.04em; }
+  .sc-bottom { text-align: center; }
+  .sc-city { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; line-height: .95; font-size: 64px; text-transform: none; overflow-wrap: anywhere; }
+  .sc-stats { display: grid; grid-template-columns: 1fr 1fr; margin-top: 26px; padding-top: 22px; border-top: 2px solid rgba(255,255,255,.85); }
+  .sc-num { font-family: var(--font-display); font-weight: 800; font-size: 44px; letter-spacing: -.04em; line-height: 1; color: var(--t-light); }
+  .sc-lbl { margin-top: 8px; font-size: 14px; font-weight: 700; }
+  .sc-sub { margin-top: 2px; font-size: 12px; opacity: .75; }
+  body.exporting #story-card { box-shadow: none; border-radius: 0; }
+  body.exporting .sc-ui { background: none; }
+  body.exporting #story-card:not(.solid) { background: transparent; }
+</style>
+{% endblock %}
 
-        /* --- UI ELEMENTS --- */
-        .header-back { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; color: #666; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: 0.2s; }
-        .header-back:hover { color: var(--bordeaux); transform: translateX(-5px); }
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="studio">
+    <aside class="studio__side" id="side-desk"></aside>
 
-        h1 { margin: 0 0 5px 0; font-size: 1.8rem; color: var(--bordeaux); letter-spacing: -1px; }
-        p { color: #888; font-size: 0.9rem; margin-bottom: 30px; }
-        .control-group { margin-bottom: 20px; }
-        label { display: block; font-weight: 700; margin-bottom: 8px; font-size: 0.8rem; color: #333; text-transform: uppercase; }
-        select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem; background: #f9f9f9; outline: none; box-sizing: border-box; }
-        select:focus, input:focus { border-color: var(--bordeaux); background: #fff; }
-
-        .btn-download {
-            margin-top: auto; padding: 15px; background: var(--bordeaux); color: white; border: none; 
-            border-radius: 10px; font-size: 1.1rem; font-weight: 700; cursor: pointer; transition: 0.2s;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-        }
-        .btn-download:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(109, 7, 26, 0.2); }
-
-        /* --- BOUTON FERMER (Caché sur PC par défaut) --- */
-        .btn-close-menu { 
-            display: none; /* CACHÉ SUR PC */
-            margin-bottom: 25px; background: #fff; border: 1px solid #eee; color: #333;
-            padding: 14px; border-radius: 12px; font-weight: 700; font-size: 0.95rem;
-            cursor: pointer; width: 100%; align-items: center; justify-content: center; gap: 10px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.03); transition: all 0.2s;
-        }
-        .btn-close-menu:active { background: #f9f9f9; transform: scale(0.98); }
-
-        /* --- CARTE STORY --- */
-        #story-card {
-            width: 450px; height: 800px;
-            background: #000; border-radius: 20px; overflow: hidden; position: relative;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.2); 
-            display: flex; flex-direction: column;
-            flex-shrink: 0;
-            transform-origin: center center;
-            transition: transform 0.3s ease;
-        }
-
-        #map { width: 100%; height: 100%; z-index: 1; background: transparent; cursor: move; }
-        
-        .overlay-ui {
-            position: absolute; inset: 0; z-index: 10; pointer-events: none;
-            display: flex; flex-direction: column; justify-content: space-between; padding: 40px;
-            background: linear-gradient(to bottom, transparent 60%, rgba(0,0,0,0.8) 100%);
-        }
-        .top-brand { text-align: center; color: white; font-weight: 900; font-size: 1.5rem; letter-spacing: 2px; opacity: 0.9; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-        .bottom-stats { color: white; text-align: center; width: 100%; text-shadow: 0 2px 4px rgba(0,0,0,0.8); padding-bottom: 20px; } 
-        
-        .city-title { font-weight: 900; line-height: 1.1; margin-bottom: 20px; text-transform: uppercase; font-size: 3.5rem; }
-        .stats-row { display: flex; justify-content: center; gap: 40px; border-top: 2px solid rgba(255,255,255,0.8); padding-top: 20px; margin: 0 auto; max-width: 90%; }
-        .stat-box { display: flex; flex-direction: column; align-items: center; }
-        .stat-num { font-size: 1.8rem; font-weight: 800; line-height: 1; text-shadow: none; color: var(--theme-light); }
-        .stat-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; color: #fff; margin-top: 6px; letter-spacing: 1px; opacity: 0.9; }
-        .stat-sub { font-size: 0.65rem; font-weight: 500; color: #ddd; margin-top: 4px; font-style: italic; }
-
-        /* EXPORT STYLE */
-        body.exporting .overlay-ui { background: none !important; }
-        body.exporting .top-brand, body.exporting .bottom-stats { text-shadow: none !important; }
-        body.exporting path.leaflet-interactive { stroke-width: 1px !important; stroke: var(--theme-light) !important; stroke-opacity: 0.6 !important; }
-
-        /* --- BOUTON DOWNLOAD FLOTTANT --- */
-        .btn-mobile-fab {
-            display: none; /* Caché sur PC */
-            position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: var(--bordeaux); color: white; padding: 14px 28px;
-            border-radius: 50px; font-weight: 700; box-shadow: 0 5px 20px rgba(109, 7, 26, 0.4);
-            z-index: 40; border: none; align-items: center; gap: 8px; cursor: pointer;
-            width: max-content; transition: transform 0.2s;
-        }
-        .btn-mobile-fab:active { transform: translateX(-50%) scale(0.95); }
-
-        /* LOADER */
-        #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
-        .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
-        .loader-text { color: var(--bordeaux); font-weight: 700; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; }
-        .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
-        .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
-        @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
-        .loader-signature { position: absolute; bottom: 30px; display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--bordeaux); opacity: 0.6; text-decoration: none; font-weight: 600; transition: opacity 0.3s, transform 0.3s; }
-        .loader-signature:hover { opacity: 1; transform: translateY(-2px); }
-        .loader-icon { width: 14px; height: 14px; fill: currentColor; }
-
-        /* ========================================= */
-        /* ---        RESPONSIVE MOBILE          --- */
-        /* ========================================= */
-        @media (max-width: 900px) {
-            body { 
-                display: block; /* On casse le flexbox horizontal du PC */
-                height: 100vh; overflow: hidden; 
-            }
-
-            /* --- HEADER FIXE --- */
-            .mobile-header {
-                display: flex;
-                position: absolute; top: 0; left: 0; right: 0; height: 60px;
-                background: white; z-index: 50; padding: 0 20px;
-                align-items: center; justify-content: space-between;
-                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            }
-            .mobile-title { 
-                font-weight: 800; color: var(--bordeaux); font-size: 1.1rem;
-                position: absolute; left: 50%; transform: translateX(-50%); white-space: nowrap;
-            }
-            .btn-toggle-settings {
-                background: #f0f2f5; border: none; padding: 8px 12px; border-radius: 8px;
-                color: #333; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px;
-            }
-            
-            /* Bouton retour DANS le header mobile */
-            .btn-header-back {
-                display: flex; align-items: center; justify-content: center;
-                color: #333; text-decoration: none;
-                width: 36px; height: 36px; border-radius: 50%;
-                background: #f0f2f5; margin-right: 10px;
-            }
-
-            /* --- SIDEBAR OVERLAY --- */
-            .sidebar {
-                position: fixed; inset: 0; width: 100%; height: 100%;
-                transform: translateX(100%); /* Caché à droite */
-                z-index: 200; box-shadow: none; border: none;
-                transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            }
-            .sidebar.active { transform: translateX(0); } /* Slide in */
-
-            /* Cacher le lien "Retour" du menu overlay puisqu'il est dans le header */
-            .sidebar .header-back { display: none; }
-
-            .btn-close-menu { display: flex; } /* AFFICHER LE BOUTON FERMER ICI */
-            .sidebar .btn-download { display: none; } /* Cacher le bouton PC */
-
-            /* --- PREVIEW AREA MOBILE --- */
-            .preview-area {
-                position: absolute;
-                top: 60px; /* Sous le header */
-                bottom: 0; left: 0; right: 0;
-                padding: 20px;
-                padding-bottom: 120px; /* PLACE POUR LE BOUTON FLOTTANT */
-                display: flex; align-items: center; justify-content: center;
-                overflow: hidden;
-            }
-
-            .btn-mobile-fab { display: flex; }
-
-            /* --- SCALE CARTE --- */
-            #story-card { transform: scale(0.7); }
-        }
-        
-        @media (max-width: 380px) {
-            #story-card { transform: scale(0.65); }
-        }
-        @media (max-height: 700px) {
-            #story-card { transform: scale(0.6); }
-        }
-    </style>
-</head>
-<body>
-
-    <div id="loader">
-        <div class="loader-content">
-            <div class="loader-text">Génération du studio...</div>
-            <div class="progress-bar"><div class="progress-fill"></div></div>
-        </div>
-        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="loader-signature">
-            <svg class="loader-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-            <span>Théophile Sénéchal</span>
-        </a>
-    </div>
-
-    <div class="mobile-header">
-        <a href="/" class="btn-header-back">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-        </a>
-        
-        <div class="mobile-title">UNLOCK Studio</div>
-        
-        <button class="btn-toggle-settings" onclick="toggleSettings()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/><path d="M1 14h6"/><path d="M9 8h6"/><path d="M17 16h6"/></svg>
-            Réglages
-        </button>
-    </div>
-
-    <div class="sidebar" id="settings-panel">
-        <a href="/" class="header-back">← Retour au menu principal</a>
-        
-        <button class="btn-close-menu" onclick="toggleSettings()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="15" y1="9" x2="9" y2="15"></line>
-                <line x1="9" y1="9" x2="15" y2="15"></line>
-            </svg>
-            Fermer les réglages
-        </button>
-        
-        <h1>Studio Story</h1>
-        <p>Génère un calque transparent.</p>
-
-        <div class="control-group">
-            <label>1. Couleur</label>
-            <select id="color-selector" onchange="updateColors()">
-                <option value="red" selected>Rouge & Bordeaux</option>
-                <option value="blue">Bleu Néon & Marine</option>
-                <option value="green">Vert Flash & Forêt</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <label>2. Taille de la grille</label>
-            <select id="grid-selector" onchange="loadData()">
-                <option value="100" selected>100m x 100m</option>
-                <option value="250">250m x 250m</option>
-            </select>
-        </div>
-
-        <div class="control-group">
-            <label>3. Choisir la ville</label>
-            <input type="text" id="city-input" list="city-list" placeholder="Rechercher..." onchange="onCitySelected()" autocomplete="off">
-            <datalist id="city-list"></datalist>
-        </div>
-
-        <button class="btn-download" onclick="downloadStory()">Télécharger l'image 📸</button>
-    </div>
-
-    <div class="preview-area">
+    <div class="studio__stage" id="stage">
+      <div class="studio__fit" id="fit">
         <div id="story-card">
-            <div id="map"></div>
-            <div class="overlay-ui">
-                <div class="top-brand">UNLOCK</div>
-                <div class="bottom-stats">
-                    <div id="disp-city" class="city-title">...</div>
-                    <div class="stats-row">
-                        <div class="stat-box">
-                            <span id="disp-percent" class="stat-num">-</span>
-                            <span class="stat-label">Explorés</span>
-                        </div>
-                        <div class="stat-box">
-                            <span id="disp-blocks" class="stat-num">-</span>
-                            <span class="stat-label">Blocs</span>
-                            <span id="disp-grid-size" class="stat-sub">-</span>
-                        </div>
-                    </div>
-                </div>
+          <div id="story-map"></div>
+          <div class="sc-ui">
+            <div class="sc-brand"><span>unlock</span></div>
+            <div class="sc-bottom">
+              <div class="sc-city" id="sc-city">…</div>
+              <div class="sc-stats">
+                <div><div class="sc-num" id="sc-pct">–</div><div class="sc-lbl">explorés</div></div>
+                <div><div class="sc-num" id="sc-blocks">–</div><div class="sc-lbl">blocs</div><div class="sc-sub" id="sc-grid"></div></div>
+              </div>
             </div>
+          </div>
         </div>
+      </div>
+      <div class="studio__actions">
+        <button type="button" class="btn btn--outline" data-sheet-open="sheet-studio"><span class="emoji" aria-hidden="true">🎨</span>Personnaliser</button>
+        <button type="button" class="btn btn--primary" data-download><span class="emoji" aria-hidden="true">📸</span>Télécharger</button>
+      </div>
     </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
 
-    <button class="btn-mobile-fab" onclick="downloadStory()">
-        <span>Télécharger</span>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-    </button>
+<!-- Settings (moved into the sidebar on desktop, into a sheet on mobile) -->
+<div id="settings" style="display:contents">
+  <div class="set-head">
+    <h1>Story</h1>
+    <p class="lead">Une image prête à poster, avec vos blocs sur fond transparent ou coloré.</p>
+  </div>
+  <div class="field"><label class="field__label" for="city-select">Commune</label><select class="select" id="city-select"></select></div>
+  <div class="field"><span class="field__label" id="col-l">Couleurs</span>
+    <div class="swatches" role="group" aria-labelledby="col-l">
+      <button type="button" class="swatch" data-theme="bordeaux" aria-pressed="true" style="--a:#FF5A6E;--b:#6D071A"><i></i>Bordeaux</button>
+      <button type="button" class="swatch" data-theme="ocean" aria-pressed="false" style="--a:#5AB4FF;--b:#0B3A66"><i></i>Océan</button>
+      <button type="button" class="swatch" data-theme="foret" aria-pressed="false" style="--a:#5BE38F;--b:#0B5C2C"><i></i>Forêt</button>
+    </div>
+  </div>
+  <div class="field"><span class="field__label" id="bg-l">Fond</span>
+    <div class="seg seg--block" role="group" aria-labelledby="bg-l">
+      <button type="button" class="seg__btn" data-bg="transparent" aria-pressed="true">Transparent</button>
+      <button type="button" class="seg__btn" data-bg="solid" aria-pressed="false">Coloré</button>
+    </div>
+  </div>
+  <div class="field"><label class="field__label" for="grid-select">Taille des blocs</label>
+    <select class="select" id="grid-select"><option value="100" selected>100 m</option><option value="250">250 m</option></select></div>
+  <p class="set-tip" style="font-size:var(--fs-sm); color:var(--muted)">💡 Déplacez et zoomez la carte dans l'aperçu pour cadrer votre story.</p>
+  <button type="button" class="btn btn--primary btn--block set-dl" data-download style="margin-top:auto"><span class="emoji" aria-hidden="true">📸</span>Télécharger l'image</button>
+</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        function toggleSettings() {
-            document.getElementById('settings-panel').classList.toggle('active');
-        }
+<div class="sheet" id="sheet-studio" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-label="Personnaliser la story">
+    <div class="sheet__grip"></div>
+    <div class="sheet__body" id="side-sheet"></div>
+    <button type="button" class="btn btn--ghost btn--block" style="margin-top:12px" data-sheet-close>Voir l'aperçu</button>
+  </div>
+</div>
 
-        const THEMES = {
-            red:   { light: '#ff4d4d', dark: '#8a0920' }, 
-            blue:  { light: '#4da6ff', dark: '#004080' }, 
-            green: { light: '#4dff88', dark: '#006622' }  
-        };
+{{ ui.loader("Préparation du studio…") }}
+{% endblock %}
 
-        function isPointInPolygon(point, vs) {
-            var x = point[0], y = point[1];
-            var inside = false;
-            for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-                var xi = vs[i][0], yi = vs[i][1];
-                var xj = vs[j][0], yj = vs[j][1];
-                var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-                if (intersect) inside = !inside;
-            }
-            return inside;
-        }
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/dom-to-image-more.min.js') }}"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const THEMES = { bordeaux: ['#FF5A6E', '#8A0920', '#3A0410'], ocean: ['#5AB4FF', '#0B3A66', '#06213B'], foret: ['#5BE38F', '#0B5C2C', '#05301A'] };
+  let theme = 'bordeaux', data = null, first = true;
 
-        L.Browser.any3d = false;
+  /* Settings placement */
+  const mq = window.matchMedia('(min-width: 900px)');
+  function place() {
+    const t = mq.matches ? $('side-desk') : $('side-sheet');
+    [...$('settings').children, ...$('side-desk').children, ...$('side-sheet').children].forEach((n) => t.appendChild(n));
+    document.querySelectorAll('.set-dl').forEach((b) => (b.hidden = !mq.matches));
+    document.querySelectorAll('.set-head').forEach((b) => (b.hidden = !mq.matches));
+    fit();
+  }
 
-        const map = L.map('map', { 
-            zoomControl: false, 
-            attributionControl: false,
-            interactive: true,
-            scrollWheelZoom: true,
-            dragging: true,
-            preferCanvas: true 
-        });
-        
-        const gridLayer = L.layerGroup().addTo(map);
-        const borderLayer = L.layerGroup().addTo(map);
+  /* Scale the 450×800 card to the available stage */
+  function fit() {
+    const st = $('stage'), cs = getComputedStyle(st);
+    const w = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const h = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const k = Math.max(.2, Math.min(w / 450, h / 800, 1.15));
+    $('story-card').style.transform = `scale(${k})`;
+    $('fit').style.width = 450 * k + 'px'; $('fit').style.height = 800 * k + 'px';
+  }
+  new ResizeObserver(fit).observe($('stage'));
 
-        let currentData = null;
+  L.Browser.any3d = false;
+  const map = L.map('story-map', { zoomControl: false, attributionControl: false, preferCanvas: true, zoomSnap: .25 });
+  map.setView([46.6, 1.9], 6);
+  const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
 
-        async function loadData() {
-            const gridSize = document.getElementById('grid-selector').value;
-            const loader = document.getElementById('loader');
-            loader.style.display = 'flex';
+  function inside(pt, vs) {
+    let x = pt[0], y = pt[1], ins = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      const xi = vs[i][0], yi = vs[i][1], xj = vs[j][0], yj = vs[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) ins = !ins;
+    }
+    return ins;
+  }
 
-            try {
-                const response = await fetch(`/api/activities?year=all&grid_size=${gridSize}&sport_type=all`);
-                currentData = await response.json();
-                populateCityDatalist();
-                
-                if(currentData.top_municipalities.length > 0) {
-                     currentData.top_municipalities.sort((a,b) => b.stats.blocks - a.stats.blocks);
-                     const firstCity = currentData.top_municipalities[0];
-                     document.getElementById('city-input').value = firstCity.name;
-                     updatePreview(firstCity.name, true);
-                }
-            } catch (e) { console.error(e); } finally { loader.style.display = 'none'; }
-        }
+  async function load() {
+    if (first) Unlock.loader.show(['Préparation du studio…', 'Sélection de vos communes…']); else Unlock.busy.on('Recalcul des blocs…');
+    try {
+      data = await Unlock.getJSON(`/api/activities?year=all&sport_type=all&grid_size=${$('grid-select').value}`);
+      const sel = $('city-select'), cur = sel.value; sel.innerHTML = '';
+      const cities = [...(data.top_municipalities || [])].sort((a, b) => b.stats.blocks - a.stats.blocks);
+      if (!cities.length) sel.add(new Option('Aucune commune disponible', ''));
+      cities.forEach((c) => sel.add(new Option(`${c.name} · ${Unlock.fmt(c.stats.percent, 1)} %`, c.name)));
+      if (cities.some((c) => c.name === cur)) sel.value = cur;
+      draw(true);
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos communes.'); }
+    finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
+  }
 
-        function populateCityDatalist() {
-            const dataList = document.getElementById('city-list');
-            dataList.innerHTML = '';
-            if (currentData.top_municipalities) {
-                const sorted = [...currentData.top_municipalities].sort((a,b) => a.name.localeCompare(b.name));
-                sorted.forEach(city => {
-                    let opt = document.createElement('option');
-                    opt.value = city.name;
-                    dataList.appendChild(opt);
-                });
-            }
-        }
+  function draw(center) {
+    const [light, dark, bg] = THEMES[theme];
+    const card = $('story-card');
+    card.style.setProperty('--t-light', light); card.style.setProperty('--t-dark', dark); card.style.setProperty('--t-bg', bg);
+    const city = (data && data.top_municipalities || []).find((c) => c.name === $('city-select').value);
+    gridLayer.clearLayers(); borderLayer.clearLayers();
+    if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
+    const name = city.name; const el = $('sc-city');
+    el.textContent = name; el.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
+    $('sc-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + ' %';
+    $('sc-blocks').textContent = Unlock.fmt(city.stats.blocks);
+    const g = +$('grid-select').value; $('sc-grid').textContent = `de ${g} m × ${g} m`;
+    if (!city.outline) return;
+    const poly = L.polygon(city.outline, { color: dark, weight: 4, fill: false, opacity: 1, interactive: false }).addTo(borderLayer);
+    const size = data.grid_size_used;
+    const cells = (data.grid_cells || []).filter((c) => inside([c[0], c[1]], city.outline));
+    let max = 1; cells.forEach((c) => { if (c[2] > max) max = c[2]; });
+    cells.forEach(([lat, lon, count]) => L.rectangle([[lat - size / 2, lon - size / 2], [lat + size / 2, lon + size / 2]],
+      { stroke: false, fillColor: light, fillOpacity: .6 + Math.sqrt(count / max) * .4, interactive: false }).addTo(gridLayer));
+    if (center) { map.invalidateSize(); map.fitBounds(poly.getBounds(), { paddingTopLeft: [30, 110], paddingBottomRight: [30, 300] }); }
+  }
 
-        function onCitySelected() {
-            const name = document.getElementById('city-input').value;
-            updatePreview(name, true);
-            if(window.innerWidth < 900) {
-                toggleSettings();
-            }
-        }
+  async function download() {
+    const card = $('story-card'), prev = card.style.transform;
+    document.body.classList.add('exporting');
+    Unlock.busy.on('Création de l\'image…');
+    try {
+      await new Promise((r) => setTimeout(r, 120));
+      const url = await domtoimage.toPng(card, {
+        width: 900, height: 1600, cacheBust: true,
+        style: { transform: 'scale(2)', transformOrigin: 'top left', width: '450px', height: '800px' }
+      });
+      const a = document.createElement('a');
+      a.download = `unlock-story-${($('city-select').value || 'ville').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
+      a.href = url; a.click();
+      Unlock.toast('📸 Image enregistrée, à vous de poster !');
+    } catch (e) { console.error(e); Unlock.toast("⚠️ L'export a échoué. Réessayez, ou faites une capture d'écran de l'aperçu."); }
+    finally { card.style.transform = prev; document.body.classList.remove('exporting'); Unlock.busy.off(); }
+  }
 
-        function updateColors() {
-            const name = document.getElementById('city-input').value;
-            if(name) updatePreview(name, false);
-        }
-
-        function updatePreview(cityName, shouldCenter = true) {
-            if (!currentData || !currentData.top_municipalities) return;
-            const city = currentData.top_municipalities.find(c => c.name === cityName);
-            const gridSize = document.getElementById('grid-selector').value;
-            const themeKey = document.getElementById('color-selector').value;
-            const theme = THEMES[themeKey];
-
-            document.documentElement.style.setProperty('--theme-light', theme.light);
-            document.documentElement.style.setProperty('--theme-dark', theme.dark);
-
-            if (!city) return;
-
-            const cityTitleEl = document.getElementById('disp-city');
-            cityTitleEl.textContent = city.name;
-            
-            if (city.name.length > 15) cityTitleEl.style.fontSize = "2.2rem";
-            else if (city.name.length > 10) cityTitleEl.style.fontSize = "2.8rem";
-            else cityTitleEl.style.fontSize = "3.5rem";
-
-            document.getElementById('disp-percent').textContent = city.stats.percent + '%';
-            document.getElementById('disp-blocks').textContent = city.stats.blocks;
-            document.getElementById('disp-grid-size').textContent = `${gridSize}m / ${gridSize}m`;
-
-            gridLayer.clearLayers();
-            borderLayer.clearLayers();
-
-            let cityBounds = null;
-
-            if (city.outline) {
-                const poly = L.polygon(city.outline, { color: theme.dark, weight: 4, fill: false, opacity: 1 }).addTo(borderLayer);
-                cityBounds = poly.getBounds();
-                if (shouldCenter) {
-                    setTimeout(() => {
-                        map.fitBounds(cityBounds, { paddingTopLeft: [20, 20], paddingBottomRight: [20, 250], animate: true });
-                    }, 50);
-                }
-            }
-
-            if (currentData.grid_cells && city.outline) {
-                const size = currentData.grid_size_used;
-                const cellsInside = currentData.grid_cells.filter(cell => {
-                    const [lat, lon, count] = cell;
-                    return isPointInPolygon([lat, lon], city.outline);
-                });
-
-                const counts = cellsInside.map(c => c[2]);
-                const maxCount = counts.length > 0 ? Math.max(...counts) : 1;
-
-                cellsInside.forEach(cell => {
-                    const [lat, lon, count] = cell;
-                    const intensity = 0.6 + (Math.sqrt(count / maxCount) * 0.4); 
-                    const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
-                    L.rectangle(bounds, { color: theme.light, weight: 0, fillOpacity: intensity }).addTo(gridLayer);
-                });
-            }
-        }
-
-        async function downloadStory() {
-            const card = document.getElementById('story-card');
-            const cityName = document.getElementById('city-input').value;
-            
-            document.body.classList.add('exporting');
-            card.style.backgroundColor = 'transparent';
-
-            window.scrollTo(0,0);
-            await new Promise(r => setTimeout(r, 100));
-
-            try {
-                const dataUrl = await domtoimage.toPng(card, {
-                    width: card.clientWidth * 2,
-                    height: card.clientHeight * 2,
-                    style: {
-                        transform: 'scale(2)', 
-                        transformOrigin: 'top left',
-                        width: card.clientWidth + 'px',
-                        height: card.clientHeight + 'px',
-                        backgroundColor: null 
-                    }
-                });
-
-                const link = document.createElement('a');
-                link.download = `Unlock_Story_${cityName}.png`;
-                link.href = dataUrl;
-                link.click();
-
-            } catch (err) {
-                console.error(err);
-                alert("Erreur lors de l'export.");
-            } finally {
-                card.style.backgroundColor = ''; 
-                document.body.classList.remove('exporting');
-            }
-        }
-
-        loadData();
-    </script>
-</body>
-</html>
+  document.addEventListener('click', (e) => {
+    if (e.target.closest('[data-download]')) { Unlock.closeSheet('sheet-studio'); download(); }
+    const sw = e.target.closest('[data-theme]');
+    if (sw) { theme = sw.dataset.theme; document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); draw(false); }
+    const bg = e.target.closest('[data-bg]');
+    if (bg) { document.querySelectorAll('[data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b === bg))); $('story-card').classList.toggle('solid', bg.dataset.bg === 'solid'); }
+  });
+  $('city-select').addEventListener('change', () => { draw(true); if (!mq.matches) Unlock.closeSheet('sheet-studio'); });
+  $('grid-select').addEventListener('change', load);
+  place(); mq.addEventListener('change', place);
+  load();
+})();
+</script>
+{% endblock %}

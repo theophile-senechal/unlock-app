@@ -1,0 +1,8 @@
+{% extends "_status.html" %}
+{% block title %}Hors connexion · Unlock{% endblock %}
+{% block card %}
+<div class="status__icon">📡</div>
+<h1>Vous êtes hors connexion</h1>
+<p>Unlock a besoin d'internet pour lire vos activités Strava. Reconnectez-vous puis réessayez.</p>
+<div class="actions"><button type="button" class="btn btn--primary btn--block" onclick="location.reload()">Réessayer</button></div>
+{% endblock %}

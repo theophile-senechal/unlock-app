@@ -1,14 +1,18 @@
 import os
+import time
+import secrets
 import requests
+from urllib.parse import urlencode
 import polyline
 import json
-from flask import Flask, redirect, request, jsonify, session, render_template, url_for
+from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response
 from dotenv import load_dotenv
 from datetime import datetime
 from shapely.geometry import Point, Polygon
 from shapely.prepared import prep
 from collections import defaultdict
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, table as sa_table, column as sa_column
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.pool import NullPool
 
 # ============================================================
@@ -17,6 +21,70 @@ from sqlalchemy.pool import NullPool
 load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE='Lax',
+    SESSION_COOKIE_SECURE=os.getenv('VERCEL') is not None or os.getenv('SESSION_COOKIE_SECURE') == '1',
+)
+
+# ------------------------------------------------------------
+# Fonctionnalités / infos légales
+# ------------------------------------------------------------
+# ⚠️ Classement désactivé par défaut : il affiche les données Strava d'autres
+# utilisateurs et les agrège par commune, ce que la Strava API Policy (juin 2026)
+# interdit (§2.3, §5.4, §5.7, §6.2). Ne le réactiver qu'après accord écrit de Strava.
+ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
+
+SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
+LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
+ASSET_VERSION = '2026.10.3'
+
+# Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
+ACTIVE_WINDOW_DAYS = 31
+# Sans connexion pendant ce délai, l'accès Strava est révoqué et les données effacées :
+# ça libère une place sur le quota d'athlètes autorisé par Strava.
+INACTIVE_DAYS = int(os.getenv('INACTIVE_DAYS', '31'))
+# En dessous de ce nombre, le compteur n'est pas affiché (évite « 2 explorateurs actifs »)
+MIN_ACTIVE_DISPLAY = int(os.getenv('MIN_ACTIVE_DISPLAY', '5'))
+# Quota d'athlètes accordé par Strava, et identifiants Strava des admins (séparés par des virgules)
+STRAVA_ATHLETE_CAPACITY = int(os.getenv('STRAVA_ATHLETE_CAPACITY', '999'))
+ADMIN_ATHLETE_IDS = {x.strip() for x in os.getenv('ADMIN_ATHLETE_IDS', '').split(',') if x.strip()}
+
+def is_admin():
+    return bool(ADMIN_ATHLETE_IDS) and str(session.get('athlete_id')) in ADMIN_ATHLETE_IDS
+STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+
+ALLOWED_GRID_SIZES = (100, 250)
+
+def _grid_size(default=250):
+    """Taille de bloc demandée, limitée à 100 m ou 250 m."""
+    value = request.args.get('grid_size', default, type=int)
+    return value if value in ALLOWED_GRID_SIZES else default
+
+NAV_ITEMS = [
+    ('map', '/', '🗺️', 'Carte'),
+    ('timelapse', '/timelapse', '⏱️', 'Timelapse'),
+    ('story', '/story', '📸', 'Story'),
+    ('stats', '/stats', '📊', 'Stats'),
+]
+
+@app.context_processor
+def inject_globals():
+    if 'csrf' not in session:
+        session['csrf'] = secrets.token_urlsafe(24)
+    return {
+        'nav_items': NAV_ITEMS,
+        'linkedin_url': LINKEDIN_URL,
+        'asset_v': ASSET_VERSION,
+        'leaderboard_enabled': ENABLE_LEADERBOARD,
+        'session_user': 'access_token' in session,
+        'csrf_token': session['csrf'],
+        'site_owner': SITE_OWNER,
+        'legal_updated': '29 octobre 2026',
+        'inactive_days': INACTIVE_DAYS,
+        'is_admin': is_admin(),
+        'my_athlete_id': session.get('athlete_id'),
+    }
 
 # ============================================================
 # 2. CONFIGURATION DATABASE
@@ -43,10 +111,40 @@ SPORT_TRANSLATIONS = {
 GPS_SPORTS = list(SPORT_TRANSLATIONS.keys())
 
 # ============================================================
-# 5. CACHES EN MÉMOIRE
+# 5. CACHES
 # ============================================================
-RAW_DATA_CACHE = {}
-API_RESULT_CACHE = {}
+# Strava API Policy :
+#   §6.2 : pas plus de 7 jours de cache ;
+#   §6.3 : une activité supprimée sur Strava doit disparaître sous 48 h.
+# → Les activités sont gardées en base (table `activities`) au maximum 47 h,
+#   puis rechargées entièrement. Entre-temps, seules les nouvelles sont demandées.
+DB_CACHE_MAX_AGE_HOURS = 47
+MEMORY_TTL_SECONDS = 600          # petit cache mémoire (même instance serveur)
+INCREMENTAL_OVERLAP_SECONDS = 3 * 86400   # rattrape les activités envoyées en retard
+
+RAW_DATA_CACHE = {}     # user_key -> (timestamp, activities)
+API_RESULT_CACHE = {}   # user_key -> {"_ts": timestamp, cache_key: data}
+
+def _user_key():
+    return str(session.get('athlete_id') or session.get('access_token'))
+
+def _purge_expired_caches():
+    now = time.time()
+    for k in [k for k, (ts, _) in RAW_DATA_CACHE.items() if now - ts > MEMORY_TTL_SECONDS]:
+        RAW_DATA_CACHE.pop(k, None)
+    for k in [k for k, v in API_RESULT_CACHE.items() if now - v.get('_ts', 0) > MEMORY_TTL_SECONDS]:
+        API_RESULT_CACHE.pop(k, None)
+
+def _result_cache(user_key):
+    _purge_expired_caches()
+    if user_key not in API_RESULT_CACHE:
+        API_RESULT_CACHE[user_key] = {'_ts': time.time()}
+    return API_RESULT_CACHE[user_key]
+
+def _data_version(activities):
+    """Change dès qu'une activité arrive : invalide les résultats calculés."""
+    if not activities: return "0"
+    return f"{len(activities)}-{max(str(a['id']) for a in activities)}"
 
 # ============================================================
 # 6. FONCTIONS UTILITAIRES
@@ -91,136 +189,448 @@ def get_current_week_display():
 # ============================================================
 # 7. ACTIVITÉS STRAVA
 # ============================================================
-def get_strava_activities_cached(token):
-    if token in RAW_DATA_CACHE:
-        return RAW_DATA_CACHE[token]
+class StravaAuthError(Exception):
+    """Le jeton Strava n'est plus valide et n'a pas pu être renouvelé."""
 
-    all_activities = []
-    headers = {'Authorization': f'Bearer {token}'}
-    page = 1
-
-    while True:
+def _valid_token():
+    """Renvoie un jeton d'accès valide, en le renouvelant si besoin (ils expirent après 6 h)."""
+    token = session.get('access_token')
+    expires_at = session.get('expires_at') or 0
+    refresh = session.get('refresh_token')
+    if not refresh or expires_at > time.time() + 120:
+        return token
+    try:
+        r = requests.post("https://www.strava.com/oauth/token", data={
+            'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET,
+            'grant_type': 'refresh_token', 'refresh_token': refresh}, timeout=10)
+    except Exception:
+        return token
+    if r.status_code != 200:
+        raise StravaAuthError()
+    d = r.json()
+    session['access_token'] = d['access_token']
+    session['refresh_token'] = d.get('refresh_token', refresh)
+    session['expires_at'] = d.get('expires_at', 0)
+    if DB_URL and session.get('athlete_id'):
         try:
-            r = requests.get(
-                "https://www.strava.com/api/v3/athlete/activities",
-                headers=headers,
-                params={'per_page': 200, 'page': page},
-                timeout=10
-            )
-            if r.status_code != 200: break
-            data = r.json()
-            if not data: break
-            all_activities.extend(data)
-            page += 1
-            if page > 10: break
+            with _engine().begin() as conn:
+                conn.execute(text("UPDATE strava_users SET access_token = :t, refresh_token = :r WHERE athlete_id = :a"),
+                             {"t": d['access_token'], "r": session['refresh_token'], "a": session['athlete_id']})
+        except Exception as e:
+            print(f"Mise à jour du jeton : {e}")
+    return d['access_token']
+
+def _clean_activity(act):
+    start_utc = act.get('start_date') or act['start_date_local']
+    return {
+        'id': str(act.get('id')),
+        'type': act['type'],
+        'start_date_local': act['start_date_local'],
+        'start_epoch': int(datetime.fromisoformat(start_utc.replace('Z', '+00:00')).timestamp()),
+        'polyline': act['map']['summary_polyline'],
+        'distance': act.get('distance', 0) or 0,
+    }
+
+def _fetch_strava(token, after=None):
+    """Toutes les activités GPS (ou celles après `after`). None si Strava ne répond pas correctement :
+    on ne veut jamais enregistrer un historique incomplet."""
+    out, page = [], 1
+    while page <= 10:
+        params = {'per_page': 200, 'page': page}
+        if after: params['after'] = int(after)
+        try:
+            r = requests.get("https://www.strava.com/api/v3/athlete/activities",
+                             headers={'Authorization': f'Bearer {token}'}, params=params, timeout=15)
         except Exception:
-            break
+            return None
+        _record_rate_limit(r)
+        if r.status_code == 401:
+            raise StravaAuthError()
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        if not data: break
+        out.extend(data)
+        if len(data) < 200: break
+        page += 1
+    return [_clean_activity(a) for a in out
+            if a.get('type') in GPS_SPORTS and (a.get('map') or {}).get('summary_polyline')]
 
-    cleaned_data = []
-    for act in all_activities:
-        if act.get('type') in GPS_SPORTS and act.get('map', {}).get('summary_polyline'):
-            cleaned_data.append({
-                'id': act.get('id'),
-                'type': act['type'],
-                'start_date_local': act['start_date_local'],
-                'polyline': act['map']['summary_polyline'],
-                'distance': act.get('distance', 0)
-            })
+_ENGINE = None
+def _engine():
+    global _ENGINE
+    if _ENGINE is None:
+        # SQLAlchemy ≥ 2.1 choisit le pilote "psycopg" (v3) par défaut ; on force psycopg2 (requirements.txt)
+        url = DB_URL
+        for prefix in ('postgres://', 'postgresql://'):
+            if url.startswith(prefix):
+                url = 'postgresql+psycopg2://' + url[len(prefix):]
+        _ENGINE = create_engine(url, poolclass=NullPool)
+    return _ENGINE
 
-    RAW_DATA_CACHE[token] = cleaned_data
-    return cleaned_data
+# ---------- Journal anonyme pour le tableau de bord admin ----------
+# Aucun identifiant d'utilisateur : seulement un type d'événement et une date.
+EVENT_KINDS = ('signup', 'login', 'visit', 'logout', 'delete', 'revoke_inactive')
+
+def log_event(kind):
+    if not DB_URL: return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("INSERT INTO app_events (kind) VALUES (:k)"), {"k": kind})
+    except Exception as e:
+        print(f"Journal ({kind}) : {e}")
+
+def kv_set(key, value):
+    if not DB_URL: return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("""INSERT INTO app_kv (key, value, updated_at) VALUES (:k, CAST(:v AS jsonb), NOW())
+                                 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()"""),
+                         {"k": key, "v": json.dumps(value)})
+    except Exception as e:
+        print(f"app_kv ({key}) : {e}")
+
+_RATE = {'ts': 0}
+def _record_rate_limit(resp):
+    """Mémorise l'utilisation des quotas Strava (en-têtes X-RateLimit / X-ReadRateLimit), au plus 1 fois/min."""
+    h = resp.headers if hasattr(resp, 'headers') else {}
+    if not h or 'X-RateLimit-Usage' not in h: return
+    def pair(name):
+        try: return [int(x) for x in h.get(name, '').split(',')[:2]]
+        except ValueError: return None
+    data = {'usage': pair('X-RateLimit-Usage'), 'limit': pair('X-RateLimit-Limit'),
+            'read_usage': pair('X-ReadRateLimit-Usage'), 'read_limit': pair('X-ReadRateLimit-Limit'),
+            'at': datetime.utcnow().isoformat() + 'Z'}
+    _RATE.update(data)
+    if time.time() - _RATE['ts'] > 60:
+        _RATE['ts'] = time.time()
+        kv_set('strava_rate_limit', data)
+
+def _touch_visit(old_last_login):
+    """Compte une visite unique par utilisateur et par jour."""
+    if old_last_login is None or old_last_login.date() < datetime.now().date():
+        log_event('visit')
+
+_ACT_TABLE = sa_table('activities', sa_column('activity_id'), sa_column('athlete_id'), sa_column('start_date_local'),
+                      sa_column('type'), sa_column('distance'), sa_column('polyline'), sa_column('start_epoch'),
+                      sa_column('fetched_at'))
+
+def _db_sync(token, athlete_id):
+    """Synchronise la table `activities` puis la renvoie. None si impossible (on passe alors sans base)."""
+    with _engine().begin() as conn:
+        row = conn.execute(text("""SELECT full_sync_at > NOW() - make_interval(hours => :h) AS fresh
+                                   FROM strava_users WHERE athlete_id = :a"""),
+                           {"h": DB_CACHE_MAX_AGE_HOURS, "a": athlete_id}).fetchone()
+        fresh = bool(row and row.fresh)
+        if fresh:
+            last = conn.execute(text("SELECT COALESCE(MAX(start_epoch), 0) FROM activities WHERE athlete_id = :a"),
+                                {"a": athlete_id}).scalar() or 0
+            new = _fetch_strava(token, after=max(0, last - INCREMENTAL_OVERLAP_SECONDS)) if last else _fetch_strava(token)
+            new = new or []          # Strava indisponible : on sert le cache, encore valide
+        else:
+            new = _fetch_strava(token)
+            if new is None:
+                return None
+            conn.execute(text("DELETE FROM activities WHERE athlete_id = :a"), {"a": athlete_id})
+            conn.execute(text("""INSERT INTO strava_users (athlete_id, access_token, full_sync_at)
+                                 VALUES (:a, :t, NOW())
+                                 ON CONFLICT (athlete_id) DO UPDATE SET full_sync_at = NOW()"""),
+                         {"a": athlete_id, "t": token})
+        for i in range(0, len(new), 500):
+            chunk = [{**{k: v for k, v in x.items() if k != 'id'}, 'activity_id': x['id'], 'athlete_id': athlete_id}
+                     for x in new[i:i + 500]]
+            stmt = pg_insert(_ACT_TABLE).values(chunk)
+            stmt = stmt.on_conflict_do_update(index_elements=['activity_id'], set_={
+                'type': stmt.excluded.type, 'distance': stmt.excluded.distance, 'polyline': stmt.excluded.polyline,
+                'start_date_local': stmt.excluded.start_date_local, 'start_epoch': stmt.excluded.start_epoch,
+                'athlete_id': stmt.excluded.athlete_id})
+            conn.execute(stmt)
+        rows = conn.execute(text("""SELECT activity_id, type, start_date_local, polyline, distance
+                                    FROM activities WHERE athlete_id = :a ORDER BY start_epoch"""),
+                            {"a": athlete_id}).fetchall()
+    return [{'id': r.activity_id, 'type': r.type, 'start_date_local': r.start_date_local,
+             'polyline': r.polyline, 'distance': r.distance or 0} for r in rows]
+
+def get_strava_activities_cached(_token=None):
+    """Activités GPS de l'utilisateur connecté : mémoire (10 min) → base (47 h, + nouveautés) → Strava."""
+    _purge_expired_caches()
+    key = _user_key()
+    if key in RAW_DATA_CACHE:
+        return RAW_DATA_CACHE[key][1]
+    token = _valid_token()
+    athlete_id = session.get('athlete_id')
+    acts = None
+    if DB_URL and athlete_id:
+        try:
+            acts = _db_sync(token, athlete_id)
+        except StravaAuthError:
+            raise
+        except Exception as e:
+            print(f"Cache base indisponible, lecture directe Strava : {e}")
+    if acts is None:
+        acts = _fetch_strava(token) or []
+        acts = [{k: v for k, v in a.items() if k != 'start_epoch'} for a in sorted(acts, key=lambda a: a['start_epoch'])]
+    RAW_DATA_CACHE[key] = (time.time(), acts)
+    return acts
+
+@app.errorhandler(StravaAuthError)
+def strava_auth_error(e):
+    session.clear()
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Session Strava expirée"}), 401
+    return redirect(url_for('login_page', error='expired'))
 
 # ============================================================
 # 8. ROUTES STANDARD
 # ============================================================
+def _require_login():
+    return 'access_token' not in session
+
+def _deauthorize(token):
+    """Révoque l'accès d'Unlock au compte Strava (libère une place sur le quota d'athlètes).
+    NB : Strava remplace /oauth/deauthorize par /oauth/revoke le 1er juin 2027."""
+    if not token: return False
+    try:
+        r = requests.post("https://www.strava.com/oauth/deauthorize",
+                          headers={'Authorization': f'Bearer {token}'}, timeout=5)
+        return r.status_code == 200
+    except Exception as e:
+        print(f"Erreur lors de la révocation Strava : {e}")
+        return False
+
+def _deauthorize_stored(access_token, refresh_token):
+    """Révocation depuis le cron : le jeton d'accès enregistré a expiré (6 h),
+    on en redemande un avec le refresh token avant de révoquer."""
+    if refresh_token:
+        try:
+            r = requests.post("https://www.strava.com/oauth/token", data={
+                'client_id': CLIENT_ID, 'client_secret': CLIENT_SECRET,
+                'grant_type': 'refresh_token', 'refresh_token': refresh_token}, timeout=10)
+            if r.status_code == 200:
+                return _deauthorize(r.json().get('access_token'))
+            return False   # accès déjà retiré par l'utilisateur côté Strava : place déjà libérée
+        except Exception as e:
+            print(f"Renouvellement avant révocation : {e}")
+    return _deauthorize(access_token)
+
+_ACTIVE_CACHE = {'ts': 0, 'n': None}
+def active_users_count():
+    """Nombre d'utilisateurs connectés au moins une fois sur les 31 derniers jours (mis en cache 10 min)."""
+    if not DB_URL: return None
+    if time.time() - _ACTIVE_CACHE['ts'] < 600:
+        return _ACTIVE_CACHE['n']
+    try:
+        with _engine().begin() as conn:
+            n = conn.execute(text("SELECT COUNT(*) FROM strava_users WHERE last_login_date > NOW() - make_interval(days => :d)"),
+                             {"d": ACTIVE_WINDOW_DAYS}).scalar()
+        _ACTIVE_CACHE.update(ts=time.time(), n=int(n or 0))
+    except Exception as e:
+        print(f"Compteur d'utilisateurs actifs : {e}")
+        _ACTIVE_CACHE.update(ts=time.time(), n=None)
+    return _ACTIVE_CACHE['n']
+
+# Tables contenant des données d'un utilisateur (ordre : dépendances d'abord)
+USER_TABLES = (('city_scores', 'athlete_id'), ('activities', 'athlete_id'), ('api_cache', 'athlete_id'),
+               ('profiles', 'id'), ('strava_users', 'athlete_id'))
+
+def _delete_user_rows(athlete_id):
+    """Supprime l'utilisateur de chaque table, chaque suppression dans sa propre transaction.
+    Renvoie False si une table existante n'a pas pu être vidée."""
+    ok = True
+    for table, col in USER_TABLES:
+        try:
+            with _engine().begin() as conn:
+                conn.execute(text(f"DELETE FROM {table} WHERE {col} = :id"), {"id": athlete_id})
+        except Exception as e:
+            if 'does not exist' not in str(e):
+                print(f"Suppression {table} : {e}")
+                ok = False
+    return ok
+
+def _purge_user(token, athlete_id):
+    """Efface toutes les données d'un utilisateur (caches + base). Strava API Policy §2.5 / §7.4."""
+    for key in (str(athlete_id) if athlete_id else None, token):
+        if key:
+            RAW_DATA_CACHE.pop(key, None)
+            API_RESULT_CACHE.pop(key, None)
+    if not DB_URL or not (athlete_id or token):
+        return True
+    try:
+        if not athlete_id and token:
+            with _engine().begin() as conn:
+                row = conn.execute(text("SELECT athlete_id FROM strava_users WHERE access_token = :t"), {"t": token}).fetchone()
+            athlete_id = row[0] if row else None
+        return _delete_user_rows(athlete_id) if athlete_id else True
+    except Exception as e:
+        print(f"Erreur purge utilisateur : {e}")
+        return False
+
 @app.route('/')
 def index():
-    if 'access_token' not in session: return redirect(url_for('login_page'))
-    return render_template('index.html')
+    if _require_login(): return redirect(url_for('login_page'))
+    return render_template('index.html', active='map')
 
 @app.route('/login')
 def login_page():
-    return render_template('login.html')
+    if 'access_token' in session: return redirect('/')
+    n = active_users_count()
+    return render_template('login.html', error=request.args.get('error'), bye=request.args.get('bye'),
+                           active_users=n if n is not None and n >= MIN_ACTIVE_DISPLAY else None,
+                           active_days=ACTIVE_WINDOW_DAYS)
 
 @app.route('/auth')
 def auth():
-    return redirect(f"https://www.strava.com/oauth/authorize?client_id={CLIENT_ID}&response_type=code&redirect_uri={REDIRECT_URI}&approval_prompt=auto&scope=activity:read_all")
+    state = secrets.token_urlsafe(16)
+    session['oauth_state'] = state
+    params = {
+        'client_id': CLIENT_ID, 'response_type': 'code', 'redirect_uri': REDIRECT_URI,
+        'approval_prompt': 'auto', 'scope': 'activity:read_all', 'state': state,
+    }
+    return redirect("https://www.strava.com/oauth/authorize?" + urlencode(params))
 
 @app.route('/logout')
 def logout():
+    # Se déconnecter révoque l'accès Strava : on efface donc aussi les données (Policy §7.4).
     token = session.get('access_token')
-    if token:
-        try:
-            requests.post(
-                "https://www.strava.com/api/v3/oauth/deauthorize",
-                headers={'Authorization': f'Bearer {token}'},
-                timeout=5
-            )
-        except Exception as e:
-            print(f"Erreur lors de la révocation Strava : {e}")
-
-        RAW_DATA_CACHE.pop(token, None)
-        API_RESULT_CACHE.pop(token, None)
-
+    _deauthorize(token)
+    _purge_user(token, session.get('athlete_id'))
+    if token: log_event('logout')
     session.clear()
-    return redirect(url_for('login_page'))
+    return redirect(url_for('login_page', bye=1))
+
+@app.route('/delete-account', methods=['POST'])
+def delete_account():
+    if request.form.get('csrf') != session.get('csrf'):
+        abort(400)
+    token = session.get('access_token')
+    _deauthorize(token)
+    ok = _purge_user(token, session.get('athlete_id'))
+    log_event('delete')
+    session.clear()
+    # Confirmation écrite de la suppression (Policy §2.5)
+    return render_template('deleted.html', ok=ok, deleted_at=datetime.now().strftime('%d/%m/%Y à %H:%M'))
 
 @app.route('/callback')
 def callback():
+    if request.args.get('error'):
+        return redirect(url_for('login_page', error='denied'))
+    expected_state = session.pop('oauth_state', None)
+    if expected_state and request.args.get('state') != expected_state:
+        return redirect(url_for('login_page', error='state'))
+    granted = request.args.get('scope', '')
+    if granted and 'activity:read' not in granted:
+        return redirect(url_for('login_page', error='scope'))
+
     code = request.args.get('code')
-    res = requests.post(
-        "https://www.strava.com/oauth/token",
-        data={
-            'client_id': CLIENT_ID,
-            'client_secret': CLIENT_SECRET,
-            'code': code,
-            'grant_type': 'authorization_code'
-        }
-    )
+    try:
+        res = requests.post(
+            "https://www.strava.com/oauth/token",
+            data={
+                'client_id': CLIENT_ID,
+                'client_secret': CLIENT_SECRET,
+                'code': code,
+                'grant_type': 'authorization_code'
+            },
+            timeout=10
+        )
+    except Exception:
+        return redirect(url_for('login_page', error='network'))
     if res.status_code == 200:
         data = res.json()
         token = data.get('access_token')
         athlete_info = data.get('athlete', {})
         athlete_id = athlete_info.get('id')
-        athlete_name = f"{athlete_info.get('firstname', '')} {athlete_info.get('lastname', '')}".strip()
-        
+        # Le nom n'est conservé que si le classement est actif (minimisation des données).
+        athlete_name = f"{athlete_info.get('firstname', '')} {athlete_info.get('lastname', '')}".strip() if ENABLE_LEADERBOARD else ''
+
         session['access_token'] = token
+        session['athlete_id'] = athlete_id
+        session['refresh_token'] = data.get('refresh_token')
+        session['expires_at'] = data.get('expires_at', 0)
 
         if athlete_id and token and DB_URL:
             try:
-                engine = create_engine(DB_URL, poolclass=NullPool)
+                engine = _engine()
                 with engine.connect() as conn:
-                    query = text("""
-                        INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date, athlete_name)
-                        VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, :ath_name)
+                    prev = conn.execute(text("SELECT last_login_date FROM strava_users WHERE athlete_id = :a"),
+                                        {"a": athlete_id}).fetchone()
+                    # Le nom n'est écrit que si le classement est actif (la colonne peut avoir été supprimée)
+                    name_col = ", athlete_name" if ENABLE_LEADERBOARD else ""
+                    name_val = ", :ath_name" if ENABLE_LEADERBOARD else ""
+                    name_upd = ", athlete_name = EXCLUDED.athlete_name" if ENABLE_LEADERBOARD else ""
+                    query = text(f"""
+                        INSERT INTO strava_users (athlete_id, access_token, login_count, first_login_date, last_login_date{name_col})
+                        VALUES (:ath_id, :token, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP{name_val})
                         ON CONFLICT (athlete_id) DO UPDATE SET
                             access_token = EXCLUDED.access_token,
                             login_count = strava_users.login_count + 1,
-                            last_login_date = CURRENT_TIMESTAMP,
-                            athlete_name = EXCLUDED.athlete_name;
+                            last_login_date = CURRENT_TIMESTAMP{name_upd};
                     """)
                     conn.execute(query, {"ath_id": athlete_id, "token": token, "ath_name": athlete_name})
                     conn.commit()
+                log_event('login' if prev else 'signup')
+                _touch_visit(prev[0] if prev else None)
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
+            try:
+                with _engine().begin() as conn:
+                    conn.execute(text("UPDATE strava_users SET refresh_token = :r WHERE athlete_id = :a"),
+                                 {"r": data.get('refresh_token'), "a": athlete_id})
+            except Exception as e:
+                print(f"Enregistrement du refresh token (colonne manquante ?) : {e}")
 
         return redirect('/')
-    return "Erreur lors de l'authentification avec Strava"
+    return redirect(url_for('login_page', error='token'))
 
 @app.route('/stats')
 def stats_page():
-    if 'access_token' not in session: return redirect(url_for('login_page'))
-    return render_template('stats.html')
+    if _require_login(): return redirect(url_for('login_page'))
+    return render_template('stats.html', active='stats')
 
 @app.route('/story')
 def story_page():
-    if 'access_token' not in session: return redirect(url_for('login_page'))
-    return render_template('story.html')
+    if _require_login(): return redirect(url_for('login_page'))
+    return render_template('story.html', active='story')
 
 @app.route('/timelapse')
 def timelapse_page():
-    if 'access_token' not in session: return redirect(url_for('login_page'))
-    return render_template('timelapse.html')
+    if _require_login(): return redirect(url_for('login_page'))
+    return render_template('timelapse.html', active='timelapse')
+
+# ---------- Pages légales ----------
+@app.route('/cgu')
+def cgu_page():
+    return render_template('legal/cgu.html', legal='cgu')
+
+@app.route('/confidentialite')
+def privacy_page():
+    return render_template('legal/confidentialite.html', legal='privacy')
+
+@app.route('/mentions-legales')
+def mentions_page():
+    return render_template('legal/mentions.html', legal='mentions')
+
+# ---------- PWA ----------
+@app.route('/manifest.webmanifest')
+def manifest():
+    resp = send_from_directory(STATIC_DIR, 'manifest.webmanifest', mimetype='application/manifest+json')
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+@app.route('/sw.js')
+def service_worker():
+    resp = send_from_directory(STATIC_DIR, 'sw.js', mimetype='application/javascript')
+    resp.headers['Cache-Control'] = 'no-cache'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    return resp
+
+@app.route('/offline')
+def offline_page():
+    return render_template('offline.html')
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(STATIC_DIR, 'icons'), 'favicon-32.png', mimetype='image/png')
 
 # ============================================================
 # 9. API HISTORIQUE
@@ -230,15 +640,15 @@ def get_stats_history():
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
-    grid_meters = int(request.args.get('grid_size', 100))
+    grid_meters = _grid_size()
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
 
-    cache_key = f"stats_{grid_meters}_{sel_year}_{sel_sport}"
-    if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
-    if cache_key in API_RESULT_CACHE[token]: return jsonify(API_RESULT_CACHE[token][cache_key])
-
-    activities = get_strava_activities_cached(token)
+    activities = get_strava_activities_cached()
+    cache_key = f"stats_{grid_meters}_{sel_year}_{sel_sport}_{_data_version(activities)}"
+    cache = _result_cache(_user_key())
+    if cache_key in cache: return jsonify(cache[cache_key])
+    activities = list(activities)
     grid_size_deg = grid_meters / 111320
     activities.sort(key=lambda x: x['start_date_local'])
 
@@ -290,7 +700,7 @@ def get_stats_history():
         "available_sports": sorted(list(available_sports))
     }
 
-    API_RESULT_CACHE[token][cache_key] = result
+    cache[cache_key] = result
     return jsonify(result)
 
 # ============================================================
@@ -301,32 +711,35 @@ def get_activities_route():
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
-    athlete_id = None
+    athlete_id = session.get('athlete_id')
 
     if DB_URL:
         try:
-            engine = create_engine(DB_URL, poolclass=NullPool)
+            engine = _engine()
             with engine.connect() as conn:
                 res = conn.execute(
                     text("""
-                        UPDATE strava_users SET last_login_date = CURRENT_TIMESTAMP
-                        WHERE access_token = :token RETURNING athlete_id
-                    """), {"token": token}
+                        WITH prev AS (SELECT athlete_id, last_login_date AS old FROM strava_users
+                                      WHERE athlete_id = :aid OR access_token = :token LIMIT 1)
+                        UPDATE strava_users u SET last_login_date = CURRENT_TIMESTAMP
+                        FROM prev WHERE u.athlete_id = prev.athlete_id
+                        RETURNING u.athlete_id, prev.old
+                    """), {"token": token, "aid": athlete_id or -1}
                 ).fetchone()
-                if res: athlete_id = res[0]
+                if res and not athlete_id: athlete_id = res[0]
                 conn.commit()
+            if res: _touch_visit(res[1])
         except Exception as e:
             print(f"Erreur màj silencieuse: {e}")
 
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
-    grid_meters = int(request.args.get('grid_size', 100))
+    grid_meters = _grid_size()
 
-    cache_key = f"act_{grid_meters}_{sel_year}_{sel_sport}"
-    if token not in API_RESULT_CACHE: API_RESULT_CACHE[token] = {}
-    if cache_key in API_RESULT_CACHE[token]: return jsonify(API_RESULT_CACHE[token][cache_key])
-
-    activities = get_strava_activities_cached(token)
+    activities = get_strava_activities_cached()
+    cache_key = f"act_{grid_meters}_{sel_year}_{sel_sport}_{_data_version(activities)}"
+    cache = _result_cache(_user_key())
+    if cache_key in cache: return jsonify(cache[cache_key])
     grid_size_deg = grid_meters / 111320
 
     data = {
@@ -402,7 +815,7 @@ def get_activities_route():
         batch_size = 500  # 🚀 OPTIMISATION N°2 : Batch SQL massif pour réduire la latence réseau
 
         try:
-            engine = create_engine(DB_URL, poolclass=NullPool)
+            engine = _engine()
             with engine.connect() as conn:
                 for i in range(0, len(probe_list), batch_size):
                     batch = probe_list[i:i + batch_size]
@@ -541,9 +954,9 @@ def get_activities_route():
 
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
 
-        if scores_to_save:
+        if scores_to_save and ENABLE_LEADERBOARD:
             try:
-                engine = create_engine(DB_URL, poolclass=NullPool)
+                engine = _engine()
                 with engine.connect() as conn:
                     upsert_query = text("""
                         INSERT INTO city_scores (
@@ -561,7 +974,7 @@ def get_activities_route():
             except Exception as e:
                 print(f"Erreur sauvegarde scores: {e}")
 
-    API_RESULT_CACHE[token][cache_key] = data
+    cache[cache_key] = data
     return jsonify(data)
 
 # ============================================================
@@ -571,7 +984,7 @@ def get_activities_route():
 def keep_alive():
     if not DB_URL: return jsonify({"error": "Database URL non configurée"}), 500
     try:
-        engine = create_engine(DB_URL, poolclass=NullPool)
+        engine = _engine()
         with engine.connect() as conn: conn.execute(text("SELECT 1"))
         return jsonify({"status": "Supabase is awake!"}), 200
     except Exception as e:
@@ -588,26 +1001,37 @@ def cleanup_users():
     if not DB_URL: return jsonify({"error": "Database URL non configurée"}), 500
 
     try:
-        engine = create_engine(DB_URL, poolclass=NullPool)
         revoked_count = 0
-        with engine.connect() as conn:
+        with _engine().begin() as conn:
             inactive_users = conn.execute(text("""
-                SELECT athlete_id, access_token FROM strava_users WHERE last_login_date < NOW() - INTERVAL '60 days'
-            """)).fetchall()
+                SELECT athlete_id, access_token, refresh_token FROM strava_users
+                WHERE last_login_date < NOW() - make_interval(days => :d)
+            """), {"d": INACTIVE_DAYS}).fetchall()
+        for row in inactive_users:
+            _deauthorize_stored(row.access_token, row.refresh_token)
+            _delete_user_rows(row.athlete_id)
+            log_event('revoke_inactive')
+            revoked_count += 1
 
-            for row in inactive_users:
-                try:
-                    requests.post(
-                        "https://www.strava.com/api/v3/oauth/deauthorize",
-                        headers={'Authorization': f'Bearer {row.access_token}'}, timeout=5
-                    )
-                except Exception: pass
-                
-                conn.execute(text("DELETE FROM strava_users WHERE athlete_id = :id"), {"id": row.athlete_id})
-                conn.commit()
-                revoked_count += 1
+        # Cache d'activités expiré (> 47 h) : effacé (Strava API Policy §6.2 / §6.3)
+        expired = 0
+        with _engine().begin() as conn:
+            expired = conn.execute(text("""
+                DELETE FROM activities a WHERE NOT EXISTS (
+                    SELECT 1 FROM strava_users u WHERE u.athlete_id = a.athlete_id
+                    AND u.full_sync_at > NOW() - make_interval(hours => :h))
+            """), {"h": DB_CACHE_MAX_AGE_HOURS}).rowcount
+        try:
+            with _engine().begin() as conn:
+                conn.execute(text("DELETE FROM api_cache WHERE created_at < NOW() - make_interval(hours => :h)"),
+                             {"h": DB_CACHE_MAX_AGE_HOURS})
+        except Exception:
+            pass
 
-        return jsonify({"status": "Nettoyage terminé", "comptes_supprimes": revoked_count}), 200
+        _daily_snapshot()
+        result = {"status": "Nettoyage terminé", "comptes_supprimes": revoked_count, "activites_expirees": expired}
+        kv_set('last_cron', {**result, 'at': datetime.utcnow().isoformat() + 'Z'})
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -616,18 +1040,20 @@ def cleanup_users():
 # ============================================================
 @app.route('/leaderboard')
 def leaderboard_page():
+    if not ENABLE_LEADERBOARD: abort(404)
     if 'access_token' not in session: return redirect(url_for('login_page'))
-    return render_template('leaderboard.html')
+    return render_template('leaderboard.html', active='leaderboard')
 
 # ============================================================
 # 14. LEADERBOARD GLOBAL
 # ============================================================
 @app.route('/api/global_stats_leaderboard')
 def get_global_stats_leaderboard():
+    if not ENABLE_LEADERBOARD: return jsonify({"error": "Fonctionnalité désactivée"}), 404
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
-    grid_size = request.args.get('grid_size', 250, type=int)
+    grid_size = _grid_size()
     sport_filter = request.args.get('sport', 'all')
     period_filter = request.args.get('period', 'all')
     period_display = None
@@ -639,7 +1065,7 @@ def get_global_stats_leaderboard():
     if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
 
     try:
-        engine = create_engine(DB_URL, poolclass=NullPool)
+        engine = _engine()
         with engine.connect() as conn:
             query = text("""
                 SELECT city_name, COUNT(DISTINCT athlete_id) AS users_count, SUM(blocks_count) AS total_blocks, SUM(activities_count) AS total_acts
@@ -669,11 +1095,12 @@ def get_global_stats_leaderboard():
 # ============================================================
 @app.route('/api/city_leaderboard')
 def get_city_leaderboard():
+    if not ENABLE_LEADERBOARD: return jsonify({"error": "Fonctionnalité désactivée"}), 404
     token = session.get('access_token')
     if not token: return jsonify({"error": "Login required"}), 401
 
     city = request.args.get('city')
-    grid_size = request.args.get('grid_size', 250, type=int)
+    grid_size = _grid_size()
     sport_filter = request.args.get('sport', 'all')
     period_filter = request.args.get('period', 'all')
     period_display = None
@@ -686,7 +1113,7 @@ def get_city_leaderboard():
     if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
 
     try:
-        engine = create_engine(DB_URL, poolclass=NullPool)
+        engine = _engine()
         with engine.connect() as conn:
             stats_res = conn.execute(text("""
                 SELECT COUNT(DISTINCT athlete_id) AS total_users, SUM(activities_count) AS total_activities
@@ -723,5 +1150,108 @@ def get_city_leaderboard():
 # ============================================================
 # 16. LANCEMENT
 # ============================================================
+# ============================================================
+# 17. TABLEAU DE BORD ADMIN
+# ============================================================
+def _daily_snapshot():
+    """Relevé quotidien anonyme (comptes connectés, actifs 7 j / 31 j) + purge du journal > 400 jours."""
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("""
+                INSERT INTO app_daily_stats (day, connected, active_7, active_31)
+                SELECT CURRENT_DATE, COUNT(*),
+                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '7 days'),
+                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days')
+                FROM strava_users
+                ON CONFLICT (day) DO UPDATE SET connected = EXCLUDED.connected,
+                    active_7 = EXCLUDED.active_7, active_31 = EXCLUDED.active_31"""))
+            conn.execute(text("DELETE FROM app_events WHERE created_at < NOW() - INTERVAL '400 days'"))
+    except Exception as e:
+        print(f"Relevé quotidien : {e}")
+
+@app.route('/admin')
+def admin_page():
+    if not is_admin(): abort(404)
+    return render_template('admin.html', active='admin')
+
+@app.route('/api/admin/stats')
+def admin_stats():
+    if not is_admin(): return jsonify({"error": "Introuvable"}), 404
+    if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
+    _daily_snapshot()   # garde la courbe à jour même si le cron n'est pas encore passé aujourd'hui
+    out = {"capacity": STRAVA_ATHLETE_CAPACITY, "inactive_days": INACTIVE_DAYS, "generated_at": datetime.utcnow().isoformat() + 'Z'}
+    with _engine().begin() as conn:
+        u = conn.execute(text("""
+            SELECT COUNT(*) AS connected,
+              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '1 day')   AS active_1,
+              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '7 days')  AS active_7,
+              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days') AS active_31,
+              COUNT(*) FILTER (WHERE first_login_date > NOW() - INTERVAL '7 days') AS new_7,
+              COUNT(*) FILTER (WHERE first_login_date <= NOW() - INTERVAL '7 days'
+                               AND first_login_date > NOW() - INTERVAL '14 days')  AS new_prev_7,
+              COUNT(*) FILTER (WHERE first_login_date < NOW() - INTERVAL '1 day')  AS older_than_1d,
+              COUNT(*) FILTER (WHERE first_login_date < NOW() - INTERVAL '1 day'
+                               AND last_login_date::date > first_login_date::date) AS returned,
+              COUNT(*) FILTER (WHERE last_login_date::date = CURRENT_DATE)                         AS seen_today,
+              COUNT(*) FILTER (WHERE last_login_date::date < CURRENT_DATE
+                               AND last_login_date > NOW() - INTERVAL '7 days')                    AS seen_week,
+              COUNT(*) FILTER (WHERE last_login_date <= NOW() - INTERVAL '7 days'
+                               AND last_login_date > NOW() - make_interval(days => :d - 7))         AS seen_month,
+              COUNT(*) FILTER (WHERE last_login_date <= NOW() - make_interval(days => :d - 7))      AS at_risk
+            FROM strava_users"""), {"d": INACTIVE_DAYS}).mappings().one()
+        out["users"] = {k: int(v or 0) for k, v in u.items()}
+
+        def series(sql, **kw):
+            try: return [dict(r) for r in conn.execute(text(sql), kw).mappings().all()]
+            except Exception as e:
+                print(f"Admin : {e}"); conn.rollback(); return []
+        out["daily"] = series("""
+            SELECT d::date AS day,
+                   COUNT(e.*) FILTER (WHERE e.kind = 'visit')  AS visits,
+                   COUNT(e.*) FILTER (WHERE e.kind = 'signup') AS signups
+            FROM generate_series(CURRENT_DATE - 59, CURRENT_DATE, INTERVAL '1 day') d
+            LEFT JOIN app_events e ON e.created_at::date = d::date
+            GROUP BY d ORDER BY d""")
+        out["weekly"] = series("""
+            SELECT w::date AS week,
+                   COUNT(e.*) FILTER (WHERE e.kind = 'signup') AS arrivals,
+                   COUNT(e.*) FILTER (WHERE e.kind IN ('revoke_inactive', 'delete', 'logout')) AS departures,
+                   COUNT(e.*) FILTER (WHERE e.kind = 'revoke_inactive') AS auto_revoked
+            FROM generate_series(date_trunc('week', CURRENT_DATE) - INTERVAL '11 weeks', date_trunc('week', CURRENT_DATE), INTERVAL '1 week') w
+            LEFT JOIN app_events e ON date_trunc('week', e.created_at) = w
+            GROUP BY w ORDER BY w""")
+        out["snapshots"] = series("""SELECT day, connected, active_7, active_31 FROM app_daily_stats
+                                     WHERE day > CURRENT_DATE - 90 ORDER BY day""")
+        out["recent"] = series("""SELECT kind, created_at FROM app_events
+                                  WHERE kind IN ('signup', 'logout', 'delete', 'revoke_inactive')
+                                  ORDER BY created_at DESC LIMIT 10""")
+        flow = series("""SELECT COUNT(*) FILTER (WHERE kind = 'signup') AS arrivals,
+                                COUNT(*) FILTER (WHERE kind IN ('revoke_inactive','delete','logout')) AS departures,
+                                MIN(created_at) AS since
+                         FROM app_events WHERE created_at > NOW() - INTERVAL '30 days'""")
+        out["flow_30"] = flow[0] if flow else {"arrivals": 0, "departures": 0, "since": None}
+        first = series("SELECT MIN(created_at) AS first_event FROM app_events")
+        out["tracking_since"] = first[0]["first_event"] if first else None
+        kv = {r["key"]: {"value": r["value"], "updated_at": r["updated_at"]} for r in series("SELECT key, value, updated_at FROM app_kv")}
+        out["last_cron"] = kv.get("last_cron")
+        out["rate_limit"] = kv.get("strava_rate_limit")
+
+    out["health"] = [
+        {"label": "Clé secrète Flask personnalisée", "ok": app.secret_key != 'dev_secret_key_123',
+         "help": "Définir SECRET_KEY dans Vercel (longue chaîne aléatoire)."},
+        {"label": "Secret du cron défini", "ok": bool(os.getenv('CRON_SECRET')),
+         "help": "Définir CRON_SECRET dans Vercel, sinon le nettoyage quotidien ne tourne pas."},
+        {"label": "Classement désactivé", "ok": not ENABLE_LEADERBOARD,
+         "help": "ENABLE_LEADERBOARD doit rester à false (règles Strava)."},
+    ]
+    return app.response_class(json.dumps(out, default=str), mimetype='application/json')
+
+@app.errorhandler(404)
+def not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({"error": "Introuvable"}), 404
+    return render_template('error.html', code=404, title="Page introuvable",
+                           message="Cette page n'existe pas ou n'est plus disponible."), 404
+
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

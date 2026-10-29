@@ -1,572 +1,348 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UNLOCK</title>
-    
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
-    
-    <!-- Google Font Inter -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <style>
-        :root { --bordeaux: #6d071a; --off-white: #fdfdfb; --text-dark: #2c2c2c; }
-        
-        body { background: var(--off-white); color: var(--text-dark); font-family: 'Inter', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
-        
-        /* HEADER PREMIUM */
-        header { padding: 12px 25px; display: flex; justify-content: space-between; align-items: center; background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(0,0,0,0.05); z-index: 1001; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.02); }
-        .logo { font-weight: 800; font-size: 1.4rem; color: var(--bordeaux); letter-spacing: -1px; }
-        
-        .controls { display: flex; align-items: center; gap: 10px; transition: all 0.3s ease; }
-        
-        .burger-menu { display: none; background: none; border: none; cursor: pointer; padding: 5px; }
-        .burger-icon { width: 24px; height: 24px; fill: var(--text-dark); }
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Ma carte · Unlock{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">{% endblock %}
 
-        .switch-container { display: flex; background: #f3f4f6; padding: 4px; border-radius: 12px; gap: 4px; }
-        .switch-btn { padding: 6px 14px; border-radius: 8px; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: 0.2s; border: none; color: #6b7280; background: transparent; }
-        .switch-btn.active { background: white; color: var(--bordeaux); box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
-        
-        .btn { padding: 8px 18px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 0.85rem; cursor: pointer; border: none; }
-        
-        .btn-story { 
-            background: white; color: #6b7280; border: 1px solid #e5e7eb;
-            display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.2s; border-radius: 10px; padding: 8px 14px; font-size: 0.75rem; font-weight: 700;
-        }
-        .btn-story:hover { border-color: var(--bordeaux); color: var(--bordeaux); transform: translateY(-1px); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
 
-        .btn-logout { padding: 8px 16px; border-radius: 10px; font-weight: 700; text-decoration: none; font-size: 0.75rem; color: #6b7280; border: 1px solid #e5e7eb; background: white; transition: 0.2s; }
-        .btn-logout:hover { border-color: var(--bordeaux); background: var(--bordeaux); color: white; }
-        
-        .linkedin-menu-item { display: none; } 
+  <main class="mapview" id="mapview">
+    <div id="map" role="region" aria-label="Carte de vos activités"></div>
 
-        select, input[type="text"] { 
-            padding: 8px 30px 8px 12px; border-radius: 10px; border: 1px solid #e5e7eb; background: white; 
-            font-weight: 600; color: #374151; outline: none; font-size: 0.75rem; cursor: pointer; 
-            transition: border-color 0.2s; appearance: none;
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%239ca3af'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
-            background-repeat: no-repeat; background-position: right 8px center; background-size: 14px;
-        }
-        select:hover, input[type="text"]:hover { border-color: #d1d5db; }
-        select:focus, input[type="text"]:focus { border-color: var(--bordeaux); box-shadow: 0 0 0 3px rgba(109,7,26,0.1); }
-        
-        #map-wrapper { flex-grow: 1; position: relative; }
-        #map { height: 100%; width: 100%; z-index: 1; }
-        .leaflet-tile { 
-    filter: grayscale(100%) brightness(1.03) contrast(0.80); 
-}
-        
-        .stats-overlay { 
-            position: absolute; top: 20px; left: 20px; z-index: 1000; 
-            display: flex; flex-direction: column; gap: 15px; 
-            max-height: calc(100vh - 40px); overflow-y: auto; scrollbar-width: none; 
-            transition: all 0.3s ease;
-        }
-        .stats-overlay::-webkit-scrollbar { display: none; }
-        
-        /* THE GLASSMORPHISM STYLE (Remplace ton ancienne classe) */
-        .stat-card {
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 18px 20px; border-radius: 16px;
-            box-shadow: 0 8px 30px rgba(109,7,26,0.08); border: 1px solid rgba(109,7,26,0.15);
-        }
-        .stat-label { font-size: 0.65rem; color: #6b7280; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px; }
-        .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--bordeaux); display: block; line-height: 1.1; margin-top: 4px; }
-        .equivalence-text { font-size: 0.7rem; color: #6b7280; margin-top: 8px; font-weight: 500; font-style: italic; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 8px; }
-
-        #city-search { width: 100%; margin-top: 10px; padding: 10px 14px; font-size: 0.85rem; border-radius: 10px; background-image: none;}
-
-        .city-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-        .city-table tr { border-bottom: 1px solid rgba(0,0,0,0.05); transition: 0.2s; }
-        .city-table tr:hover { background: rgba(109,7,26,0.03); }
-        .city-table td { padding: 8px 0; vertical-align: middle; }
-        .rank-col { width: 28px; color: #9ca3af; font-weight: 800; font-style: italic; }
-        .city-name { font-weight: 700; color: #374151; }
-        .city-stats { text-align: right; }
-        
-        .sort-header { display: flex; justify-content: space-between; align-items: center; margin-top: 15px; margin-bottom: 8px; border-top: 1px solid rgba(0,0,0,0.06); padding-top: 12px; }
-        .sort-controls { display: flex; gap: 4px; background: #f3f4f6; padding: 3px; border-radius: 8px; }
-        .sort-btn { border: none; background: transparent; border-radius: 6px; padding: 4px 8px; font-size: 0.6rem; font-weight: 800; color: #6b7280; cursor: pointer; transition: 0.2s; }
-        .sort-btn.active { background: white; color: var(--bordeaux); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
-
-        /* DEFILEMENT DU TABLEAU TOP 5 */
-        .table-container { max-height: 160px; overflow-y: auto; padding-right: 5px; }
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .legend { 
-            position: absolute; bottom: 80px; right: 20px; left: auto; z-index: 1000; 
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 14px; 
-            border-radius: 14px; display: none; flex-direction: column; gap: 10px; border: 1px solid rgba(109,7,26,0.15);
-            box-shadow: 0 8px 30px rgba(109,7,26,0.08);
-        }
-        .legend-scale { height: 8px; width: 140px; border-radius: 4px; background: linear-gradient(to right, rgba(109, 7, 26, 0.2), rgba(109, 7, 26, 1)); }
-        .legend-labels { display: flex; justify-content: space-between; font-size: 0.6rem; font-weight: 800; text-transform: uppercase; color: #6b7280; }
-
-        /* LOADER */
-        #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
-        .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
-        .loader-text { color: var(--bordeaux); font-weight: 800; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; font-size: 0.8rem;}
-        .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
-        .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
-        @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
-        .loader-signature { position: absolute; bottom: 30px; display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--bordeaux); opacity: 0.6; text-decoration: none; font-weight: 600; transition: opacity 0.3s, transform 0.3s; }
-        .loader-signature:hover { opacity: 1; transform: translateY(-2px); }
-
-        /* SIGNATURE FLOTTANTE EXACTEMENT COMME AVANT */
-        .dev-badge {
-            position: fixed; bottom: 20px; right: 20px; left: auto; z-index: 2000;
-            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(12px); padding: 8px 16px; border-radius: 12px; 
-            text-decoration: none; color: #4b5563; font-size: 0.75rem; font-weight: 600;
-            box-shadow: 0 8px 30px rgba(109,7,26,0.08); border: 1px solid rgba(109,7,26,0.15);
-            display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;
-        }
-        .dev-badge:hover { transform: translateY(-2px); color: var(--bordeaux); box-shadow: 0 10px 30px rgba(109, 7, 26, 0.15); border-color: var(--bordeaux); }
-        .linkedin-icon { width: 14px; height: 14px; fill: currentColor; }
-
-        /* Leaflet Controls Custom */
-        .leaflet-control-zoom { border: none !important; box-shadow: 0 8px 30px rgba(109,7,26,0.08) !important; border-radius: 12px !important; overflow: hidden !important; margin-right: 20px !important; margin-top: 20px !important; }
-        .leaflet-control-zoom a { background-color: rgba(255, 255, 255, 0.85) !important; backdrop-filter: blur(12px) !important; color: #2c2c2c !important; border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important; }
-        .leaflet-control-zoom a:hover { background-color: #6d071a !important; color: #ffffff !important; }
-        .leaflet-tooltip { background: rgba(255, 255, 255, 0.95) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(109, 7, 26, 0.15) !important; border-radius: 12px !important; padding: 8px 12px !important; box-shadow: 0 8px 30px rgba(109,7,26,0.1) !important; }
-        .leaflet-tooltip-top:before { border-top-color: rgba(255, 255, 255, 0.95) !important; }
-
-        /* MEDIA QUERIES */
-        @media (max-width: 1200px) {
-            header { padding: 15px 20px; }
-            .logo { font-size: 1.3rem; }
-            .burger-menu { display: block; }
-            
-            .controls {
-                display: block; position: absolute; top: 60px; left: 0; right: 0;
-                background: rgba(255,255,255,0.98); backdrop-filter: blur(15px);
-                max-height: 0; overflow: hidden; padding: 0 20px; border-bottom: none; box-shadow: none;
-                transition: max-height 0.4s ease-in-out, padding 0.4s ease, box-shadow 0.4s ease;
-                flex-direction: column; align-items: stretch; gap: 15px;
-            }
-            .controls.mobile-visible { max-height: 500px; padding: 20px; border-bottom: 1px solid rgba(0,0,0,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
-
-            .switch-container { justify-content: center; background: #f3f4f6; padding: 5px; border-radius: 12px; margin-bottom: 5px; }
-            .switch-btn { flex: 1; text-align: center; padding: 10px; border-radius: 8px; font-size: 0.85rem; }
-
-            .btn-story, .btn-logout, .btn { justify-content: center; padding: 12px; width: 100%; box-sizing: border-box; }
-            select { padding: 12px; width: 100%; box-sizing: border-box; }
-
-            .stats-overlay { top: auto; bottom: 0; left: 10px; right: 10px; max-height: 38vh; z-index: 1000; gap: 10px;}
-            .stat-card { padding: 12px 15px; border-radius: 16px;}
-            
-            .dev-badge { display: none; }
-            
-            .linkedin-menu-item {
-                display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; padding-top: 15px;
-                border-top: 1px solid rgba(0,0,0,0.05); color: var(--bordeaux); text-decoration: none; font-weight: 700; font-size: 0.85rem;
-            }
-            .legend { bottom: 42vh; right: 10px; padding: 12px; }
-        }
-    </style>
-</head>
-<body>
-
-<div id="loader">
-    <div class="loader-content">
-        <div class="loader-text">Analyse des traces GPS...</div>
-        <div class="progress-bar"><div class="progress-fill"></div></div>
+    <div class="maptools">
+      <div class="seg" role="group" aria-label="Type d'affichage">
+        <button type="button" class="seg__btn" data-mode="route" aria-pressed="true"><span class="emoji" aria-hidden="true">〰️</span>Tracés</button>
+        <button type="button" class="seg__btn" data-mode="grid" aria-pressed="false"><span class="emoji" aria-hidden="true">🧩</span>Blocs</button>
+      </div>
+      <div class="maptools__spacer"></div>
+      <div class="maptools__filters" id="filters-inline"></div>
+      <button type="button" class="iconbtn maptools__filterbtn filter-dot" id="filter-btn" data-sheet-open="sheet-filters" aria-label="Filtres">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      </button>
     </div>
-    <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="loader-signature">
-        <svg class="linkedin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-        <span>Théophile Sénéchal</span>
-    </a>
-</div>
 
-<header>
-    <div class="logo">UNLOCK</div>
-    
-    <button type="button" class="burger-menu" onclick="toggleMenu()">
-        <svg class="burger-icon" viewBox="0 0 24 24">
-            <path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/>
-        </svg>
-    </button>
-
-    <div class="controls" id="mobile-controls">
-        <div class="switch-container">
-            <button type="button" class="switch-btn active" onclick="setMode('route')" id="btn-route">TRACÉS</button>
-            <button type="button" class="switch-btn" onclick="setMode('grid')" id="btn-grid">BLOCS</button>
-        </div>
-        
-        <select id="sport-select" onchange="updateDashboard()">
-            <option value="all">TOUS SPORTS</option>
-        </select>
-
-        <select id="grid-size-select" onchange="updateDashboard()" style="display:none;">
-            <option value="100">100M / 100M</option>
-            <option value="250" selected>250M / 250M</option>
-        </select>
-        <select id="year-select" onchange="updateDashboard()"><option value="all">HISTORIQUE</option></select>
-        
-        <a href="/timelapse" class="btn btn-story" style="text-decoration: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polyline points="12 6 12 12 16 14"></polyline>
-            </svg>
-            TIMELAPSE
-        </a>
-
-        <a href="/story" class="btn btn-story" style="text-decoration: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
-            </svg>
-            STORY
-        </a>
-
-        <a href="/stats" class="btn btn-story" style="text-decoration: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <path d="M18 20V10"></path><path d="M12 20V4"></path><path d="M6 20v-6"></path>
-            </svg>
-            STATS
-        </a>
-        
-        <a href="/leaderboard" class="btn btn-story" style="text-decoration: none;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                <circle cx="12" cy="8" r="7"></circle>
-                <polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline>
-            </svg>
-            CLASSEMENT
-        </a>
-        
-        <a href="/logout" class="btn btn-logout" id="logout-btn">DÉCONNEXION</a>
-
-        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="linkedin-menu-item">
-            <svg class="linkedin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-            Théophile Sénéchal
-        </a>
+    <!-- Filters (moved inline on desktop, into a sheet on smaller screens) -->
+    <div id="filters" class="filters-set" style="display:contents">
+      <label class="sr-only" for="sport-select">Sport</label>
+      <select class="select select--pill" id="sport-select"><option value="all">🏅  Tous les sports</option></select>
+      <label class="sr-only" for="year-select">Année</label>
+      <select class="select select--pill" id="year-select"><option value="all">📅  Toutes les années</option></select>
+      <label class="sr-only" for="grid-select">Taille des blocs</label>
+      <select class="select select--pill" id="grid-select" hidden>
+        <option value="100">🧩  Blocs de 100 m</option>
+        <option value="250" selected>🧩  Blocs de 250 m</option>
+      </select>
     </div>
-</header>
 
-<div id="map-wrapper">
-    <div class="stats-overlay">
-        <div class="stat-card">
-            <span class="stat-label">Activités</span>
-            <span id="count" class="stat-value">0</span>
+    <aside class="panel is-collapsed" id="panel" aria-label="Statistiques">
+      <button type="button" class="panel__toggle" id="panel-toggle" aria-expanded="false" aria-controls="panel-more">
+        <span class="sheet__grip"></span><span class="sr-only">Afficher les détails</span>
+      </button>
+      <div class="panel__scroll">
+        <div class="panel-heading">
+          <h1 id="panel-title">Vos tracés</h1>
+          <p id="filter-summary">Tous les sports, toutes les années</p>
         </div>
-        <div class="stat-card">
-            <span class="stat-label">Distance</span>
-            <span id="distance" class="stat-value">0.0</span> <small style="font-weight: 700;">KM</small>
-        </div>
-        <div class="stat-card" id="card-cells" style="display: none;">
-            <span class="stat-label">Zones Explorées</span>
-            <span id="cells" class="stat-value">0</span>
-            <div id="equivalence-text" class="equivalence-text">Soit env. 0 terrains de football</div>
-        </div>
-        
-        <div class="stat-card" id="card-muni" style="display: none; min-width: 260px;">
-            <span class="stat-label">Villes Explorées</span>
-            
-            <input type="text" id="city-search" list="city-suggestions" placeholder="Chercher une commune..." onchange="onCitySearch()">
-            <datalist id="city-suggestions"></datalist>
 
-            <div id="city-info-box" style="margin-top: 15px; display: none;">
-                <span id="muni-name" class="stat-value" style="font-size: 1.1rem; margin-top: 2px;">-</span>
-                <span id="muni-percent" style="font-size: 1.4rem; color: var(--bordeaux); font-weight: 800; display: block;">-</span>
-                <div id="muni-details" class="equivalence-text"></div>
-            </div>
+        <div class="stats">
+          <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">🏃</span>Activités</span><span class="stat__val" id="s-count">–</span></div>
+          <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">📏</span>Distance</span><span class="stat__val"><span id="s-dist">–</span><small>km</small></span></div>
+          <div class="stat stat--wide" id="stat-third">
+            <span class="stat__top"><span class="emoji" aria-hidden="true" id="s3-emoji">📐</span><span id="s3-label">Par sortie</span></span>
+            <span class="stat__val"><span id="s3-val">–</span><small id="s3-unit">km</small></span>
+            <span class="stat__sub" id="s3-sub"></span>
+          </div>
+        </div>
 
-            <div class="sort-header">
-                <span class="stat-label">Top 5</span>
-                <div class="sort-controls">
-                    <button type="button" id="sort-blocks" class="sort-btn active" onclick="setSortMode('blocks')">BLOCS</button>
-                    <button type="button" id="sort-percent" class="sort-btn" onclick="setSortMode('percent')">%</button>
+        <div class="panel__more" id="panel-more">
+          <div id="route-hint" class="hint">
+            <span class="emoji" aria-hidden="true">💡</span>
+            <span>Passez en <button type="button" data-mode="grid">mode Blocs</button> pour voir quelles communes vous avez explorées, et à quel point.</span>
+          </div>
+
+          <div id="grid-extra" hidden>
+            <section class="section">
+              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🏘️</span>Communes</h2></div>
+              <div class="search">
+                <span class="emoji" aria-hidden="true">🔍</span>
+                <label class="sr-only" for="city-search">Chercher une commune</label>
+                <input class="input" id="city-search" list="city-suggestions" placeholder="Chercher une commune" autocomplete="off">
+                <datalist id="city-suggestions"></datalist>
+              </div>
+              <div class="city" id="city-card" hidden>
+                <div class="city__name" id="city-name"></div>
+                <div class="city__row">
+                  <span class="city__pct" id="city-pct"></span>
+                  <span class="city__meta" id="city-meta"></span>
                 </div>
+                <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="city-bar"><div class="bar__fill" id="city-fill"></div></div>
+              </div>
+              <div class="empty" id="city-empty" hidden><span class="emoji">🗺️</span>Aucune commune trouvée pour ces filtres. Les communes françaises apparaissent dès que vos blocs les traversent.</div>
+            </section>
+
+            <section class="section" id="top-section">
+              <div class="section__head">
+                <h2 class="section__title"><span class="emoji" aria-hidden="true">🏆</span>Vos 5 communes</h2>
+                <div class="seg seg--sm" role="group" aria-label="Trier par">
+                  <button type="button" class="seg__btn" data-sort="blocks" aria-pressed="true">Blocs</button>
+                  <button type="button" class="seg__btn" data-sort="percent" aria-pressed="false">%</button>
+                </div>
+              </div>
+              <ol class="rank" id="top-list"></ol>
+            </section>
+
+            <div class="legend">
+              <div class="section__title" style="font-size:var(--fs-md)">Fréquence de passage</div>
+              <div class="legend__scale" style="margin-top:10px"></div>
+              <div class="legend__labels"><span>Rare</span><span>Fréquent</span></div>
             </div>
-            
-            <div class="table-container custom-scrollbar">
-                <table class="city-table" id="top-cities-list"></table>
-            </div>
+          </div>
         </div>
-    </div>
+      </div>
+    </aside>
+  </main>
 
-    <div id="grid-legend" class="legend">
-        <span class="stat-label" style="margin-bottom: 2px;">Intensité de passage</span>
-        <div class="legend-scale"></div>
-        <div class="legend-labels"><span>Rare</span><span>Fréquent</span></div>
-    </div>
-
-    <div id="map"></div>
-
-    <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="dev-badge">
-        <svg class="linkedin-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/></svg>
-        <span>Développé par <strong>Théophile Sénéchal</strong></span>
-    </a>
+  {{ ui.bottomnav(active) }}
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<div class="sheet" id="sheet-filters" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="filters-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="filters-title">Filtres</h2>
+      <button type="button" class="btn btn--ghost btn--sm" id="filters-reset">Réinitialiser</button>
+    </div>
+    <div class="sheet__body" id="filters-sheet"></div>
+    <button type="button" class="btn btn--primary btn--block" style="margin-top:18px" data-sheet-close>Voir la carte</button>
+  </div>
+</div>
+
+{{ ui.loader("Lecture de vos activités Strava…", "La première ouverture peut prendre jusqu'à 30 secondes.") }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <script>
-    function toggleMenu() {
-        const controls = document.getElementById('mobile-controls');
-        controls.classList.toggle('mobile-visible');
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const BRAND = '#6D071A';
+  const mqDesk = window.matchMedia('(min-width: 1280px)');
+  const mqFloat = window.matchMedia('(min-width: 768px)');
+
+  /* ---------- Map ---------- */
+  const map = L.map('map', { zoomControl: false, preferCanvas: true, attributionControl: true }).setView([47.65, -2.75], 12);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  map.attributionControl.setPrefix(false);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19, subdomains: 'abcd',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+  }).addTo(map);
+  const traceLayer = L.layerGroup().addTo(map);
+  const cityLayer = L.layerGroup().addTo(map);
+
+  /* ---------- State ---------- */
+  let data = null, mode = 'route', sortKey = 'blocks', selectedCity = null, firstLoad = true, fitPending = true;
+
+  /* ---------- Filters placement (inline on desktop, sheet otherwise) ---------- */
+  const filters = $('filters');
+  function placeFilters() {
+    const target = mqDesk.matches ? $('filters-inline') : $('filters-sheet');
+    [...filters.children].forEach((n) => target.appendChild(n));
+    target.querySelectorAll('select').forEach((s) => s.classList.toggle('select--pill', mqDesk.matches));
+  }
+  placeFilters(); mqDesk.addEventListener('change', placeFilters);
+
+  /* ---------- Panel ---------- */
+  const panel = $('panel');
+  function setPanel(expanded) {
+    panel.classList.toggle('is-collapsed', !expanded);
+    $('panel-toggle').setAttribute('aria-expanded', String(expanded));
+    requestAnimationFrame(syncPanelHeight);
+  }
+  $('panel-toggle').addEventListener('click', () => setPanel(panel.classList.contains('is-collapsed')));
+  function syncPanelHeight() {
+    const h = mqFloat.matches ? 0 : panel.getBoundingClientRect().height;
+    $('mapview').style.setProperty('--panel-h', h + 'px');
+  }
+  new ResizeObserver(syncPanelHeight).observe(panel);
+
+  function fitPadding() {
+    if (mqFloat.matches) {
+      const w = panel.getBoundingClientRect().width;
+      return { paddingTopLeft: [w + 40, 80], paddingBottomRight: [30, 30] };
     }
+    return { paddingTopLeft: [20, 70], paddingBottomRight: [20, panel.getBoundingClientRect().height + 20] };
+  }
 
-    const SPORT_TRANSLATIONS = {
-        'Run': 'Course à pied',
-        'Ride': 'Vélo',
-        'Swim': 'Natation',
-        'Hike': 'Randonnée',
-        'Walk': 'Marche',
-        'AlpineSki': 'Ski Alpin',
-        'BackcountrySki': 'Ski de Rando',
-        'WeightTraining': 'Musculation',
-        'Workout': 'Entraînement',
-        'VirtualRide': 'Vélo Virtuel',
-        'VirtualRun': 'Course Virtuelle',
-        'GravelRide': 'Gravel',
-        'TrailRun': 'Trail',
-        'E-BikeRide': 'Vélo Électrique',
-        'Velomobile': 'Vélomobile',
-        'NordicSki': 'Ski de Fond',
-        'Snowshoe': 'Raquettes'
-    };
+  /* ---------- Mode ---------- */
+  function setMode(m) {
+    if (m === mode) return;
+    mode = m;
+    document.querySelectorAll('.seg__btn[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
+    $('grid-select').hidden = m !== 'grid';
+    $('grid-extra').hidden = m !== 'grid';
+    $('route-hint').hidden = m === 'grid';
+    $('panel-title').textContent = m === 'grid' ? 'Vos blocs' : 'Vos tracés';
+    if (m === 'grid' && !mqFloat.matches) setPanel(true);
+    renderStats(); render();
+  }
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); });
 
-    const map = L.map('map', { zoomControl: false }).setView([47.65, -2.75], 13);
-    L.control.zoom({ position: 'topright' }).addTo(map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-}).addTo(map);
+  document.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+    sortKey = b.dataset.sort;
+    document.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    renderTop();
+  }));
 
-    const traceLayer = L.layerGroup().addTo(map);
-    const muniLayer = L.layerGroup().addTo(map);
-    
-    let currentData = null;
-    let currentMode = 'route';
-    let currentSort = 'blocks'; 
-    let currentSelectedCityName = null;
-
-    function setMode(mode) {
-        currentMode = mode;
-        document.getElementById('btn-route').classList.toggle('active', mode === 'route');
-        document.getElementById('btn-grid').classList.toggle('active', mode === 'grid');
-        document.getElementById('grid-size-select').style.display = mode === 'grid' ? 'inline-block' : 'none';
-        document.getElementById('card-cells').style.display = mode === 'grid' ? 'block' : 'none';
-        document.getElementById('grid-legend').style.display = mode === 'grid' ? 'flex' : 'none';
-        document.getElementById('card-muni').style.display = mode === 'grid' ? 'block' : 'none';
-        
-        if (mode === 'grid') {
-            const gridSelect = document.getElementById('grid-size-select');
-            if (gridSelect && gridSelect.value !== "250") {
-                gridSelect.value = "250";
-                updateDashboard(); // Recharge les données en 250m
-            } else {
-                renderData();
-            }
-        } else {
-            renderData();
-        }
-        
-        if(window.innerWidth < 1200) {
-             document.getElementById('mobile-controls').classList.remove('mobile-visible');
-        }
+  /* ---------- Data ---------- */
+  async function load() {
+    const year = $('year-select').value, sport = $('sport-select').value, grid = $('grid-select').value;
+    if (firstLoad) Unlock.loader.show(['Lecture de vos activités Strava…', 'Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Presque prêt…']);
+    else Unlock.busy.on('Mise à jour de la carte…');
+    try {
+      data = await Unlock.getJSON(`/api/activities?year=${encodeURIComponent(year)}&grid_size=${grid}&sport_type=${encodeURIComponent(sport)}`);
+      fillSelects(sport, year);
+      updateSummary();
+      if (selectedCity && !(data.top_municipalities || []).some((c) => c.name === selectedCity)) selectedCity = null;
+      if (!selectedCity && data.top_municipalities && data.top_municipalities.length) selectedCity = data.top_municipalities[0].name;
+      fitPending = true;
+      renderStats(); render();
+    } catch (err) {
+      if (err.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos activités. Vérifiez votre connexion puis réessayez.');
+      console.error(err);
+    } finally {
+      if (firstLoad) { Unlock.loader.hide(); firstLoad = false; }
+      Unlock.busy.off();
     }
+  }
 
-    function setSortMode(mode) {
-        currentSort = mode;
-        document.getElementById('sort-blocks').classList.toggle('active', mode === 'blocks');
-        document.getElementById('sort-percent').classList.toggle('active', mode === 'percent');
-        renderLeaderboard();
+  function fillSelects(sport, year) {
+    const ys = $('year-select');
+    if (ys.options.length === 1 && data.available_years) {
+      data.available_years.forEach((y) => ys.add(new Option('📅  ' + y, y)));
+      ys.value = year;
     }
+    const ss = $('sport-select');
+    while (ss.options.length > 1) ss.remove(1);
+    Object.keys(data.available_sports || {}).sort((a, b) => Unlock.sportLabel(a).localeCompare(Unlock.sportLabel(b), 'fr'))
+      .forEach((code) => ss.add(new Option(Unlock.sportLabel(code), code)));
+    ss.value = sport;
+    const active = ss.value !== 'all' || ys.value !== 'all';
+    $('filter-btn').classList.toggle('has-filter', active);
+  }
 
-    async function updateDashboard() {
-        const year = document.getElementById('year-select').value;
-        const gridSize = document.getElementById('grid-size-select').value;
-        const sportType = document.getElementById('sport-select').value;
-        const loader = document.getElementById('loader');
-        loader.style.display = 'flex';
+  function updateSummary() {
+    const ss = $('sport-select'), ys = $('year-select');
+    const sp = ss.value === 'all' ? 'Tous les sports' : ss.selectedOptions[0].text.replace(/^\S+\s+/, '');
+    const yr = ys.value === 'all' ? 'toutes les années' : 'en ' + ys.value;
+    $('filter-summary').textContent = `${sp}, ${yr}`;
+  }
 
-        try {
-            const response = await fetch(`/api/activities?year=${year}&grid_size=${gridSize}&sport_type=${sportType}`);
-            if (!response.ok) throw new Error();
-            currentData = await response.json();
+  ['sport-select', 'year-select', 'grid-select'].forEach((id) => $(id).addEventListener('change', load));
+  $('filters-reset').addEventListener('click', () => { $('sport-select').value = 'all'; $('year-select').value = 'all'; load(); });
 
-            document.getElementById('logout-btn').style.display = 'inline-block';
-
-            const yearSelect = document.getElementById('year-select');
-            if (yearSelect.options.length === 1 && currentData.available_years.length > 0) {
-                currentData.available_years.forEach(y => {
-                    let opt = document.createElement('option');
-                    opt.value = y; opt.textContent = y;
-                    yearSelect.appendChild(opt);
-                });
-            }
-
-            const sportSelect = document.getElementById('sport-select');
-            while (sportSelect.options.length > 1) { sportSelect.remove(1); }
-            if (currentData.available_sports) {
-                for (const [code, name] of Object.entries(currentData.available_sports)) {
-                    let opt = document.createElement('option');
-                    opt.value = code;
-                    const translatedName = SPORT_TRANSLATIONS[code] ? SPORT_TRANSLATIONS[code].toUpperCase() : name.toUpperCase();
-                    opt.textContent = translatedName;
-                    
-                    if (code === sportType) opt.selected = true;
-                    sportSelect.appendChild(opt);
-                }
-            }
-
-            document.getElementById('count').textContent = currentData.stats.activity_count;
-            document.getElementById('distance').textContent = currentData.stats.total_distance.toFixed(1);
-            const cells = currentData.stats.cells_conquered;
-            document.getElementById('cells').textContent = cells;
-            const m = parseInt(gridSize);
-            const footballFields = Math.round((cells * m * m) / 7140);
-            document.getElementById('equivalence-text').textContent = `Soit env. ${footballFields.toLocaleString()} terrains de football`;
-
-            const dataList = document.getElementById('city-suggestions');
-            dataList.innerHTML = '';
-            
-            if (currentData.top_municipalities) {
-                const top20 = [...currentData.top_municipalities]
-                    .sort((a, b) => b.stats.blocks - a.stats.blocks)
-                    .slice(0, 20);
-
-                const top20SortedAlpha = top20.sort((a, b) => a.name.localeCompare(b.name));
-
-                top20SortedAlpha.forEach(city => {
-                    let option = document.createElement('option');
-                    option.value = city.name;
-                    dataList.appendChild(option);
-                });
-            }
-            
-            if (!currentSelectedCityName && currentData.top_municipalities.length > 0) {
-                currentSelectedCityName = currentData.top_municipalities[0].name;
-            }
-
-            renderData();
-        } catch (err) { console.error(err); } finally {
-            setTimeout(() => { loader.style.display = 'none'; }, 600);
-        }
+  /* ---------- Render ---------- */
+  function renderStats() {
+    if (!data) return;
+    const s = data.stats;
+    $('s-count').textContent = Unlock.fmt(s.activity_count);
+    $('s-dist').textContent = Unlock.fmt(s.total_distance, s.total_distance < 100 ? 1 : 0);
+    if (mode === 'grid') {
+      const m = +$('grid-select').value;
+      const fields = Math.round((s.cells_conquered * m * m) / 7140);
+      $('s3-emoji').textContent = '🧩'; $('s3-label').textContent = 'Blocs';
+      $('s3-val').textContent = Unlock.fmt(s.cells_conquered); $('s3-unit').textContent = '';
+      $('s3-sub').textContent = `≈ ${Unlock.fmt(fields)} terrains de foot ⚽`;
+    } else {
+      const avg = s.activity_count ? s.total_distance / s.activity_count : 0;
+      $('s3-emoji').textContent = '📐'; $('s3-label').textContent = 'Par sortie';
+      $('s3-val').textContent = Unlock.fmt(avg, 1); $('s3-unit').textContent = 'km';
+      $('s3-sub').textContent = 'Distance moyenne';
     }
+  }
 
-    function onCitySearch() {
-        const inputVal = document.getElementById('city-search').value;
-        if (!currentData || !currentData.top_municipalities) return;
-        const city = currentData.top_municipalities.find(c => c.name.toLowerCase() === inputVal.toLowerCase());
-        if (city) {
-            currentSelectedCityName = city.name;
-            displayActiveCity(city);
-        }
+  function render() {
+    if (!data) return;
+    traceLayer.clearLayers(); cityLayer.clearLayers();
+    let bounds = null;
+    if (mode === 'grid') {
+      const size = data.grid_size_used, cells = data.grid_cells || [];
+      let max = 1; for (const c of cells) if (c[2] > max) max = c[2];
+      for (const [lat, lon, count, , last] of cells) {
+        const rect = L.rectangle([[lat - size / 2, lon - size / 2], [lat + size / 2, lon + size / 2]],
+          { stroke: false, fillColor: BRAND, fillOpacity: 0.2 + Math.sqrt(count / max) * 0.6 }).addTo(traceLayer);
+        const [y, mo] = (last || '').split('-');
+        rect.bindTooltip(`<b>${count}</b> passage${count > 1 ? 's' : ''}<span>Dernier : ${mo}/${y}</span>`, { sticky: true, direction: 'top', className: 'cell-tip', offset: [0, -6] });
+      }
+      if (cells.length) bounds = L.latLngBounds(cells.map((c) => [c[0], c[1]]));
+      renderCities();
+    } else {
+      for (const pts of data.coords || []) L.polyline(pts, { color: BRAND, weight: 2.5, opacity: 0.55 }).addTo(traceLayer);
+      if ((data.coords || []).length) bounds = L.latLngBounds(data.coords.flat());
     }
+    if (fitPending && bounds && bounds.isValid()) { map.fitBounds(bounds, fitPadding()); fitPending = false; }
+    if (!(data.coords || []).length) Unlock.toast('🤷 Aucune activité GPS pour ces filtres.');
+  }
 
-    function displayActiveCity(city) {
-        if (!city) return;
-        const infoBox = document.getElementById('city-info-box');
-        infoBox.style.display = 'block';
-        document.getElementById('muni-name').textContent = city.name;
-        document.getElementById('muni-percent').textContent = `${city.stats.percent}% découverts`;
-        document.getElementById('muni-details').textContent = `${city.stats.blocks} blocs explorés`;
+  function renderCities() {
+    const cities = data.top_municipalities || [];
+    const dl = $('city-suggestions'); dl.innerHTML = '';
+    [...cities].sort((a, b) => a.name.localeCompare(b.name, 'fr')).forEach((c) => dl.appendChild(new Option(c.name)));
+    $('city-empty').hidden = cities.length > 0;
+    $('top-section').hidden = cities.length === 0;
+    showCity(cities.find((c) => c.name === selectedCity), false);
+    renderTop();
+  }
 
-        muniLayer.clearLayers();
-        if (city.outline) {
-            const polygon = L.polygon(city.outline, {
-                color: 'var(--bordeaux)',
-                weight: 3,
-                fillOpacity: 0.1,
-                interactive: false
-            }).addTo(muniLayer);
-            map.fitBounds(polygon.getBounds(), { padding: [50, 50] });
-        }
+  function showCity(city, fit) {
+    cityLayer.clearLayers();
+    $('city-card').hidden = !city;
+    if (!city) return;
+    selectedCity = city.name;
+    $('city-name').textContent = city.name;
+    $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + ' %';
+    $('city-meta').innerHTML = `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
+    $('city-bar').setAttribute('aria-valuenow', city.stats.percent);
+    requestAnimationFrame(() => { $('city-fill').style.width = Math.max(2, city.stats.percent) + '%'; });
+    if (city.outline) {
+      const poly = L.polygon(city.outline, { color: '#4A0412', weight: 2.5, dashArray: '6 6', fillOpacity: 0.04, interactive: false }).addTo(cityLayer);
+      if (fit) map.fitBounds(poly.getBounds(), fitPadding());
     }
+    document.querySelectorAll('.rank__item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.city === city.name)));
+  }
 
-    function renderLeaderboard() {
-        if (!currentData || !currentData.top_municipalities) return;
-        const tableBody = document.getElementById('top-cities-list');
-        tableBody.innerHTML = '';
-        let sortedCities = [...currentData.top_municipalities];
+  function renderTop() {
+    const list = $('top-list'); list.innerHTML = '';
+    const cities = [...(data.top_municipalities || [])].sort((a, b) => b.stats[sortKey] - a.stats[sortKey]).slice(0, 5);
+    cities.forEach((c, i) => {
+      const li = document.createElement('li');
+      const main = sortKey === 'percent' ? `${Unlock.fmt(c.stats.percent, 1)} %` : `${Unlock.fmt(c.stats.blocks)} blocs`;
+      const sub = sortKey === 'percent' ? `${Unlock.fmt(c.stats.blocks)} blocs` : `${Unlock.fmt(c.stats.percent, 1)} %`;
+      const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
+      li.innerHTML = `<button type="button" class="rank__item" data-city="${Unlock.esc(c.name)}" aria-current="${c.name === selectedCity}">
+        <span class="rank__pos">${medal}</span><span class="rank__name">${Unlock.esc(c.name)}</span>
+        <span class="rank__val">${main}<small>${sub}</small></span></button>`;
+      li.firstElementChild.addEventListener('click', () => {
+        showCity(c, true); $('city-search').value = '';
+        if (!mqFloat.matches) setPanel(false);
+      });
+      list.appendChild(li);
+    });
+  }
 
-        if (currentSort === 'blocks') { sortedCities.sort((a, b) => b.stats.blocks - a.stats.blocks); } 
-        else { sortedCities.sort((a, b) => b.stats.percent - a.stats.percent); }
+  $('city-search').addEventListener('change', (e) => {
+    const v = e.target.value.trim().toLowerCase(); if (!v || !data) return;
+    const c = (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v) || (data.top_municipalities || []).find((x) => x.name.toLowerCase().includes(v));
+    if (c) { showCity(c, true); e.target.value = ''; e.target.blur(); if (!mqFloat.matches) setPanel(false); }
+    else Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`);
+  });
 
-        sortedCities.slice(0, 5).forEach((city, index) => {
-            const row = document.createElement('tr');
-            const activeStyle = 'color: var(--bordeaux); font-weight: 800; font-size: 0.9rem;';
-            const passiveStyle = 'color: #999; font-weight: 400; font-size: 0.75rem;';
-            let mainContent = '';
-            
-            if (currentSort === 'percent') {
-                mainContent = `<span style="${activeStyle}">${city.stats.percent}%</span><span style="display:block; margin-top:2px; ${passiveStyle}">${city.stats.blocks} blocs</span>`;
-            } else {
-                mainContent = `<span style="${activeStyle}">${city.stats.blocks} blocs</span><span style="display:block; margin-top:2px; ${passiveStyle}">${city.stats.percent}%</span>`;
-            }
-
-            row.innerHTML = `<td class="rank-col">#${index + 1}</td><td class="city-name">${city.name}</td><td class="city-stats">${mainContent}</td>`;
-            row.style.cursor = 'pointer';
-            row.onclick = () => {
-                currentSelectedCityName = city.name;
-                displayActiveCity(city);
-                document.getElementById('city-search').value = city.name;
-            };
-            tableBody.appendChild(row);
-        });
-    }
-
-    function renderData() {
-        if (!currentData) return;
-        traceLayer.clearLayers();
-        muniLayer.clearLayers();
-        const size = currentData.grid_size_used;
-
-        if (currentMode === 'grid') {
-            if (currentSelectedCityName) {
-                const city = currentData.top_municipalities.find(c => c.name === currentSelectedCityName);
-                if (city) displayActiveCity(city);
-            }
-            renderLeaderboard();
-
-            if (currentData.grid_cells) {
-                const counts = currentData.grid_cells.map(c => c[2]);
-                const maxCount = Math.max(...counts);
-                
-                currentData.grid_cells.forEach(cell => {
-                    const [lat, lon, count, firstSeen, lastSeen] = cell;
-
-                    const intensity = 0.2 + (Math.sqrt(count / maxCount) * 0.6);
-                    const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
-                    
-                    const rect = L.rectangle(bounds, { 
-                        color: "var(--bordeaux)", 
-                        weight: 0,
-                        fillOpacity: intensity 
-                    }).addTo(traceLayer);
-
-                    const [year, month] = lastSeen.split('-');
-                    const formattedDate = `${month}/${year}`;
-
-                    rect.bindTooltip(
-                        `<div style="text-align: center; font-family: 'Inter', sans-serif;">
-                            <div style="font-size: 1rem; font-weight: 800; color: var(--bordeaux);">${count} <span style="font-size:0.7rem; font-weight:500; color:#666;">PASSAGE${count > 1 ? 'S' : ''}</span></div>
-                            <div style="font-size: 0.7rem; color: #888; margin-top:2px; border-top:1px solid #eee; padding-top:2px;">
-                                Dernier : <strong>${formattedDate}</strong>
-                            </div>
-                        </div>`,
-                        { sticky: true, direction: 'top', opacity: 0.95 }
-                    );
-                });
-            }
-        } else {
-            currentData.coords.forEach(points => {
-                L.polyline(points, { color: 'var(--bordeaux)', weight: 3, opacity: 0.6 }).addTo(traceLayer);
-            });
-            const group = new L.featureGroup([traceLayer]);
-            if (group.getLayers().length > 0) map.fitBounds(group.getBounds());
-        }
-    }
-
-    updateDashboard();
+  mqFloat.addEventListener('change', () => { setPanel(mqFloat.matches); map.invalidateSize(); });
+  window.addEventListener('resize', () => map.invalidateSize());
+  if (mqFloat.matches) setPanel(true);
+  load();
+})();
 </script>
-</body>
-</html>
+{% endblock %}

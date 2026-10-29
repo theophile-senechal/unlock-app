@@ -1,0 +1,57 @@
+{% macro loader(message, hint=None, visible=True) -%}
+<div id="loader" class="loader{% if not visible %} is-hidden{% endif %}" role="status" aria-live="polite">
+  <div class="loader__inner">
+    {% set route = {20:0, 15:1, 16:2, 11:3, 12:4, 13:5, 18:6, 19:7, 14:8, 9:9, 4:10} %}
+    <div class="loader__grid" aria-hidden="true">
+      {% for i in range(25) %}<span class="loader__cell{% if i in route %} is-route{% endif %}"{% if i in route %} style="--i:{{ route[i] }}"{% endif %}></span>{% endfor %}
+    </div>
+    <div>
+      <div class="loader__word">unlock</div>
+      <p class="loader__msg">{{ message }}</p>
+      {% if hint %}<p class="loader__hint">{{ hint }}</p>{% endif %}
+    </div>
+  </div>
+  <p class="loader__credit">Conçu par <a href="{{ linkedin_url }}" target="_blank" rel="noopener">Théophile Sénéchal</a></p>
+</div>
+{%- endmacro %}
+
+{% macro topbar(active) -%}
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Unlock, retour à la carte">
+    <img class="brand__logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="" width="34" height="34">
+    <span class="brand__word">unlock</span>
+  </a>
+  <nav class="nav" aria-label="Navigation principale">
+    {% for key, href, emoji, label in nav_items %}
+    <a class="nav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}><span class="emoji" aria-hidden="true">{{ emoji }}</span>{{ label }}</a>
+    {% endfor %}
+  </nav>
+  <div class="topbar__spacer"></div>
+  <div class="topbar__actions">
+    <button type="button" class="btn btn--outline btn--sm" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app</span></button>
+    <button type="button" class="iconbtn" data-sheet-open="sheet-menu" aria-label="Ouvrir le menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    </button>
+  </div>
+</header>
+{%- endmacro %}
+
+{% macro bottomnav(active) -%}
+<nav class="bottomnav" aria-label="Navigation">
+  {% for key, href, emoji, label in nav_items %}
+  <a class="bottomnav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}><span class="emoji" aria-hidden="true">{{ emoji }}</span>{{ label }}</a>
+  {% endfor %}
+</nav>
+{%- endmacro %}
+
+{% macro strava_powered() -%}
+<span class="powered powered--text">Powered by Strava</span>
+{%- endmacro %}
+
+{% macro footer_links() -%}
+<a href="/cgu">CGU</a><a href="/confidentialite">Confidentialité</a><a href="/mentions-legales">Mentions légales</a>
+{%- endmacro %}
+
+{% macro logo_mark(cls='') -%}
+<svg class="{{ cls }}" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="116" fill="#6D071A"/><rect x="67" y="67" width="84" height="84" rx="16" fill="#fff" opacity="0.14"/><rect x="165" y="67" width="84" height="84" rx="16" fill="#fff" opacity="0.3"/><rect x="263" y="67" width="84" height="84" rx="16" fill="#fff" opacity="0.14"/><rect x="361" y="67" width="84" height="84" rx="16" fill="#fff" opacity="0.5"/><rect x="67" y="165" width="84" height="84" rx="16" fill="#fff" opacity="0.3"/><rect x="165" y="165" width="84" height="84" rx="16" fill="#fff" opacity="0.75"/><rect x="263" y="165" width="84" height="84" rx="16" fill="#fff" opacity="0.5"/><rect x="361" y="165" width="84" height="84" rx="16" fill="#fff" opacity="0.3"/><rect x="67" y="263" width="84" height="84" rx="16" fill="#fff" opacity="0.14"/><rect x="165" y="263" width="84" height="84" rx="16" fill="#fff" opacity="1"/><rect x="263" y="263" width="84" height="84" rx="16" fill="#fff" opacity="0.75"/><rect x="361" y="263" width="84" height="84" rx="16" fill="#fff" opacity="0.14"/><rect x="67" y="361" width="84" height="84" rx="16" fill="#fff" opacity="0.5"/><rect x="165" y="361" width="84" height="84" rx="16" fill="#fff" opacity="0.3"/><rect x="263" y="361" width="84" height="84" rx="16" fill="#fff" opacity="0.14"/><rect x="361" y="361" width="84" height="84" rx="16" fill="#fff" opacity="0.3"/><g transform="translate(258 70)"><path d="M90 230 C78 214 18 160 18 108 A72 72 0 0 1 162 108 C162 160 102 214 90 230 Z" fill="#fff" stroke="#6D071A" stroke-width="14" stroke-linejoin="round"/><circle cx="90" cy="106" r="26" fill="#6D071A"/></g></svg>
+{%- endmacro %}

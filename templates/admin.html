@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Tableau de bord · Unlock{% endblock %}
+{% block head %}
+<style>
+  .dash { display: grid; gap: 14px; }
+  .dash-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1024px) { .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .updated { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
+
+  /* Capacity */
+  .cap { padding: 20px; display: grid; gap: 18px; }
+  @media (min-width: 900px) { .cap { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; padding: 24px 28px; } }
+  .cap__label { display: flex; gap: 8px; align-items: center; color: var(--ink-2); font-weight: 650; font-size: var(--fs-sm); }
+  .cap__big { font-family: var(--font-display); font-weight: 750; letter-spacing: -.04em; font-size: clamp(2.2rem, 6vw, 3.4rem); line-height: 1; margin-top: 10px; font-variant-numeric: tabular-nums; }
+  .cap__big small { font-size: .4em; color: var(--muted); font-weight: 600; letter-spacing: 0; }
+  .capbar { display: flex; height: 14px; border-radius: 99px; overflow: hidden; background: var(--line); margin-top: 16px; gap: 2px; }
+  .capbar span { height: 100%; transition: width .6s var(--ease); }
+  .capbar__active { background: #9E2A3F; } .capbar__dormant { background: #E5BDC5; }
+  .caplegend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 10px; font-size: var(--fs-sm); color: var(--ink-2); }
+  .caplegend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .cap__side { display: grid; gap: 10px; }
+  .callout { padding: 14px 16px; border-radius: var(--r-md); background: var(--canvas); font-size: var(--fs-sm); color: var(--ink-2); display: flex; gap: 10px; }
+  .callout b { color: var(--ink); }
+  .callout--warn { background: #FDF3E6; } .callout--bad { background: #FDECEA; }
+
+  .kpis5 { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 1024px) { .kpis5 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
+
+  .hbar { display: grid; gap: 12px; }
+  .hbar__row { display: grid; grid-template-columns: 150px minmax(0, 1fr) 48px; gap: 12px; align-items: center; font-size: var(--fs-sm); }
+  .hbar__track { height: 12px; border-radius: 99px; background: var(--canvas); overflow: hidden; }
+  .hbar__fill { height: 100%; border-radius: 99px; background: #9E2A3F; transition: width .6s var(--ease); }
+  .hbar__val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+  @media (max-width: 480px) { .hbar__row { grid-template-columns: 110px minmax(0, 1fr) 40px; } }
+
+  .health { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .health li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
+  .health li:last-child { border-bottom: 0; }
+  .health b { display: block; color: var(--ink); font-weight: 650; }
+  .health small { color: var(--muted); }
+  .quota { height: 6px; border-radius: 99px; background: var(--canvas); margin-top: 6px; overflow: hidden; }
+  .quota span { display: block; height: 100%; background: #2A86B8; border-radius: 99px; }
+
+  .events { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+  .events td { padding: 10px 4px; border-bottom: 1px solid var(--line); }
+  .events tr:last-child td { border-bottom: 0; }
+  .events td:last-child { text-align: right; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .note { font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="scrollmain">
+    <div class="page">
+      <div class="page__head">
+        <div>
+          <h1 class="page__title">Tableau de bord</h1>
+          <p class="page__lead">Unlock en un coup d'œil. Uniquement des chiffres anonymes, aucune donnée Strava.</p>
+        </div>
+        <div class="updated"><span id="updated">Chargement…</span>
+          <button type="button" class="iconbtn" id="refresh" aria-label="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+        </div>
+      </div>
+
+      <div class="dash">
+        <!-- Capacité -->
+        <section class="surface cap" aria-labelledby="cap-t">
+          <div>
+            <h2 class="cap__label" id="cap-t"><span class="emoji" aria-hidden="true">🎟️</span>Places Strava occupées</h2>
+            <div class="cap__big"><span id="c-used">–</span> <small>/ <span id="c-cap">999</span></small></div>
+            <div class="capbar" role="img" id="capbar" aria-label="Répartition des places"><span class="capbar__active" id="b-active"></span><span class="capbar__dormant" id="b-dormant"></span></div>
+            <div class="caplegend">
+              <span><i style="background:#9E2A3F"></i>Actifs ≤ 31 j : <b id="l-active">–</b></span>
+              <span><i style="background:#E5BDC5"></i>En sommeil : <b id="l-dormant">–</b></span>
+              <span><i style="background:var(--line)"></i>Libres : <b id="l-free">–</b></span>
+            </div>
+          </div>
+          <div class="cap__side" id="cap-side"></div>
+        </section>
+
+        <!-- KPI -->
+        <div class="kpis5">
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">☀️</span>Actifs aujourd'hui</span><span class="kpi__val" id="k-today">–</span><span class="kpi__sub" id="k-today-sub"></span><span class="kpi__help">Utilisateurs venus depuis minuit</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📅</span>Actifs sur 7 jours</span><span class="kpi__val" id="k-week">–</span><span class="kpi__sub" id="k-week-sub"></span><span class="kpi__help">Au moins une visite cette semaine</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🆕</span>Nouveaux sur 7 jours</span><span class="kpi__val" id="k-new">–</span><span class="kpi__sub" id="k-new-sub"></span><span class="kpi__help">Premières connexions</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🔁</span>Taux de retour</span><span class="kpi__val" id="k-ret">–</span><span class="kpi__sub" id="k-ret-sub"></span><span class="kpi__help">Utilisateurs revenus un autre jour que leur inscription</span></div>
+        </div>
+
+        <div class="dash-grid">
+          <section class="surface chart" aria-labelledby="g1">
+            <div class="chart__head"><h2 class="chart__title" id="g1"><span class="emoji" aria-hidden="true">👀</span>Visiteurs par jour</h2><span class="chart__note">60 derniers jours, visiteurs uniques</span></div>
+            <div class="chart__box"><canvas id="c-daily" role="img" aria-label="Visiteurs uniques par jour"></canvas></div>
+            <p class="note" id="n-daily"></p>
+          </section>
+
+          <section class="surface chart" aria-labelledby="g2">
+            <div class="chart__head"><h2 class="chart__title" id="g2"><span class="emoji" aria-hidden="true">↕️</span>Arrivées et départs</h2>
+              <span class="legend-inline"><span><i style="background:#9E2A3F"></i>Arrivées</span><span><i style="background:#2A86B8"></i>Départs</span></span></div>
+            <div class="chart__box"><canvas id="c-weekly" role="img" aria-label="Arrivées et départs par semaine"></canvas></div>
+            <p class="note">Par semaine, 12 dernières semaines. Départs = déconnexions, suppressions et révocations automatiques.</p>
+          </section>
+
+          <section class="surface chart" aria-labelledby="g3">
+            <div class="chart__head"><h2 class="chart__title" id="g3"><span class="emoji" aria-hidden="true">📈</span>Évolution des comptes</h2>
+              <span class="legend-inline"><span><i style="background:#9E2A3F"></i>Places occupées</span><span><i style="background:#2A86B8"></i>Actifs 31 j</span></span></div>
+            <div class="chart__box"><canvas id="c-snap" role="img" aria-label="Évolution des places occupées et des actifs"></canvas></div>
+            <p class="note" id="n-snap"></p>
+          </section>
+
+          <section class="surface chart" aria-labelledby="g4">
+            <div class="chart__head"><h2 class="chart__title" id="g4"><span class="emoji" aria-hidden="true">🕒</span>Dernière visite</h2><span class="chart__note">Répartition des comptes connectés</span></div>
+            <div class="hbar" id="recency"></div>
+            <p class="note" id="n-recency"></p>
+          </section>
+
+          <section class="surface chart" aria-labelledby="g5">
+            <div class="chart__head"><h2 class="chart__title" id="g5"><span class="emoji" aria-hidden="true">🩺</span>Santé de l'app</h2></div>
+            <ul class="health" id="health"></ul>
+          </section>
+
+          <section class="surface chart" aria-labelledby="g6">
+            <div class="chart__head"><h2 class="chart__title" id="g6"><span class="emoji" aria-hidden="true">🧾</span>Derniers événements</h2><span class="chart__note">Anonymes</span></div>
+            <table class="events"><tbody id="events"></tbody></table>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
+{{ ui.loader("Chargement du tableau de bord…") }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const C1 = '#9E2A3F', C2 = '#2A86B8';
+  const charts = {}; let first = true;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = 12; Chart.defaults.color = '#7C7883';
+  const grid = { color: '#EFEDF0', drawTicks: false };
+  const tooltip = { backgroundColor: '#18161B', padding: 10, cornerRadius: 10, titleFont: { weight: '700' } };
+  const fmt = Unlock.fmt;
+  const d = (s) => new Date(String(s).length <= 10 ? s + 'T12:00:00' : s);
+  const dayLbl = (s) => d(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).replace('.', '');
+  const ago = (s) => { const m = Math.max(0, Math.round((Date.now() - d(s)) / 60000)); return m < 1 ? 'à l\'instant' : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
+  const delta = (cur, prev, ref) => {
+    if (!prev) return cur ? `<span class="delta delta--up">▲ nouveau</span> <span class="delta__ref">${ref}</span>` : `<span class="delta__ref">${ref} : 0</span>`;
+    const p = (cur - prev) / prev * 100, cls = Math.abs(p) < .5 ? '' : p > 0 ? ' delta--up' : ' delta--down';
+    return `<span class="delta${cls}">${p > 0 ? '▲' : p < 0 ? '▼' : '='} ${p >= 0 ? '+' : '−'}${fmt(Math.abs(p))} %</span> <span class="delta__ref">${ref} (${fmt(prev)})</span>`;
+  };
+  function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
+
+  async function load() {
+    if (first) Unlock.loader.show(['Chargement du tableau de bord…']); else Unlock.busy.on('Actualisation…');
+    try {
+      const s = await Unlock.getJSON('/api/admin/stats');
+      render(s);
+      $('updated').textContent = 'Actualisé à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { Unlock.toast('⚠️ Impossible de charger le tableau de bord.'); }
+    finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
+  }
+
+  function render(s) {
+    const u = s.users, cap = s.capacity;
+    const dormant = Math.max(0, u.connected - u.active_31), free = Math.max(0, cap - u.connected), pct = u.connected / cap * 100;
+
+    /* Capacité */
+    $('c-used').textContent = fmt(u.connected); $('c-cap').textContent = fmt(cap);
+    $('b-active').style.width = (u.active_31 / cap * 100) + '%';
+    $('b-dormant').style.width = (dormant / cap * 100) + '%';
+    $('capbar').setAttribute('aria-label', `${u.connected} places occupées sur ${cap} : ${u.active_31} actifs, ${dormant} en sommeil, ${free} libres`);
+    $('l-active').textContent = fmt(u.active_31); $('l-dormant').textContent = fmt(dormant); $('l-free').textContent = fmt(free);
+    const net = (+s.flow_30.arrivals || 0) - (+s.flow_30.departures || 0);
+    const side = [];
+    const level = pct >= 95 ? 'bad' : pct >= 80 ? 'warn' : '';
+    side.push(`<div class="callout${level ? ' callout--' + level : ''}"><span class="emoji">${level === 'bad' ? '🚨' : level === 'warn' ? '⚠️' : '✅'}</span><span><b>${fmt(pct, pct < 10 ? 1 : 0)} % du quota utilisé.</b> ${level === 'bad' ? 'Les nouveaux utilisateurs risquent d\'être refusés : demande une hausse du quota à Strava.' : level === 'warn' ? 'Pense à demander une hausse du quota à Strava.' : 'Il reste de la marge.'}</span></div>`);
+    if (net > 0) {
+      const days = Math.round(free / (net / 30));
+      side.push(`<div class="callout"><span class="emoji">🔮</span><span>Au rythme des 30 derniers jours (<b>+${fmt(net)}</b> comptes nets), l'app serait pleine dans <b>~${fmt(days)} jours</b>.</span></div>`);
+    } else {
+      side.push(`<div class="callout"><span class="emoji">⚖️</span><span>Sur 30 jours, les départs compensent les arrivées (<b>${net >= 0 ? '+' : ''}${fmt(net)}</b> comptes nets) : pas de risque de saturation.</span></div>`);
+    }
+    side.push(`<div class="callout"><span class="emoji">🧹</span><span><b>${fmt(u.at_risk)}</b> compte${u.at_risk > 1 ? 's' : ''} sans visite depuis plus de ${s.inactive_days - 7} jours, révoqué${u.at_risk > 1 ? 's' : ''} d'ici une semaine s'ils ne reviennent pas.</span></div>`);
+    $('cap-side').innerHTML = side.join('');
+
+    /* KPI */
+    const daily = s.daily || [];
+    const today = daily.length ? +daily[daily.length - 1].visits : 0, yesterday = daily.length > 1 ? +daily[daily.length - 2].visits : 0;
+    $('k-today').textContent = fmt(u.seen_today);
+    $('k-today-sub').innerHTML = delta(today, yesterday, 'visiteurs vs hier');
+    $('k-week').textContent = fmt(u.active_7);
+    $('k-week-sub').innerHTML = `<span class="delta__ref">${fmt(u.connected ? u.active_7 / u.connected * 100 : 0)} % des comptes connectés</span>`;
+    $('k-new').textContent = fmt(u.new_7);
+    $('k-new-sub').innerHTML = delta(u.new_7, u.new_prev_7, 'vs 7 jours précédents');
+    const ret = u.older_than_1d ? u.returned / u.older_than_1d * 100 : null;
+    $('k-ret').textContent = ret === null ? '–' : fmt(ret) + ' %';
+    $('k-ret-sub').innerHTML = `<span class="delta__ref">${fmt(u.returned)} sur ${fmt(u.older_than_1d)} comptes de plus d'un jour</span>`;
+
+    /* Visiteurs / jour */
+    draw('c-daily', { type: 'bar',
+      data: { labels: daily.map((r) => dayLbl(r.day)), datasets: [{ label: 'Visiteurs', data: daily.map((r) => +r.visits), backgroundColor: C1, borderRadius: 4, maxBarThickness: 18 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { ...tooltip, displayColors: false, callbacks: { label: (c) => `${fmt(c.parsed.y)} visiteur${c.parsed.y > 1 ? 's' : ''}`, afterLabel: (c) => { const n = +daily[c.dataIndex].signups; return n ? `dont ${n} nouveau${n > 1 ? 'x' : ''}` : ''; } } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 16 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8 } } } } });
+    $('n-daily').textContent = s.tracking_since ? `Suivi depuis le ${d(s.tracking_since).toLocaleDateString('fr-FR')}.` : 'Le suivi démarre avec cette version : les barres se rempliront au fil des jours.';
+
+    /* Arrivées / départs */
+    const wk = s.weekly || [];
+    draw('c-weekly', { type: 'bar',
+      data: { labels: wk.map((r) => 'sem. ' + dayLbl(r.week)), datasets: [
+        { label: 'Arrivées', data: wk.map((r) => +r.arrivals), backgroundColor: C1, borderRadius: 4, maxBarThickness: 20, borderColor: '#fff', borderWidth: 1 },
+        { label: 'Départs', data: wk.map((r) => +r.departures), backgroundColor: C2, borderRadius: 4, maxBarThickness: 20, borderColor: '#fff', borderWidth: 1 }] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { afterBody: (it) => { const r = wk[it[0].dataIndex]; return +r.auto_revoked ? `dont ${r.auto_revoked} révocation(s) automatique(s)` : ''; } } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 12 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8 } } } } });
+
+    /* Évolution */
+    const sn = s.snapshots || [];
+    draw('c-snap', { type: 'line',
+      data: { labels: sn.map((r) => dayLbl(r.day)), datasets: [
+        { label: 'Places occupées', data: sn.map((r) => +r.connected), borderColor: C1, backgroundColor: C1, borderWidth: 2, pointRadius: sn.length < 3 ? 4 : 0, pointHoverRadius: 5, tension: .25 },
+        { label: 'Actifs 31 j', data: sn.map((r) => +r.active_31), borderColor: C2, backgroundColor: C2, borderWidth: 2, pointRadius: sn.length < 3 ? 4 : 0, pointHoverRadius: 5, tension: .25 }] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { label: (c) => ` ${c.dataset.label} : ${fmt(c.parsed.y)}` } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 16 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8 } } } } });
+    $('n-snap').textContent = sn.length < 7 ? 'Un point est ajouté chaque jour : la courbe se dessine au fil du temps.' : `Quota Strava : ${fmt(cap)} places.`;
+
+    /* Dernière visite */
+    const rows = [['Aujourd\'hui', u.seen_today], ['Cette semaine', u.seen_week], [`8 à ${s.inactive_days - 7} jours`, u.seen_month], [`Plus de ${s.inactive_days - 7} jours ⚠️`, u.at_risk]];
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    $('recency').innerHTML = rows.map(([l, v]) => `<div class="hbar__row"><span>${l}</span><div class="hbar__track"><div class="hbar__fill" style="width:${v / max * 100}%"></div></div><span class="hbar__val">${fmt(v)}</span></div>`).join('');
+    $('n-recency').textContent = `Sans visite pendant ${s.inactive_days} jours, un compte est révoqué automatiquement et sa place libérée.`;
+
+    /* Santé */
+    const H = s.health.map((h) => ({ ok: h.ok, label: h.label, help: h.ok ? '' : h.help }));
+    const cron = s.last_cron && s.last_cron.value;
+    const cronAge = cron ? (Date.now() - d(cron.at)) / 3600000 : null;
+    H.push({ ok: cron && cronAge < 26, label: 'Nettoyage quotidien', help: cron ? `Dernier passage ${ago(cron.at)} : ${cron.comptes_supprimes} compte(s) révoqué(s), ${cron.activites_expirees} activité(s) expirée(s) effacée(s).` : 'Pas encore exécuté (il tourne chaque nuit à minuit UTC).' });
+    const rl = s.rate_limit && s.rate_limit.value;
+    let quota = '';
+    if (rl && rl.read_usage && rl.read_limit) {
+      const q15 = rl.read_usage[0] / rl.read_limit[0] * 100, qd = rl.read_usage[1] / rl.read_limit[1] * 100;
+      quota = `<small>Lecture : ${fmt(rl.read_usage[0])}/${fmt(rl.read_limit[0])} sur 15 min, ${fmt(rl.read_usage[1])}/${fmt(rl.read_limit[1])} aujourd'hui (relevé ${ago(rl.at)})</small><div class="quota"><span style="width:${Math.min(100, qd)}%"></span></div>`;
+      H.push({ ok: qd < 80 && q15 < 80, label: 'Quota de requêtes Strava', html: quota });
+    } else {
+      H.push({ ok: null, label: 'Quota de requêtes Strava', help: 'Pas encore de relevé : il apparaît après le prochain appel à Strava.' });
+    }
+    $('health').innerHTML = H.map((h) => `<li><span class="emoji" aria-hidden="true">${h.ok === null ? '⏳' : h.ok ? '✅' : '⚠️'}</span><span><b>${h.label}</b>${h.html || (h.help ? `<small>${h.help}</small>` : '')}</span></li>`).join('');
+
+    /* Événements */
+    const LBL = { signup: ['🆕', 'Nouvel utilisateur'], logout: ['🚪', 'Déconnexion'], delete: ['🗑️', 'Données supprimées par l\'utilisateur'], revoke_inactive: ['🧹', 'Révocation automatique (inactif)'] };
+    const ev = s.recent || [];
+    $('events').innerHTML = ev.length ? ev.map((e) => `<tr><td><span class="emoji">${LBL[e.kind][0]}</span> ${LBL[e.kind][1]}</td><td>${ago(e.created_at)}</td></tr>`).join('')
+      : '<tr><td>Aucun événement pour l\'instant.</td><td></td></tr>';
+  }
+
+  $('refresh').addEventListener('click', load);
+  setInterval(() => { if (!document.hidden) load(); }, 60000);
+  load();
+})();
+</script>
+{% endblock %}

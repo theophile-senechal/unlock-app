@@ -1,0 +1,62 @@
+{% extends "legal/_layout.html" %}
+{% block title %}Conditions générales d'utilisation · Unlock{% endblock %}
+{% block heading %}Conditions générales d'utilisation{% endblock %}
+{% block legal %}
+<p>Les présentes conditions générales d'utilisation (« CGU ») encadrent l'utilisation du service Unlock (le « Service »), accessible depuis le site web et l'application installable (PWA). En vous connectant au Service, vous acceptez ces CGU sans réserve.</p>
+
+<h2>1. Éditeur</h2>
+<p>Le Service est édité par {{ site_owner }}, à titre personnel et non commercial. Les informations complètes figurent dans les <a href="/mentions-legales">mentions légales</a>.</p>
+
+<h2>2. Description du Service</h2>
+<p>Unlock lit les activités sportives de votre compte Strava, découpe leurs tracés GPS en blocs (carrés de 100 m ou 250 m de côté) et affiche :</p>
+<ul>
+  <li>la carte de vos tracés et de vos blocs explorés ;</li>
+  <li>la part de chaque commune française que vous avez parcourue ;</li>
+  <li>l'évolution de votre exploration dans le temps (statistiques, timelapse) ;</li>
+  <li>une image « story » que vous pouvez télécharger et partager si vous le souhaitez.</li>
+</ul>
+<p>Vos données ne sont visibles que par vous. Le Service est gratuit et sans publicité.</p>
+
+<h2>3. Accès au Service</h2>
+<p>L'accès nécessite un compte Strava valide et l'autorisation de lecture de vos activités. Vous devez avoir l'âge minimum requis pour utiliser Strava dans votre pays. Le Service est fourni « en l'état » et peut être interrompu, modifié ou arrêté à tout moment, notamment pour maintenance ou en cas d'évolution des conditions d'accès à l'API Strava (nombre d'utilisateurs autorisés, quotas de requêtes…).</p>
+
+<h2>4. Connexion à Strava</h2>
+<p>La connexion passe par la page d'autorisation officielle de Strava : Unlock ne voit jamais votre mot de passe. L'autorisation demandée (« activity:read_all ») permet de <strong>lire</strong> vos activités, y compris privées. Unlock ne publie rien, ne modifie rien et n'envoie aucun message sur votre compte Strava.</p>
+<p>Unlock est un projet indépendant. Il n'est ni développé, ni sponsorisé, ni approuvé par Strava, Inc. « Strava » est une marque de Strava, Inc.</p>
+
+<h2>5. Vos engagements</h2>
+<ul>
+  <li>Utiliser le Service pour votre usage personnel et conformément à la loi.</li>
+  <li>Ne pas tenter de contourner les mesures de sécurité, de surcharger le Service ou d'accéder aux données d'autres personnes.</li>
+  <li>Ne pas extraire en masse les données affichées ni les réutiliser à des fins commerciales.</li>
+</ul>
+
+<h2>6. Données personnelles</h2>
+<p>Le traitement de vos données est décrit dans la <a href="/confidentialite">politique de confidentialité</a>. En résumé : vos activités sont lues à la demande, gardées au plus 48 heures pour accélérer l'affichage, et jamais revendues ni partagées.</p>
+
+<h2>7. Fin de l'utilisation et suppression</h2>
+<p>Vous pouvez arrêter d'utiliser le Service à tout moment :</p>
+<ul>
+  <li>« Se déconnecter » révoque l'accès d'Unlock à votre compte Strava et efface vos données ;</li>
+  <li>« Supprimer mes données » (menu ☰) fait de même et affiche une confirmation écrite de la suppression ;</li>
+  <li>vous pouvez aussi retirer l'accès depuis Strava (Paramètres › Mes applications).</li>
+</ul>
+<p>Les comptes sans connexion depuis plus de {{ inactive_days }} jours sont automatiquement déconnectés de Strava et supprimés. Il suffit de se reconnecter pour réactiver le Service.</p>
+
+<h2>8. Propriété intellectuelle</h2>
+<p>Le nom, le logo, le design et le code d'Unlock appartiennent à leur auteur. Vos activités restent les vôtres. Les fonds de carte sont fournis par © OpenStreetMap contributors et © CARTO ; les contours des communes proviennent des données publiques de l'État (geo.api.gouv.fr, Licence Ouverte Etalab).</p>
+
+<h2>9. Responsabilité et garanties</h2>
+<p>Les calculs (blocs, pourcentages, distances) sont des estimations fondées sur des tracés simplifiés et peuvent différer de la réalité. Le Service est fourni sans garantie d'exactitude, de disponibilité ou d'adéquation à un usage particulier, dans les limites permises par la loi.</p>
+<p><strong>Prestataires tiers.</strong> Strava, Inc. et les autres prestataires tiers dont dépend le Service (notamment CARTO, la Fondation OpenStreetMap, Vercel et Supabase) ne fournissent aucune garantie, expresse ou implicite, au titre du Service, et déclinent toute responsabilité pour les dommages indirects, consécutifs, spéciaux, punitifs ou accessoires liés à votre utilisation du Service.</p>
+<p>Vous restez responsable de l'usage que vous faites des images générées (stories) et de leur partage, en particulier des informations de localisation qu'elles peuvent révéler.</p>
+
+<h2>10. Modification des CGU</h2>
+<p>Ces CGU peuvent évoluer. La date de dernière mise à jour figure en haut de la page. En cas de changement important, un message vous en informera lors de votre prochaine connexion.</p>
+
+<h2>11. Droit applicable</h2>
+<p>Les présentes CGU sont soumises au droit français. En cas de litige, une solution amiable sera recherchée en priorité ; à défaut, les tribunaux français seront compétents.</p>
+
+<h2>12. Contact</h2>
+<p>Pour toute question, envoyez un <a href="{{ linkedin_url }}" target="_blank" rel="noopener">message LinkedIn</a>.</p>
+{% endblock %}

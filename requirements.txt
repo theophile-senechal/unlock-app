@@ -3,7 +3,7 @@ python-dotenv
 requests
 polyline
 shapely
-sqlalchemy
+sqlalchemy>=2.0,<2.2
 psycopg2-binary
 gunicorn
 geoalchemy2

@@ -1,384 +1,216 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>UNLOCK | Time Lapse</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏃</text></svg>">
-    
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <style>
-        /* THÈME CLAIR */
-        :root { 
-            --bordeaux: #6d071a; 
-            --off-white: #fdfdfb; 
-            --bg-color: #f0f2f5; 
-            --text-color: #333; 
-            --panel-white: rgba(255, 255, 255, 0.95); 
-        }
-        
-        body { margin: 0; font-family: 'Inter', sans-serif; background: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Timelapse · Unlock{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<style>
+  .maptools.tl-tools { left: 12px; }
+  .tl-search { width: min(260px, 100%); }
+  .tl-search .input { height: 40px; border-radius: 999px; border-color: transparent; box-shadow: var(--shadow-float); font-size: var(--fs-sm); font-weight: 600; }
+  .tl-desk { display: none; gap: 8px; }
+  @media (min-width: 900px) { .tl-desk { display: flex; } .tl-mobile { display: none; } .maptools.tl-tools { left: 16px; right: 16px; top: 16px; } }
 
-        /* HEADER FLOTTANT */
-        .header { 
-            padding: 20px 30px; display: flex; align-items: flex-start; justify-content: space-between; 
-            position: absolute; top: 0; width: 100%; z-index: 1000; box-sizing: border-box; 
-            pointer-events: none; /* Laisse passer les clics vers la carte */
-        }
-        .header > * { pointer-events: auto; } /* Réactive les boutons */
+  .dock {
+    position: absolute; z-index: 950; left: 12px; right: 12px; bottom: 12px;
+    max-width: 760px; margin: 0 auto;
+    display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px;
+    padding: 10px 16px 10px 10px; border-radius: var(--r-lg);
+    background: rgba(255,255,255,.96); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); box-shadow: var(--shadow-float);
+  }
+  @media (min-width: 768px) { .dock { bottom: 24px; padding: 12px 22px 12px 12px; gap: 18px; } }
+  .play { width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--brand); color: #fff; display: grid; place-items: center; box-shadow: 0 6px 16px -6px rgba(109,7,26,.6); transition: transform .15s; }
+  .play:hover { transform: scale(1.05); } .play:active { transform: scale(.96); }
+  .play svg { width: 20px; height: 20px; }
+  .when { text-align: right; min-width: 92px; }
+  .when__month { font-family: var(--font-display); font-weight: 750; font-size: var(--fs-lg); letter-spacing: -.02em; line-height: 1.1; color: var(--brand); white-space: nowrap; }
+  .when__count { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  @media (min-width: 768px) { .when { min-width: 120px; } .when__month { font-size: var(--fs-xl); } }
 
-        /* --- BOUTON RETOUR (DESIGN ADAPTATIF) --- */
-        .back-btn { 
-            background: var(--panel-white); color: #555; padding: 0 20px; 
-            border-radius: 30px; text-decoration: none; font-weight: 700; font-size: 0.9rem; 
-            box-shadow: 0 4px 15px rgba(0,0,0,0.08); transition: all 0.2s;
-            display: flex; align-items: center; gap: 8px; backdrop-filter: blur(5px);
-            height: 44px; /* Hauteur fixe */
-            border: 1px solid rgba(0,0,0,0.05);
-        }
-        .back-btn:hover { color: var(--bordeaux); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.12); }
-        .back-btn svg { width: 20px; height: 20px; stroke-width: 2.5; }
-        
-        /* GROUPE DE CONTRÔLES */
-        .controls-top { 
-            display: flex; gap: 10px; background: var(--panel-white); padding: 5px; 
-            border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); backdrop-filter: blur(5px);
-        }
-        
-        select, input { 
-            background: #f9f9f9; border: 1px solid #eee; color: #333; padding: 0 12px; 
-            border-radius: 8px; outline: none; font-weight: 600; font-family: 'Inter', sans-serif;
-            font-size: 0.85rem; height: 34px; /* Hauteur uniforme */
-        }
-        select:focus, input:focus { border-color: var(--bordeaux); background: #fff; }
+  .range { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; cursor: pointer; margin: 0; }
+  .range::-webkit-slider-runnable-track { height: 6px; border-radius: 99px; background: linear-gradient(90deg, var(--brand) var(--p, 100%), var(--brand-100) var(--p, 100%)); }
+  .range::-moz-range-track { height: 6px; border-radius: 99px; background: var(--brand-100); }
+  .range::-moz-range-progress { height: 6px; border-radius: 99px; background: var(--brand); }
+  .range::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: #fff; border: 3px solid var(--brand); box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+  .range::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 3px solid var(--brand); }
+  .range:focus-visible { outline: none; }
+  .range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px var(--brand-100); }
+  .range-wrap { display: grid; gap: 2px; min-width: 0; }
+  .range-ends { display: flex; justify-content: space-between; font-size: .6875rem; color: var(--muted); font-weight: 600; }
+</style>
+{% endblock %}
 
-        /* CARTE */
-        #map { width: 100%; height: 100%; z-index: 1; }
-        .leaflet-tile { 
-    filter: grayscale(100%) brightness(1.03) contrast(0.80); 
-}
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="mapview">
+    <div id="map" role="region" aria-label="Carte animée de vos blocs"></div>
 
-        /* TIMELINE UI (BAS) */
-        .timeline-container {
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); 
-            width: 90%; max-width: 850px; z-index: 1000;
-            display: flex; align-items: center; gap: 20px;
-            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
-            padding: 15px 25px; border-radius: 20px; 
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            border: 1px solid rgba(255,255,255,0.5);
-            transition: all 0.3s ease;
-        }
-
-        .play-btn {
-            background: var(--bordeaux); color: white; border: none; width: 45px; height: 45px; border-radius: 50%;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            transition: transform 0.2s, box-shadow 0.2s; flex-shrink: 0;
-            box-shadow: 0 4px 10px rgba(109, 7, 26, 0.3);
-        }
-        .play-btn:hover { transform: scale(1.05); }
-
-        .slider-wrapper { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
-        input[type=range] { width: 100%; cursor: pointer; accent-color: var(--bordeaux); height: 5px; background: #eee; border-radius: 3px; }
-
-        .date-display {
-            display: flex; flex-direction: column; align-items: flex-end; min-width: 80px; text-align: right;
-            border-left: 1px solid #eee; padding-left: 15px;
-        }
-        .date-month { font-size: 1.1rem; font-weight: 800; line-height: 1; color: var(--bordeaux); text-transform: uppercase; }
-        .date-year { font-size: 0.8rem; font-weight: 600; color: #999; margin-top: 2px; }
-
-        /* LOADER */
-        #loader { position: fixed; inset: 0; background: var(--off-white); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 9999; }
-        .loader-content { display: flex; flex-direction: column; align-items: center; text-align: center; }
-        .loader-text { color: var(--bordeaux); font-weight: 700; margin-bottom: 20px; letter-spacing: 2px; text-transform: uppercase; }
-        .progress-bar { width: 220px; height: 4px; background: rgba(109, 7, 26, 0.1); border-radius: 10px; overflow: hidden; position: relative; }
-        .progress-fill { position: absolute; width: 40%; height: 100%; background: var(--bordeaux); animation: loading 1.8s infinite ease-in-out; }
-        @keyframes loading { 0% { left: -40%; } 100% { left: 100%; } }
-        .loader-signature { position: absolute; bottom: 30px; display: flex; align-items: center; gap: 8px; font-size: 0.75rem; color: var(--bordeaux); opacity: 0.6; text-decoration: none; font-weight: 600; transition: opacity 0.3s, transform 0.3s; }
-        .loader-signature:hover { opacity: 1; transform: translateY(-2px); }
-        .loader-icon { width: 14px; height: 14px; fill: currentColor; }
-
-        /* ========================================= */
-        /* ---        DESIGN MOBILE (Sleek)      --- */
-        /* ========================================= */
-        @media (max-width: 768px) {
-            .header { padding: 15px; }
-
-            /* 1. BOUTON RETOUR -> CERCLE ICONE */
-            .back-btn {
-                width: 42px; height: 42px; /* Carré */
-                border-radius: 50%; /* Cercle */
-                padding: 0; justify-content: center; /* Centrer icone */
-                background: white; /* Fond bien blanc */
-            }
-            .back-btn span { display: none; } /* Cacher texte */
-            .back-btn svg { margin: 0; }
-
-            /* 2. FILTRES COMPACTS & ALIGNÉS */
-            .controls-top {
-                background: none; box-shadow: none; padding: 0;
-                display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
-            }
-            
-            /* Style des selects sur mobile pour être discrets */
-            select, input {
-                background: rgba(255, 255, 255, 0.95);
-                backdrop-filter: blur(4px);
-                border: 1px solid rgba(0,0,0,0.1);
-                box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-                font-size: 0.75rem;
-                height: 32px;
-                width: auto; /* Largeur auto selon contenu */
-                max-width: 140px;
-            }
-
-            /* 3. TIMELINE MOBILE */
-            .timeline-container {
-                width: 90%; bottom: 25px;
-                padding: 10px 15px; gap: 10px;
-                flex-wrap: nowrap; /* Garder sur une ligne */
-            }
-            .play-btn { width: 40px; height: 40px; }
-            .date-display { padding-left: 10px; min-width: auto; }
-            .date-month { font-size: 0.9rem; }
-            .date-year { font-size: 0.7rem; }
-        }
-    </style>
-</head>
-<body>
-
-    <div id="loader">
-        <div class="loader-content">
-            <div class="loader-text">Chargement de l'historique...</div>
-            <div class="progress-bar"><div class="progress-fill"></div></div>
-        </div>
-        
-        <a href="https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/" target="_blank" class="loader-signature">
-            <svg class="loader-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
-            </svg>
-            <span>Théophile Sénéchal</span>
-        </a>
+    <div class="maptools tl-tools">
+      <div class="search tl-search">
+        <span class="emoji" aria-hidden="true">🔍</span>
+        <label class="sr-only" for="city-input">Filtrer sur une commune</label>
+        <input class="input" id="city-input" list="city-list" placeholder="Toutes les communes" autocomplete="off">
+        <datalist id="city-list"></datalist>
+      </div>
+      <div class="maptools__spacer"></div>
+      <div class="tl-desk" id="tl-desk"></div>
+      <button type="button" class="iconbtn tl-mobile" data-sheet-open="sheet-tl" aria-label="Réglages de l'animation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      </button>
     </div>
 
-    <div class="header">
-        <a href="/" class="back-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12"></line>
-                <polyline points="12 19 5 12 12 5"></polyline>
-            </svg>
-            <span>Retour</span>
-        </a>
-        
-        <div class="controls-top">
-            <select id="speed-selector" onchange="changeSpeed()">
-                <option value="600">Vitesse : Lente</option>
-                <option value="300" selected>Vitesse : Normale</option>
-                <option value="100">Vitesse : Rapide</option>
-            </select>
-
-            <select id="grid-selector" onchange="loadData()">
-                <option value="100">Grille : 100m</option>
-                <option value="250" selected>Grille : 250m</option>
-            </select>
-            
-            <input type="text" id="city-input" list="city-list" placeholder="🔍 Ville..." onchange="focusCity()" autocomplete="off">
-            <datalist id="city-list"></datalist>
-        </div>
+    <div id="tl-settings" style="display:contents">
+      <div class="seg" role="group" aria-label="Vitesse">
+        <button type="button" class="seg__btn" data-speed="650" aria-pressed="false"><span class="emoji" aria-hidden="true">🐢</span>Lente</button>
+        <button type="button" class="seg__btn" data-speed="300" aria-pressed="true">Normale</button>
+        <button type="button" class="seg__btn" data-speed="110" aria-pressed="false"><span class="emoji" aria-hidden="true">🐇</span>Rapide</button>
+      </div>
+      <label class="sr-only" for="grid-select">Taille des blocs</label>
+      <select class="select select--pill" id="grid-select">
+        <option value="100">🧩  Blocs de 100 m</option>
+        <option value="250" selected>🧩  Blocs de 250 m</option>
+      </select>
     </div>
 
-    <div id="map"></div>
-
-    <div class="timeline-container">
-        <button class="play-btn" onclick="togglePlay()" id="btn-play">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-        </button>
-        
-        <div class="slider-wrapper">
-            <input type="range" id="time-slider" min="0" max="100" value="0" step="1" oninput="updateTimeFromSlider()">
-        </div>
-
-        <div class="date-display">
-            <span id="disp-month" class="date-month">---</span>
-            <span id="disp-year" class="date-year">----</span>
-        </div>
+    <div class="dock">
+      <button type="button" class="play" id="play" aria-label="Lancer l'animation">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z"/></svg>
+      </button>
+      <div class="range-wrap">
+        <label class="sr-only" for="slider">Mois affiché</label>
+        <input type="range" class="range" id="slider" min="0" max="0" value="0" step="1">
+        <div class="range-ends"><span id="first-month"></span><span id="last-month"></span></div>
+      </div>
+      <div class="when" aria-live="polite"><div class="when__month" id="when-month">–</div><div class="when__count" id="when-count"></div></div>
     </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script>
-        const map = L.map('map', { 
-            zoomControl: false, 
-            attributionControl: false,
-            preferCanvas: true 
-        }).setView([46.603354, 1.888334], 6);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19
-}).addTo(map);
+<div class="sheet" id="sheet-tl" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="tl-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head"><h2 class="sheet__title" id="tl-title">Réglages</h2></div>
+    <div class="sheet__body" id="tl-sheet"></div>
+    <button type="button" class="btn btn--primary btn--block" style="margin-top:18px" data-sheet-close>Fermer</button>
+  </div>
+</div>
 
+{{ ui.loader("Chargement de votre historique…", "On remonte le temps, bloc par bloc.") }}
+{% endblock %}
 
-        const gridLayer = L.layerGroup().addTo(map);
-        const borderLayer = L.layerGroup().addTo(map);
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const BRAND = '#6D071A', FRESH = '#E0405A';
+  const PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12-7.5a1 1 0 0 0 0-1.72l-12-7.5A1 1 0 0 0 7 4.5Z"/></svg>';
+  const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4.5" height="16" rx="1.5"/><rect x="13.5" y="4" width="4.5" height="16" rx="1.5"/></svg>';
 
-        let currentData = null;
-        let allMonths = [];
-        let isPlaying = false;
-        let playInterval = null;
-        let currentCityOutline = null;
-        let currentSpeed = 300; 
-        
-        async function loadData() {
-            const gridSize = document.getElementById('grid-selector').value;
-            const loader = document.getElementById('loader');
-            loader.style.display = 'flex';
-            
-            try {
-                const res = await fetch(`/api/activities?year=all&grid_size=${gridSize}&sport_type=all`);
-                currentData = await res.json();
-                processDates();
-                populateCities();
-                if (allMonths.length > 0) setSliderTo(allMonths.length - 1);
-                loader.style.display = 'none';
-            } catch(e) { 
-                console.error(e); 
-                loader.style.display = 'none';
-            }
-        }
+  // Settings: inline on desktop, in a sheet on mobile
+  const mq = window.matchMedia('(min-width: 900px)');
+  const settings = $('tl-settings');
+  function place() {
+    const t = mq.matches ? $('tl-desk') : $('tl-sheet');
+    [...settings.children, ...$('tl-desk').children, ...$('tl-sheet').children].forEach((n) => t.appendChild(n));
+    $('grid-select').classList.toggle('select--pill', mq.matches);
+    t.querySelectorAll('.seg').forEach((s) => s.classList.toggle('seg--block', !mq.matches));
+  }
+  place(); mq.addEventListener('change', place);
 
-        function processDates() {
-            if (!currentData.grid_cells) return;
-            const dates = new Set();
-            currentData.grid_cells.forEach(c => { if(c[3]) dates.add(c[3]); });
-            allMonths = Array.from(dates).sort();
-            const slider = document.getElementById('time-slider');
-            slider.max = allMonths.length - 1;
-            slider.value = allMonths.length - 1;
-        }
+  const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([46.6, 1.9], 6);
+  map.attributionControl.setPrefix(false);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd',
+    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' }).addTo(map);
+  const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
 
-        function populateCities() {
-            const list = document.getElementById('city-list');
-            list.innerHTML = '';
-            if (currentData.top_municipalities) {
-                currentData.top_municipalities.sort((a,b) => b.stats.blocks - a.stats.blocks).forEach(c => {
-                    let opt = document.createElement('option');
-                    opt.value = c.name;
-                    list.appendChild(opt);
-                });
-            }
-        }
+  let data = null, months = [], byMonth = [], cum = [], shown = -1, timer = null, speed = 300, outline = null, first = true;
 
-        function render(maxIndex) {
-            const limitDate = allMonths[maxIndex];
-            if (!limitDate) return;
+  const monthText = (k) => { const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }).replace('.', ''); };
 
-            const [y, m] = limitDate.split('-');
-            const dateObj = new Date(parseInt(y), parseInt(m)-1);
-            const monthName = dateObj.toLocaleString('fr-FR', { month: 'short' }).toUpperCase();
-            
-            document.getElementById('disp-month').textContent = monthName;
-            document.getElementById('disp-year').textContent = y;
+  function inside(pt, vs) {
+    let x = pt[0], y = pt[1], ins = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+      const xi = vs[i][0], yi = vs[i][1], xj = vs[j][0], yj = vs[j][1];
+      if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) ins = !ins;
+    }
+    return ins;
+  }
 
-            gridLayer.clearLayers();
+  async function load() {
+    stop();
+    if (first) Unlock.loader.show(['Chargement de votre historique…', 'Datation de chaque bloc…']); else Unlock.busy.on('Recalcul des blocs…');
+    try {
+      data = await Unlock.getJSON(`/api/activities?year=all&sport_type=all&grid_size=${$('grid-select').value}`);
+      const dl = $('city-list'); dl.innerHTML = '';
+      [...(data.top_municipalities || [])].sort((a, b) => a.name.localeCompare(b.name, 'fr')).forEach((c) => dl.appendChild(new Option(c.name)));
+      build();
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger votre historique.'); }
+    finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
+  }
 
-            // --- LISSAGE VISUEL (EXTRAPOLATION) ---
-            const SMOOTHING_FACTOR = 1.1; // 10% de débordement pour boucher les trous
+  function build() {
+    gridLayer.clearLayers(); shown = -1;
+    const size = data.grid_size_used * 1.12;
+    const cells = (data.grid_cells || []).filter((c) => !outline || inside([c[0], c[1]], outline));
+    months = [...new Set(cells.map((c) => c[3]))].sort();
+    const idx = new Map(months.map((m, i) => [m, i]));
+    byMonth = months.map(() => []);
+    for (const [lat, lon, , firstSeen] of cells) {
+      byMonth[idx.get(firstSeen)].push(L.rectangle([[lat - size / 2, lon - size / 2], [lat + size / 2, lon + size / 2]],
+        { stroke: false, fillColor: BRAND, fillOpacity: .85, interactive: false }));
+    }
+    let total = 0; cum = byMonth.map((arr) => (total += arr.length));
+    const s = $('slider'); s.max = Math.max(0, months.length - 1);
+    $('first-month').textContent = months.length ? monthText(months[0]) : '';
+    $('last-month').textContent = months.length ? monthText(months[months.length - 1]) : '';
+    if (!outline && cells.length) map.fitBounds(L.latLngBounds(cells.map((c) => [c[0], c[1]])), { padding: [40, 40], paddingBottomRight: [40, 120] });
+    goTo(months.length - 1);
+    if (!months.length) { $('when-month').textContent = '–'; $('when-count').textContent = 'Aucun bloc'; }
+  }
 
-            currentData.grid_cells.forEach(cell => {
-                const [lat, lon, count, firstSeen] = cell;
-                
-                if (firstSeen <= limitDate) {
-                    if (currentCityOutline && !isPointInPolygon([lat, lon], currentCityOutline)) return;
+  function goTo(i) {
+    if (i < 0) return;
+    if (shown >= 0 && byMonth[shown]) byMonth[shown].forEach((r) => r.setStyle({ fillColor: BRAND }));
+    if (i > shown) for (let k = shown + 1; k <= i; k++) byMonth[k].forEach((r) => r.addTo(gridLayer));
+    else for (let k = shown; k > i; k--) byMonth[k].forEach((r) => gridLayer.removeLayer(r));
+    shown = i;
+    if (i < months.length - 1 || timer) byMonth[i].forEach((r) => r.setStyle({ fillColor: FRESH }));
+    const s = $('slider'); s.value = i;
+    s.style.setProperty('--p', (months.length > 1 ? (i / (months.length - 1)) * 100 : 100) + '%');
+    $('when-month').textContent = monthText(months[i]).replace(/^./, (c) => c.toUpperCase());
+    $('when-count').textContent = `${Unlock.fmt(cum[i])} blocs (+${Unlock.fmt(byMonth[i].length)})`;
+  }
 
-                    const size = currentData.grid_size_used * SMOOTHING_FACTOR;
-                    const bounds = [[lat - size/2, lon - size/2], [lat + size/2, lon + size/2]];
-                    
-                    L.rectangle(bounds, { 
-                        color: "#6d071a", // Même couleur que le fond
-                        weight: 1,        // Contour de 1px pour lier visuellement
-                        opacity: 1, 
-                        fillOpacity: 0.8,
-                        interactive: false // Optimisation performance
-                    }).addTo(gridLayer);
-                }
-            });
-        }
-
-        function isPointInPolygon(point, vs) {
-            var x = point[0], y = point[1];
-            var inside = false;
-            for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-                var xi = vs[i][0], yi = vs[i][1];
-                var xj = vs[j][0], yj = vs[j][1];
-                var intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
-                if (intersect) inside = !inside;
-            }
-            return inside;
-        }
-
-        function focusCity() {
-            const name = document.getElementById('city-input').value;
-            const city = currentData.top_municipalities.find(c => c.name === name);
-            
-            borderLayer.clearLayers();
-            currentCityOutline = null;
-
-            if (city && city.outline) {
-                currentCityOutline = city.outline;
-                const poly = L.polygon(city.outline, { color: '#333', weight: 2, fill: false }).addTo(borderLayer);
-                map.fitBounds(poly.getBounds(), { padding: [50, 50] });
-            }
-            render(document.getElementById('time-slider').value);
-        }
-
-        function updateTimeFromSlider() {
-            const val = parseInt(document.getElementById('time-slider').value);
-            render(val);
-        }
-
-        function setSliderTo(val) {
-            document.getElementById('time-slider').value = val;
-            render(val);
-        }
-
-        function changeSpeed() {
-            currentSpeed = parseInt(document.getElementById('speed-selector').value);
-            if (isPlaying) {
-                clearInterval(playInterval);
-                playInterval = setInterval(nextStep, currentSpeed);
-            }
-        }
-
-        function nextStep() {
-            const slider = document.getElementById('time-slider');
-            let val = parseInt(slider.value);
-            if (val < parseInt(slider.max)) {
-                slider.value = val + 1;
-                render(val + 1);
-            } else {
-                togglePlay(); 
-            }
-        }
-
-        function togglePlay() {
-            const btn = document.getElementById('btn-play');
-            const slider = document.getElementById('time-slider');
-            
-            if (isPlaying) {
-                clearInterval(playInterval);
-                isPlaying = false;
-                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>';
-            } else {
-                if (parseInt(slider.value) >= parseInt(slider.max)) slider.value = 0;
-                
-                isPlaying = true;
-                btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>';
-                
-                playInterval = setInterval(nextStep, currentSpeed);
-            }
-        }
-
-        loadData();
-    </script>
-</body>
-</html>
+  function stop() { clearInterval(timer); timer = null; $('play').innerHTML = PLAY; $('play').setAttribute('aria-label', "Lancer l'animation"); if (shown >= 0 && byMonth[shown]) byMonth[shown].forEach((r) => r.setStyle({ fillColor: BRAND })); }
+  function start() {
+    if (!months.length) return;
+    if (shown >= months.length - 1) { gridLayer.clearLayers(); shown = -1; goTo(0); }
+    $('play').innerHTML = PAUSE; $('play').setAttribute('aria-label', "Mettre l'animation en pause");
+    timer = setInterval(() => { if (shown < months.length - 1) goTo(shown + 1); else stop(); }, speed);
+  }
+  $('play').addEventListener('click', () => (timer ? stop() : start()));
+  $('slider').addEventListener('input', (e) => { if (timer) stop(); goTo(+e.target.value); });
+  document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
+    speed = +b.dataset.speed;
+    document.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    if (timer) { clearInterval(timer); timer = null; start(); }
+  }));
+  $('grid-select').addEventListener('change', load);
+  $('city-input').addEventListener('change', (e) => {
+    const v = e.target.value.trim().toLowerCase();
+    borderLayer.clearLayers(); outline = null;
+    const c = v && (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v || x.name.toLowerCase().includes(v));
+    if (c && c.outline) {
+      outline = c.outline; e.target.value = c.name;
+      const poly = L.polygon(c.outline, { color: '#4A0412', weight: 2, dashArray: '6 6', fill: false, interactive: false }).addTo(borderLayer);
+      map.fitBounds(poly.getBounds(), { padding: [40, 40], paddingBottomRight: [40, 120] });
+    } else if (v) { Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`); e.target.value = ''; }
+    stop(); build();
+  });
+  load();
+})();
+</script>
+{% endblock %}

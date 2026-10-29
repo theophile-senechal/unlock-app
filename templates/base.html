@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{% block title %}Unlock{% endblock %}</title>
+  <meta name="description" content="Unlock transforme vos sorties Strava en blocs débloqués sur la carte et mesure la part de chaque commune que vous avez explorée.">
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#FFFFFF">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Unlock">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/logo.svg') }}">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='icons/favicon-32.png') }}">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+
+  <link rel="preload" href="{{ url_for('static', filename='fonts/sora.woff2') }}" as="font" type="font/woff2" crossorigin>
+  {% block head %}{% endblock %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}?v={{ asset_v }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+
+{% import '_ui.html' as ui with context %}
+{% block body %}{% endblock %}
+
+{% block menu %}
+{% if session_user %}
+<div class="sheet" id="sheet-menu" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="menu-title">Menu</h2>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <ul class="menu-list">
+      <li><button type="button" class="menu-item" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span></button></li>
+      {% if is_admin %}<li><a class="menu-item" href="/admin"><span class="emoji" aria-hidden="true">🛠️</span><span>Tableau de bord<small>Réservé à l'administrateur</small></span></a></li>{% endif %}
+      {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard"><span class="emoji" aria-hidden="true">🏆</span><span>Classement</span></a></li>{% endif %}
+      <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span></a></li>
+      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span></a></li>
+      <li class="menu-sep" role="separator"></li>
+      <li><a class="menu-item" href="/logout"><span class="emoji" aria-hidden="true">🚪</span><span>Se déconnecter</span></a></li>
+      <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete"><span class="emoji" aria-hidden="true">🗑️</span><span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span></button></li>
+    </ul>
+    {% if my_athlete_id %}<p class="menu-id">Votre identifiant Strava : <b class="num">{{ my_athlete_id }}</b></p>{% endif %}
+    <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-delete" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="alertdialog" aria-modal="true" aria-labelledby="del-title" aria-describedby="del-desc">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head"><h2 class="sheet__title" id="del-title">Supprimer mes données ?</h2></div>
+    <div class="sheet__body">
+      <p id="del-desc" style="color:var(--ink-2)">Unlock révoque son accès à votre compte Strava et efface immédiatement tout ce qui vous concerne de nos serveurs. Vos activités sur Strava ne sont pas touchées.</p>
+      <form method="post" action="/delete-account" style="display:grid; gap:10px">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn--primary btn--block" style="background:var(--danger)">Supprimer définitivement</button>
+        <button type="button" class="btn btn--ghost btn--block" data-sheet-close>Annuler</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="sheet" id="sheet-ios" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="ios-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="ios-title">Installer Unlock</h2>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+    </div>
+    <ol class="steps">
+      <li><span>Ouvrez cette page dans <strong>Safari</strong>.</span></li>
+      <li><span>Touchez le bouton Partager <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Partager"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> en bas de l'écran.</span></li>
+      <li><span>Choisissez <strong>Sur l'écran d'accueil</strong>, puis <strong>Ajouter</strong>.</span></li>
+    </ol>
+    <p style="margin-top:16px; color:var(--muted); font-size:var(--fs-sm)">L'icône Unlock apparaîtra à côté de vos autres apps 🎉</p>
+  </div>
+</div>
+{% endblock %}
+
+<div id="busy" class="busy" aria-live="polite"><span class="busy__dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Mise à jour…</span></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>
