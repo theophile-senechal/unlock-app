@@ -51,6 +51,7 @@ Voir `.env.example`. Nouvelles : `SITE_OWNER`, `ENABLE_LEADERBOARD` (false par d
 
 Dans Supabase (SQL Editor), **avant** de déployer :
 - première fois : `migrations/2026-10-29_tout_en_un.sql` (nettoyage, cache d'activités, sécurité, tableau de bord) ;
+- mode « Communes » : `migrations/2026-10-30_departements.sql` (un index, sans risque, relançable) ;
 - si `tout_en_un.sql` a déjà été lancé avant le tableau de bord : `migrations/2026-10-29_admin.sql`.
 
 Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_events`, `app_daily_stats`, `app_kv`.
@@ -71,6 +72,7 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 4. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Mode « Communes » de la carte** (3e mode après Tracés et Blocs) : toutes les communes d'un département, colorées selon le % exploré (0 % en gris clair), contours de toutes les communes et du département. Panneau : communes explorées / total, à 100 %, plus de 50 %, top 5 départements, top 5 communes, légende. Infobulle au clic (ordinateur, placée à droite / gauche / au-dessus / en dessous selon la place, jamais sous le panneau) ; fiche dans le panneau du bas (mobile). Département par défaut : meilleur % de communes visitées parmi ceux où au moins 5 communes sont visitées (`DEP_MIN_COMMUNES`), sinon le plus de communes visitées. Contours servis par `/api/departement/<code>/geo` (donnée publique, cache CDN 7 jours). Communes identifiées par code INSEE (homonymes distingués), jusqu'à 300 communes analysées.
 - **Mes communes** (Stats, `/api/communes`) : km parcourus *dans* chaque commune, sorties, % exploré, blocs, 1re et dernière visite ; tri par colonne (ordinateur) ou menu « Trier par » (mobile, en cartes) ; recherche ; 10 premières puis « Voir tout ». Filtres année/sport/taille appliqués. Jusqu'à 100 communes, les plus fréquentées d'abord (`MAX_COMMUNES`).
 - **Vos habitudes** (Stats) : sorties par semaine (comparées aux 4 dernières semaines), km par semaine, créneau horaire favori, jour favori, deux graphiques. Les filtres année/sport s'appliquent.
 

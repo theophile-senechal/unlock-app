@@ -14,6 +14,7 @@
       <div class="seg" role="group" aria-label="Type d'affichage">
         <button type="button" class="seg__btn" data-mode="route" aria-pressed="true"><span class="emoji" aria-hidden="true">〰️</span>Tracés</button>
         <button type="button" class="seg__btn" data-mode="grid" aria-pressed="false"><span class="emoji" aria-hidden="true">🧩</span>Blocs</button>
+        <button type="button" class="seg__btn" data-mode="communes" aria-pressed="false"><span class="emoji" aria-hidden="true">🏘️</span>Communes</button>
       </div>
       <div class="maptools__spacer"></div>
       <div class="maptools__filters" id="filters-inline"></div>
@@ -45,7 +46,7 @@
           <p id="filter-summary">Tous les sports, toutes les années</p>
         </div>
 
-        <div class="stats">
+        <div class="stats" id="act-stats">
           <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">🏃</span>Activités</span><span class="stat__val" id="s-count">–</span></div>
           <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">📏</span>Distance</span><span class="stat__val"><span id="s-dist">–</span><small>km</small></span></div>
           <div class="stat stat--wide" id="stat-third">
@@ -55,11 +56,65 @@
           </div>
         </div>
 
+        <!-- Mode Communes : en-tête du département (visible panneau replié) -->
+        <div class="dep-top" id="dep-top" hidden>
+          <div class="dep-head">
+            <div class="dep-head__name"><span class="emoji" aria-hidden="true">🏘️</span><span id="dep-name">–</span> <span class="dep-head__code" id="dep-code"></span></div>
+            <label class="btn btn--outline btn--sm dep-change">Changer<span class="sr-only"> de département</span>
+              <select id="dep-select" aria-label="Choisir un département"></select></label>
+          </div>
+          <div class="dep-kpi">
+            <span class="dep-kpi__lbl"><span class="emoji" aria-hidden="true">🏘️</span>Communes explorées</span>
+            <span class="dep-kpi__val"><span id="dk-visited">–</span> <small>/ <span id="dk-total">–</span></small></span>
+            <span class="dep-kpi__sub"><span id="dk-pct">–</span> des communes du département</span>
+            <div class="bar"><div class="bar__fill" id="dk-fill"></div></div>
+          </div>
+          <div class="stats dep-stats">
+            <div class="stat dep-stats__m"><span class="stat__top">Communes</span><span class="stat__val"><span id="ds-visited">–</span><small id="ds-total"></small></span></div>
+            <div class="stat dep-stats__m"><span class="stat__top">Département</span><span class="stat__val" id="ds-pct">–</span></div>
+            <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">💯</span>À 100&nbsp;%</span><span class="stat__val" id="ds-100">–</span></div>
+            <div class="stat dep-stats__d"><span class="stat__top"><span class="emoji" aria-hidden="true">🔥</span>Plus de 50&nbsp;%</span><span class="stat__val" id="ds-50">–</span></div>
+          </div>
+        </div>
+
+        <!-- Mode Communes, mobile : fiche de la commune touchée -->
+        <div class="ccard-m" id="commune-card" hidden>
+          <div class="ccard-m__nav">
+            <button type="button" class="ccard-m__back" id="cc-back">‹ <span id="cc-dep">Département</span></button>
+            <button type="button" class="iconbtn iconbtn--sm" id="cc-close" aria-label="Fermer la fiche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+          </div>
+          <div class="ccard-m__head">
+            <div class="ccard-m__id"><div class="ccard-m__name" id="cc-name"></div><div class="ccard-m__sub" id="cc-sub"></div></div>
+            <div class="ccard-m__pct" id="cc-pct"></div>
+          </div>
+          <div class="bar"><div class="bar__fill" id="cc-fill"></div></div>
+          <div class="ccard-m__blocks" id="cc-blocks"></div>
+          <div class="stats ccard-m__stats" id="cc-stats"></div>
+          <button type="button" class="btn btn--primary btn--block" id="cc-go" style="margin-top:14px"><span class="emoji" aria-hidden="true">🧩</span>Voir mes blocs ici</button>
+        </div>
+
         <div class="panel__more" id="panel-more">
           <div id="route-hint" class="hint">
             <span class="emoji" aria-hidden="true">💡</span>
             <span>Passez en <button type="button" data-mode="grid">mode Blocs</button> pour voir quelles communes vous avez explorées, et à quel point.</span>
           </div>
+
+          <div id="dep-extra" hidden>
+            <section class="section" id="dep-rank-section">
+              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🗺️</span>Vos 5 départements</h2></div>
+              <ol class="rank" id="dep-rank"></ol>
+            </section>
+            <section class="section" id="dep-top-section">
+              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🏆</span>Vos 5 communes</h2></div>
+              <ol class="rank" id="dep-communes"></ol>
+            </section>
+            <div class="legend legend--dep">
+              <div class="section__title" style="font-size:var(--fs-md)">Part explorée de chaque commune</div>
+              <div class="dlegend"><span class="dlegend__zero"></span><span class="dlegend__steps"><i style="--a:.16"></i><i style="--a:.30"></i><i style="--a:.48"></i><i style="--a:.70"></i><i style="--a:.92"></i></span></div>
+              <div class="dlegend__lbl"><span>0&nbsp;%</span><span>1&nbsp;%</span><span>100&nbsp;%</span></div>
+            </div>
+          </div>
+          <div class="empty" id="dep-empty" hidden><span class="emoji">🗺️</span>Aucune commune française traversée pour ces filtres.</div>
 
           <div id="grid-extra" hidden>
             <section class="section">
@@ -101,6 +156,18 @@
         </div>
       </div>
     </aside>
+
+    <div class="ctip" id="ctip" role="dialog" aria-labelledby="ct-name" hidden>
+      <button type="button" class="ctip__x" id="ct-close" aria-label="Fermer">×</button>
+      <div class="ctip__name" id="ct-name"></div>
+      <div class="ctip__sub" id="ct-sub"></div>
+      <div class="ctip__row"><span class="ctip__pct" id="ct-pct"></span><span class="ctip__lbl">explorés</span></div>
+      <div class="bar ctip__bar"><div class="bar__fill" id="ct-fill"></div></div>
+      <div class="ctip__blocks" id="ct-blocks"></div>
+      <div class="ctip__meta" id="ct-meta"></div>
+      <button type="button" class="ctip__link" id="ct-go"><span class="emoji" aria-hidden="true">🧩</span>Voir mes blocs ici →</button>
+      <i class="ctip__arrow" id="ct-arrow"></i>
+    </div>
   </main>
 
   {{ ui.bottomnav(active) }}
@@ -128,12 +195,13 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const BRAND = '#6D071A';
-  const mqDesk = window.matchMedia('(min-width: 1280px)');
+  const mqDesk = window.matchMedia('(min-width: 1440px)');
   const mqFloat = window.matchMedia('(min-width: 768px)');
 
   /* ---------- Map ---------- */
-  const map = L.map('map', { zoomControl: false, preferCanvas: true, attributionControl: true }).setView([47.65, -2.75], 12);
+  const map = L.map('map', { zoomControl: false, preferCanvas: true, attributionControl: true, zoomSnap: 0.5, zoomDelta: 0.5 }).setView([47.65, -2.75], 12);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
+  Unlock.map = map;   // accès pour les tests automatiques
   Unlock.baseLayer(map);
   const traceLayer = L.layerGroup().addTo(map);
   const cityLayer = L.layerGroup().addTo(map);
@@ -165,7 +233,7 @@
      Open/close are animated with transforms only (no height animation = no layout jank). */
   (function swipePanel() {
     const scroller = panel.querySelector('.panel__scroll');
-    const stats = panel.querySelector('.stats');
+    const stats = { getBoundingClientRect: () => ([...panel.querySelectorAll('.stats, .ccard-m__head')].find((e) => e.offsetParent) || panel).getBoundingClientRect() };
     let y0 = 0, x0 = 0, t0 = 0, dy = 0, drag = null, animating = false;
     // Visible height of the panel once collapsed (grip + stat row)
     const collapsedH = () => Math.round(stats.getBoundingClientRect().bottom - panel.getBoundingClientRect().top + 16);
@@ -253,12 +321,16 @@
     if (m === mode) return;
     mode = m;
     document.querySelectorAll('.seg__btn[data-mode]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.mode === m)));
-    $('grid-select').hidden = m !== 'grid';
+    $('grid-select').hidden = m === 'route';
     $('grid-extra').hidden = m !== 'grid';
-    $('route-hint').hidden = m === 'grid';
-    $('panel-title').textContent = m === 'grid' ? 'Vos blocs' : 'Vos tracés';
+    $('route-hint').hidden = m !== 'route';
+    $('act-stats').hidden = m === 'communes';
+    $('panel-title').textContent = m === 'grid' ? 'Vos blocs' : m === 'communes' ? 'Vos communes' : 'Vos tracés';
+    document.body.classList.toggle('mode-communes', m === 'communes');
+    if (m !== 'communes') Dep.leave();
     if (m === 'grid' && !mqFloat.matches) setPanel(true);
     renderStats(); render();
+    if (m === 'communes') Dep.enter();
   }
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); });
 
@@ -314,7 +386,7 @@
     const parts = [];
     if (ss.value !== 'all') parts.push(ss.selectedOptions[0].text.replace(/^\S+\s+/, ''));
     if (ys.value !== 'all') parts.push(ys.value);
-    if (mode === 'grid') parts.push(`blocs de ${gs.value} m`);
+    if (mode !== 'route') parts.push(`blocs de ${gs.value} m`);
     return parts.length ? parts.join(', ') : 'Toutes vos activités';
   }
 
@@ -351,6 +423,7 @@
   function render() {
     if (!data) return;
     traceLayer.clearLayers(); cityLayer.clearLayers();
+    if (mode === 'communes') { Dep.refresh(); return; }
     let bounds = null;
     if (mode === 'grid') {
       const size = data.grid_size_used, cells = data.grid_cells || [];
@@ -436,6 +509,229 @@
     if (c) { showCity(c, true); e.target.value = ''; e.target.blur(); if (!mqFloat.matches) setPanel(false); }
     else Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`);
   });
+
+
+  /* ---------- Mode Communes : un département, toutes ses communes ---------- */
+  const Dep = (function () {
+    const layer = L.layerGroup().addTo(map);
+    const geoCache = {};
+    let cur = null, geo = null, selected = null, entered = false, selLayer = null;
+    const STEPS = [[10, .16], [25, .30], [50, .48], [75, .70], [101, .92]];
+    const alpha = (p) => STEPS.find(([max]) => p < max)[1];
+    const pctTxt = (p) => Unlock.fmt(p, p > 0 && p < 10 ? 1 : 0) + ' %';
+    const deps = () => (data && data.departements) || [];
+    const cityByCode = () => { const m = {}; (data.top_municipalities || []).forEach((c) => { if (c.code) m[c.code] = c; }); return m; };
+
+    async function getGeo(code) {
+      if (geoCache[code]) return geoCache[code];
+      Unlock.busy.on('Chargement du département', (deps().find((d) => d.code === code) || {}).name || code, { veil: false });
+      try { geoCache[code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(code)}/geo`); }
+      finally { Unlock.busy.off(); }
+      return geoCache[code];
+    }
+
+    function fillHeader() {
+      const d = deps().find((x) => x.code === cur);
+      const has = !!d;
+      $('dep-top').hidden = !has || !!(selected && !mqFloat.matches);
+      $('dep-extra').hidden = !has || !!(selected && !mqFloat.matches);
+      $('dep-empty').hidden = has;
+      if (!has) return;
+      $('dep-name').textContent = d.name; $('dep-code').textContent = `(${d.code})`;
+      $('dk-visited').textContent = Unlock.fmt(d.visited); $('dk-total').textContent = Unlock.fmt(d.total);
+      $('dk-pct').textContent = pctTxt(d.percent);
+      requestAnimationFrame(() => { $('dk-fill').style.width = Math.max(1.5, d.percent) + '%'; });
+      $('ds-visited').textContent = Unlock.fmt(d.visited); $('ds-total').textContent = '/' + Unlock.fmt(d.total);
+      $('ds-pct').textContent = pctTxt(d.percent); $('ds-100').textContent = Unlock.fmt(d.at100); $('ds-50').textContent = Unlock.fmt(d.over50);
+      const sel = $('dep-select'); sel.innerHTML = '';
+      deps().forEach((x) => sel.add(new Option(`${x.name} (${x.code})`, x.code)));
+      sel.value = cur;
+      // Top 5 départements
+      $('dep-rank').innerHTML = deps().slice(0, 5).map((x, i) => `<li><button type="button" class="rank__item" data-dep="${Unlock.esc(x.code)}" aria-current="${x.code === cur}">
+        <span class="rank__pos">${i + 1}</span><span class="rank__name">${Unlock.esc(x.name)}<small class="rank__sub">${Unlock.esc(x.code)} · ${Unlock.fmt(x.visited)}/${Unlock.fmt(x.total)} communes</small></span>
+        <span class="rank__val rank__val--big">${pctTxt(x.percent)}</span></button></li>`).join('');
+      // Top 5 communes du département
+      const cs = (data.top_municipalities || []).filter((c) => c.dep === cur)
+        .sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks).slice(0, 5);
+      $('dep-communes').innerHTML = cs.map((c, i) => `<li><button type="button" class="rank__item" data-code="${Unlock.esc(c.code)}" aria-current="${!!selected && selected.code === c.code}">
+        <span class="rank__pos">${i + 1}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}</span>
+        <span class="rank__val">${pctTxt(c.stats.percent)}<small>${Unlock.fmt(c.stats.blocks)}/${Unlock.fmt(c.stats.total_blocks)} blocs</small></span></button></li>`).join('');
+    }
+
+    function draw(fit) {
+      layer.clearLayers(); selLayer = null;
+      if (!geo) return;
+      const byCode = cityByCode();
+      const zero = [], vis = [];
+      geo.communes.forEach((c) => ((byCode[c.code] ? vis : zero).push(c)));
+      const mk = (c, style) => {
+        const p = L.polygon(c.shape, { ...style, smoothFactor: 0.5 }).addTo(layer);
+        p.on('click', (e) => { L.DomEvent.stopPropagation(e); select(c.code, p); });
+        p.on('mouseover', () => { if (mqFloat.matches) p.setStyle({ weight: 2 }); });
+        p.on('mouseout', () => { if (mqFloat.matches) p.setStyle({ weight: style.weight }); });
+        c._layer = p;
+      };
+      zero.forEach((c) => mk(c, { color: '#D3CED7', weight: 1, fillColor: '#F8F7F9', fillOpacity: 0.92 }));
+      vis.forEach((c) => { const st = byCode[c.code].stats; mk(c, { color: '#FFFFFF', weight: 1.2, fillColor: BRAND, fillOpacity: alpha(st.percent) }); });
+      if (geo.outline && geo.outline.length) L.polygon(geo.outline, { color: '#8F8896', weight: 2, fill: false, interactive: false }).addTo(layer);
+      if (fit) {
+        const b = L.featureGroup(layer.getLayers()).getBounds();
+        if (b.isValid()) map.fitBounds(b, fitPadding());
+      }
+      if (selected) { const c = geo.communes.find((x) => x.code === selected.code); if (c) select(c.code, c._layer, true); else unselect(); }
+    }
+
+    async function show(code, fit) {
+      cur = code; unselect(true);
+      fillHeader();
+      if (!code) { layer.clearLayers(); geo = null; return; }
+      try { geo = await getGeo(code); } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Contours du département indisponibles pour le moment.'); return; }
+      if (cur !== code || mode !== 'communes') return;
+      draw(fit);
+    }
+
+    /* ----- Sélection d'une commune ----- */
+    function info(code) {
+      const g = geo.communes.find((x) => x.code === code);
+      const c = cityByCode()[code];
+      const d = deps().find((x) => x.code === cur) || {};
+      const ranked = (data.top_municipalities || []).filter((x) => x.dep === cur).sort((a, b) => b.stats.percent - a.stats.percent);
+      const rank = c ? ranked.indexOf(c) + 1 : 0;
+      return { code, name: c ? c.name : g.name, dep: d.name || '', stats: c ? c.stats : null, rank };
+    }
+    function select(code, poly, keepView) {
+      selected = info(code);
+      if (selLayer) layer.removeLayer(selLayer);
+      selLayer = L.polygon(poly.getLatLngs(), { color: '#2A030B', weight: 3, fill: false, interactive: false }).addTo(layer);
+      selected.bounds = poly.getBounds();
+      const s = selected.stats, p = s ? s.percent : 0;
+      const sub = s ? `${selected.rank}<sup>e</sup> commune la plus explorée${mqFloat.matches ? '' : ' du département'}` : 'Pas encore explorée';
+      const blocks = s ? `<b>${Unlock.fmt(s.blocks)}</b> / ${Unlock.fmt(s.total_blocks)} blocs explorés` : 'Aucun bloc exploré pour l’instant';
+      if (mqFloat.matches) {
+        $('ct-name').textContent = selected.name;
+        $('ct-sub').innerHTML = `${Unlock.esc(selected.dep)} · ${sub}`;
+        $('ct-pct').textContent = pctTxt(p);
+        $('ct-fill').style.width = Math.max(p ? 1.5 : 0, p) + '%';
+        $('ct-blocks').innerHTML = blocks;
+        $('ct-meta').textContent = s ? `${Unlock.fmt(s.activities)} sortie${s.activities > 1 ? 's' : ''} · ${Unlock.fmt(s.km, s.km < 10 ? 1 : 0)} km ici` : 'Une sortie qui la traverse suffit pour la débloquer.';
+        $('ct-go').hidden = !s;
+        $('ctip').hidden = false;
+        placeTip();
+      } else {
+        $('cc-dep').textContent = selected.dep;
+        $('cc-name').textContent = selected.name;
+        $('cc-sub').innerHTML = sub;
+        $('cc-pct').textContent = pctTxt(p);
+        $('cc-fill').style.width = Math.max(p ? 1.5 : 0, p) + '%';
+        $('cc-blocks').innerHTML = blocks;
+        $('cc-stats').innerHTML = s ? `<div class="stat"><span class="stat__top">Sorties</span><span class="stat__val">${Unlock.fmt(s.activities)}</span></div>
+          <div class="stat"><span class="stat__top">Distance</span><span class="stat__val">${Unlock.fmt(s.km, s.km < 10 ? 1 : 0)}<small>km</small></span></div>
+          <div class="stat"><span class="stat__top">Restant</span><span class="stat__val">${Unlock.fmt(s.total_blocks - s.blocks)}<small>blocs</small></span></div>` : '';
+        $('cc-stats').hidden = !s; $('cc-go').hidden = !s;
+        $('commune-card').hidden = false; $('dep-top').hidden = true; $('dep-extra').hidden = true;
+        $('panel').querySelector('.panel__scroll').scrollTop = 0;
+        if (!keepView) setPanel(true);
+        requestAnimationFrame(() => keepVisible());
+      }
+      document.querySelectorAll('#dep-communes .rank__item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.code === code)));
+    }
+    function unselect(silent) {
+      selected = null;
+      if (selLayer) { layer.removeLayer(selLayer); selLayer = null; }
+      $('ctip').hidden = true;
+      if (!$('commune-card').hidden) { $('commune-card').hidden = true; if (!silent) fillHeader(); }
+      document.querySelectorAll('#dep-communes .rank__item').forEach((b) => b.setAttribute('aria-current', 'false'));
+    }
+
+    // Zone de carte réellement libre (hors panneau, barre d'outils, bords)
+    function freeArea() {
+      const mv = $('mapview').getBoundingClientRect(), pr = panel.getBoundingClientRect(), tr = document.querySelector('.maptools').getBoundingClientRect(), M = 12;
+      return mqFloat.matches
+        ? { l: pr.right - mv.left + M, t: tr.bottom - mv.top + M, r: mv.width - M, b: mv.height - M }
+        : { l: M, t: tr.bottom - mv.top + M, r: mv.width - M, b: pr.top - mv.top - M };
+    }
+    // Infobulle (ordinateur) : à droite de la commune, sinon à gauche, au-dessus, en dessous ; jamais hors de la zone libre
+    function placeTip() {
+      const tip = $('ctip'); if (tip.hidden || !selected) return;
+      const F = freeArea(), b = selected.bounds;
+      const nw = map.latLngToContainerPoint(b.getNorthWest()), se = map.latLngToContainerPoint(b.getSouthEast());
+      const T = { l: nw.x, t: nw.y, r: se.x, b: se.y }; T.cx = (T.l + T.r) / 2; T.cy = (T.t + T.b) / 2;
+      const off = T.r < F.l || T.l > F.r || T.b < F.t || T.t > F.b;
+      tip.classList.toggle('is-off', off); if (off) return;
+      const w = tip.offsetWidth, h = tip.offsetHeight, G = 14, cl = (v, a, z) => Math.max(a, Math.min(z, v));
+      // a very large commune on screen: aim at its visible centre rather than its edges
+      const vis = { l: Math.max(T.l, F.l), r: Math.min(T.r, F.r), t: Math.max(T.t, F.t), b: Math.min(T.b, F.b) };
+      vis.cx = (vis.l + vis.r) / 2; vis.cy = (vis.t + vis.b) / 2;
+      const tries = [
+        ['right', vis.r + G, cl(vis.cy - h / 2, F.t, F.b - h), (x) => x + w <= F.r],
+        ['left', vis.l - G - w, cl(vis.cy - h / 2, F.t, F.b - h), (x) => x >= F.l],
+        ['top', cl(vis.cx - w / 2, F.l, F.r - w), vis.t - G - h, (x, y) => y >= F.t],
+        ['bottom', cl(vis.cx - w / 2, F.l, F.r - w), vis.b + G, (x, y) => y + h <= F.b],
+      ];
+      let pick = tries.find(([, x, y, ok]) => ok(x, y));
+      if (!pick) pick = ['inside', cl(vis.cx - w / 2, F.l, F.r - w), cl(vis.cy - h / 2, F.t, F.b - h)];
+      const [side, x, y] = pick;
+      tip.style.left = x + 'px'; tip.style.top = y + 'px'; tip.dataset.side = side;
+      const a = $('ct-arrow'); a.style.cssText = '';
+      if (side === 'right' || side === 'left') { a.style.top = cl(vis.cy - y - 7, 18, h - 32) + 'px'; a.style[side === 'right' ? 'left' : 'right'] = '-7px'; }
+      else if (side === 'top' || side === 'bottom') { a.style.left = cl(vis.cx - x - 7, 18, w - 32) + 'px'; a.style[side === 'top' ? 'bottom' : 'top'] = '-7px'; }
+    }
+    // Mobile : la commune touchée reste visible au-dessus du panneau
+    function keepVisible() {
+      if (!selected || mqFloat.matches) return;
+      const F = freeArea(), c = map.latLngToContainerPoint(selected.bounds.getCenter());
+      const tx = (F.l + F.r) / 2, ty = F.t + (F.b - F.t) * 0.5;
+      if (c.y > F.b - 24 || c.y < F.t + 24 || c.x < F.l + 24 || c.x > F.r - 24) map.panBy([c.x - tx, c.y - ty], { animate: true, duration: 0.35 });
+    }
+
+    map.on('move zoom', placeTip);
+    map.on('click', () => { if (mode === 'communes' && selected) unselect(); });
+    window.addEventListener('resize', () => { if (selected && mqFloat.matches) placeTip(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) unselect(); });
+    $('ct-close').addEventListener('click', () => unselect());
+    $('cc-close').addEventListener('click', () => unselect());
+    $('cc-back').addEventListener('click', () => unselect());
+    const toBlocks = () => {
+      if (!selected) return;
+      const c = (data.top_municipalities || []).find((x) => x.code === selected.code); if (!c) return;
+      unselect(true); setMode('grid'); showCity(c, true); $('city-search').value = '';
+    };
+    $('ct-go').addEventListener('click', toBlocks); $('cc-go').addEventListener('click', toBlocks);
+    $('dep-select').addEventListener('change', (e) => show(e.target.value, true));
+    $('dep-rank').addEventListener('click', (e) => { const b = e.target.closest('[data-dep]'); if (b && b.dataset.dep !== cur) show(b.dataset.dep, true); });
+    $('dep-communes').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-code]'); if (!b || !geo) return;
+      const c = geo.communes.find((x) => x.code === b.dataset.code); if (!c || !c._layer) return;
+      // On cadre la commune avec ses voisines autour (contexte) ; sur ordinateur, place libre à droite pour l'infobulle
+      const zone = c._layer.getBounds().pad(1.2);
+      if (!mqFloat.matches) { select(c.code, c._layer); map.fitBounds(zone, { ...fitPadding(), maxZoom: 13 }); }
+      else {
+        const pr = panel.getBoundingClientRect().width;
+        map.fitBounds(zone, { paddingTopLeft: [pr + 40, 90], paddingBottomRight: [$('ctip').offsetWidth || 260, 30], maxZoom: 13 });
+        setTimeout(() => select(c.code, c._layer), 350);
+      }
+    });
+
+    mqFloat.addEventListener('change', () => { if (selected) unselect(); });
+
+    return {
+      enter() {
+        entered = true;
+        const list = deps();
+        const keep = list.some((d) => d.code === cur);
+        show(keep ? cur : (list[0] || {}).code || null, true);
+      },
+      refresh() {          // nouvelles données (filtres) : on garde le département et la vue
+        if (!entered) return;
+        const list = deps();
+        if (!list.some((d) => d.code === cur)) { show((list[0] || {}).code || null, true); return; }
+        const sc = selected && selected.code;
+        fillHeader(); draw(false);
+        if (sc && geo) { const c = geo.communes.find((x) => x.code === sc); if (c) select(sc, c._layer, true); }
+      },
+      leave() { entered = false; unselect(true); layer.clearLayers(); $('dep-top').hidden = true; $('dep-extra').hidden = true; $('dep-empty').hidden = true; $('commune-card').hidden = true; },
+    };
+  })();
 
   mqFloat.addEventListener('change', () => { setPanel(mqFloat.matches); map.invalidateSize(); });
   window.addEventListener('resize', () => map.invalidateSize());

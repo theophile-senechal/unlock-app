@@ -41,7 +41,7 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.13'
+ASSET_VERSION = '2026.10.14'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -183,7 +183,7 @@ def _data_version(activities):
 # 6. FONCTIONS UTILITAIRES
 # ============================================================
 M_PER_DEG = 111320.0
-MAX_COMMUNES = 100   # communes analysées au maximum (les plus fréquentées d'abord)
+MAX_COMMUNES = 300   # communes analysées au maximum (les plus fréquentées d'abord)
 
 def _dlon(lat_c, dlat):
     """Largeur d'un bloc en degrés de longitude à cette latitude, pour des blocs vraiment carrés
@@ -801,6 +801,97 @@ def compute_habits(times, sel_year):
     }
 
 # ============================================================
+# DÉPARTEMENTS (mode « Communes » de la carte)
+# ============================================================
+DEPARTEMENTS = {
+    '01': 'Ain', '02': 'Aisne', '03': 'Allier', '04': 'Alpes-de-Haute-Provence', '05': 'Hautes-Alpes', '06': 'Alpes-Maritimes',
+    '07': 'Ardèche', '08': 'Ardennes', '09': 'Ariège', '10': 'Aube', '11': 'Aude', '12': 'Aveyron', '13': 'Bouches-du-Rhône',
+    '14': 'Calvados', '15': 'Cantal', '16': 'Charente', '17': 'Charente-Maritime', '18': 'Cher', '19': 'Corrèze',
+    '2A': 'Corse-du-Sud', '2B': 'Haute-Corse', '21': "Côte-d'Or", '22': "Côtes-d'Armor", '23': 'Creuse', '24': 'Dordogne',
+    '25': 'Doubs', '26': 'Drôme', '27': 'Eure', '28': 'Eure-et-Loir', '29': 'Finistère', '30': 'Gard', '31': 'Haute-Garonne',
+    '32': 'Gers', '33': 'Gironde', '34': 'Hérault', '35': 'Ille-et-Vilaine', '36': 'Indre', '37': 'Indre-et-Loire', '38': 'Isère',
+    '39': 'Jura', '40': 'Landes', '41': 'Loir-et-Cher', '42': 'Loire', '43': 'Haute-Loire', '44': 'Loire-Atlantique', '45': 'Loiret',
+    '46': 'Lot', '47': 'Lot-et-Garonne', '48': 'Lozère', '49': 'Maine-et-Loire', '50': 'Manche', '51': 'Marne', '52': 'Haute-Marne',
+    '53': 'Mayenne', '54': 'Meurthe-et-Moselle', '55': 'Meuse', '56': 'Morbihan', '57': 'Moselle', '58': 'Nièvre', '59': 'Nord',
+    '60': 'Oise', '61': 'Orne', '62': 'Pas-de-Calais', '63': 'Puy-de-Dôme', '64': 'Pyrénées-Atlantiques', '65': 'Hautes-Pyrénées',
+    '66': 'Pyrénées-Orientales', '67': 'Bas-Rhin', '68': 'Haut-Rhin', '69': 'Rhône', '70': 'Haute-Saône', '71': 'Saône-et-Loire',
+    '72': 'Sarthe', '73': 'Savoie', '74': 'Haute-Savoie', '75': 'Paris', '76': 'Seine-Maritime', '77': 'Seine-et-Marne',
+    '78': 'Yvelines', '79': 'Deux-Sèvres', '80': 'Somme', '81': 'Tarn', '82': 'Tarn-et-Garonne', '83': 'Var', '84': 'Vaucluse',
+    '85': 'Vendée', '86': 'Vienne', '87': 'Haute-Vienne', '88': 'Vosges', '89': 'Yonne', '90': 'Territoire de Belfort',
+    '91': 'Essonne', '92': 'Hauts-de-Seine', '93': 'Seine-Saint-Denis', '94': 'Val-de-Marne', '95': "Val-d'Oise",
+    '971': 'Guadeloupe', '972': 'Martinique', '973': 'Guyane', '974': 'La Réunion', '976': 'Mayotte',
+}
+DEP_MIN_COMMUNES = 5          # minimum de communes visitées pour être classé au % (évite « Paris = 100 % »)
+_DEP_TOTALS = {}              # nombre de communes par département (donnée publique, gardée en mémoire)
+_DEP_GEO = {}                 # contours simplifiés par département (donnée publique)
+
+def dep_of(code):
+    if not code: return None
+    code = str(code)
+    return code[:3] if code.startswith('97') else code[:2]
+
+def dep_totals():
+    if not _DEP_TOTALS and DB_URL:
+        try:
+            with _engine().connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT CASE WHEN code_insee LIKE '97%' THEN left(code_insee, 3) ELSE left(code_insee, 2) END AS dep, count(*) AS n
+                    FROM communes WHERE code_insee IS NOT NULL GROUP BY 1"""))
+                _DEP_TOTALS.update({r.dep: int(r.n) for r in rows})
+        except Exception as e:
+            print(f"Erreur comptage départements: {e}")
+    return _DEP_TOTALS
+
+def departements_summary(cities):
+    """Vos départements : communes visitées / total. Classement : meilleur % parmi ceux où au moins
+    DEP_MIN_COMMUNES communes sont visitées, puis les autres par nombre de communes visitées."""
+    totals = dep_totals()
+    by_dep = defaultdict(list)
+    for c in cities:
+        if c.get('dep'): by_dep[c['dep']].append(c)
+    out = []
+    for dep, cs in by_dep.items():
+        total = max(totals.get(dep, 0), len(cs))
+        out.append({"code": dep, "name": DEPARTEMENTS.get(dep, dep), "visited": len(cs), "total": total,
+                    "percent": round(len(cs) / total * 100, 1),
+                    "at100": sum(1 for c in cs if c['stats']['percent'] >= 100),
+                    "over50": sum(1 for c in cs if c['stats']['percent'] >= 50)})
+    out.sort(key=lambda d: (d['visited'] >= DEP_MIN_COMMUNES, d['percent'] if d['visited'] >= DEP_MIN_COMMUNES else d['visited'], d['visited']), reverse=True)
+    return out
+
+def _rings_latlon(geojson):
+    """GeoJSON (lon, lat) -> liste de polygones [[anneau extérieur, trous...], ...] en (lat, lon) pour Leaflet."""
+    g = json.loads(geojson) if isinstance(geojson, str) else geojson
+    polys = g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']] if g['type'] == 'Polygon' else []
+    return [[[[round(y, 5), round(x, 5)] for x, y in ring] for ring in poly] for poly in polys]
+
+@app.route('/api/departement/<dep>/geo')
+def departement_geo(dep):
+    """Contours simplifiés de toutes les communes d'un département. Donnée publique (geo.api.gouv.fr) :
+    aucune donnée Strava, donc mise en cache longue durée par le CDN de Vercel."""
+    dep = dep.upper()
+    if dep not in DEPARTEMENTS: return jsonify({"error": "Département inconnu"}), 404
+    if dep not in _DEP_GEO:
+        if not DB_URL: return jsonify({"error": "Base indisponible"}), 503
+        try:
+            with _engine().connect() as conn:
+                rows = conn.execute(text("""
+                    SELECT code_insee, nom_commune, ST_AsGeoJSON(ST_SimplifyPreserveTopology(geometry, 0.0004), 5) AS g
+                    FROM communes WHERE code_insee LIKE :p"""), {"p": dep + '%'}).fetchall()
+                outline = conn.execute(text("""
+                    SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Union(geometry), 0.0008), 5) AS g
+                    FROM communes WHERE code_insee LIKE :p"""), {"p": dep + '%'}).scalar()
+        except Exception as e:
+            print(f"Erreur contours département {dep}: {e}")
+            return jsonify({"error": "Contours indisponibles"}), 500
+        _DEP_GEO[dep] = {"code": dep, "name": DEPARTEMENTS[dep],
+                         "communes": [{"code": r.code_insee, "name": r.nom_commune, "shape": _rings_latlon(r.g)} for r in rows if r.g],
+                         "outline": _rings_latlon(outline) if outline else []}
+    resp = make_response(jsonify(_DEP_GEO[dep]))
+    resp.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400'
+    return resp
+
+# ============================================================
 # 10. API ACTIVITÉS / CARTE / COMMUNES
 # ============================================================
 @app.route('/api/activities')
@@ -838,8 +929,8 @@ def get_communes_route():
     """Tableau « Mes communes » (Stats) : mêmes calculs que la carte, sans les contours."""
     if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
     data = _activities_data(request.args.get('year', 'all'), request.args.get('sport_type', 'all'), _grid_size())
-    rows = [{"name": c["name"], **c["stats"]} for c in data.get("top_municipalities", [])]
-    return jsonify({"communes": rows, "db": bool(DB_URL)})
+    rows = [{"name": c["name"], "code": c.get("code"), "dep": c.get("dep"), **c["stats"]} for c in data.get("top_municipalities", [])]
+    return jsonify({"communes": rows, "departements": data.get("departements", []), "db": bool(DB_URL)})
 
 def _activities_data(sel_year, sel_sport, grid_meters):
     activities = get_strava_activities_cached()
@@ -850,7 +941,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
 
     data = {
         "coords": [], "grid_cells": [], "grid_size_used": grid_size_deg,
-        "available_years": set(), "available_sports": {}, "top_municipalities": [],
+        "available_years": set(), "available_sports": {}, "top_municipalities": [], "departements": [],
         "stats": { "total_distance": 0, "activity_count": 0, "cells_conquered": 0 }
     }
 
@@ -935,19 +1026,22 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                     batch = probe_list[i:i + batch_size]
                     wkt_multipoint = "MULTIPOINT(" + ", ".join(f"{lon} {lat}" for lat, lon in batch) + ")"
                     rows = conn.execute(text("""
-                        SELECT DISTINCT nom_commune, ST_AsGeoJSON(geometry) AS outline
+                        SELECT DISTINCT nom_commune, code_insee, ST_AsGeoJSON(geometry) AS outline
                         FROM communes
                         WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
                     """), {"wkt": wkt_multipoint})
                     for row in rows:
-                        if row.nom_commune in identified_cities: continue
+                        # Clé = code INSEE : des dizaines de communes portent le même nom en France
+                        key = row.code_insee or row.nom_commune
+                        if key in identified_cities: continue
                         try:
                             geom = shp_transform(swap, shp_shape(json.loads(row.outline))).buffer(0)
                             if geom.is_empty: continue
                             # Contour affiché : la plus grande partie de la commune
                             parts = list(geom.geoms) if geom.geom_type == 'MultiPolygon' else [geom]
                             main = max(parts, key=lambda g: g.area)
-                            identified_cities[row.nom_commune] = {
+                            identified_cities[key] = {
+                                "name": row.nom_commune, "code": row.code_insee, "dep": dep_of(row.code_insee),
                                 "geom": geom,
                                 "outline": [[round(y, 6), round(x, 6)] for y, x in main.exterior.coords],
                             }
@@ -963,7 +1057,8 @@ def _activities_data(sel_year, sel_sport, grid_meters):
             S_len, S_act = np.concatenate(seg_len), np.concatenate(seg_act)
         final_cities_list = []
         scores_to_save = []   # classement désactivé (non conforme Strava) : rien n'est enregistré
-        for city_name, city in identified_cities.items():
+        for city_key, city in identified_cities.items():
+            city_name = city['name']
             try:
                 all_cells = commune_cells(city['geom'], grid_size_deg)
                 seen = all_cells & visited
@@ -981,7 +1076,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                         km = float(S_len[box][inside].sum()) / 1000
                 days = sorted(activity_cache[i]['dt'].strftime('%Y-%m-%d') for i in acts)
                 final_cities_list.append({
-                    "name": city_name,
+                    "name": city_name, "code": city['code'], "dep": city['dep'],
                     "outline": city['outline'],
                     "stats": {"blocks": len(seen), "total_blocks": len(all_cells), "percent": pct, "activities": len(acts),
                               "km": round(km, 1), "first": days[0] if days else None, "last": days[-1] if days else None},
@@ -989,7 +1084,13 @@ def _activities_data(sel_year, sel_sport, grid_meters):
             except Exception as e:
                 print(f"Erreur calcul stats ville {city_name}: {e}")
 
+        # Homonymes (ex. plusieurs « Saint-Martin ») : on précise le département dans le nom affiché
+        seen_names = defaultdict(int)
+        for c in final_cities_list: seen_names[c['name']] += 1
+        for c in final_cities_list:
+            if seen_names[c['name']] > 1 and c['dep']: c['name'] = f"{c['name']} ({c['dep']})"
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
+        data["departements"] = departements_summary(final_cities_list)
 
         if scores_to_save and ENABLE_LEADERBOARD:
             try:
