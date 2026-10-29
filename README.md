@@ -49,8 +49,8 @@ Voir `.env.example`. Nouvelles : `SITE_OWNER`, `ENABLE_LEADERBOARD` (false par d
 
 ## Base de données
 
-Exécuter une fois `migrations/2026-10-29_cache_activites.sql` dans Supabase (SQL Editor) **avant** de déployer :
-purge des anciennes données Strava, colonnes `activities.start_epoch` / `fetched_at`, `strava_users.full_sync_at`, index.
+Dans Supabase (SQL Editor), **avant** de déployer :
+- première fois : `migrations/2026-10-29_tout_en_un.sql` (nettoyage, cache d'activités, sécurité, tableau de bord) ;
+- si `tout_en_un.sql` a déjà été lancé avant le tableau de bord : `migrations/2026-10-29_admin.sql`.
 
-Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`. `city_scores` et `api_cache` sont vidées et
-nettoyées mais plus alimentées ; `profiles` n'est plus utilisée (à vider, voir fin de la migration).
+Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_events`, `app_daily_stats`, `app_kv`.

@@ -121,9 +121,7 @@
   place(); mq.addEventListener('change', place);
 
   const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([46.6, 1.9], 6);
-  map.attributionControl.setPrefix(false);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd',
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' }).addTo(map);
+  Unlock.baseLayer(map);
   const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
 
   let data = null, months = [], byMonth = [], cum = [], shown = -1, timer = null, speed = 300, outline = null, first = true;
@@ -159,7 +157,7 @@
     const idx = new Map(months.map((m, i) => [m, i]));
     byMonth = months.map(() => []);
     for (const [lat, lon, , firstSeen] of cells) {
-      byMonth[idx.get(firstSeen)].push(L.rectangle([[lat - size / 2, lon - size / 2], [lat + size / 2, lon + size / 2]],
+      byMonth[idx.get(firstSeen)].push(L.rectangle(Unlock.cellBounds(lat, lon, size),
         { stroke: false, fillColor: BRAND, fillOpacity: .85, interactive: false }));
     }
     let total = 0; cum = byMonth.map((arr) => (total += arr.length));

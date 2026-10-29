@@ -19,7 +19,7 @@
 {% block body %}
 <main class="status">
   <div>
-    <div style="text-align:center"><a class="status__brand" href="/"><img src="{{ url_for('static', filename='img/logo.svg') }}" alt=""><span>unlock</span></a></div>
+    <div style="text-align:center"><a class="status__brand" href="/"><span>unlock</span></a></div>
     <div class="status__card">{% block card %}{% endblock %}</div>
     <footer class="site-foot">{{ ui.footer_links() }}</footer>
   </div>

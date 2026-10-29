@@ -18,6 +18,28 @@
   U.esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   U.fmt = (n, d = 0) => Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/\u202f/g, '\u00a0');
 
+  /* ---------------- Fond de carte ----------------
+     CARTO (clair, épuré) si une clé est configurée, sinon OpenStreetMap passé en gris clair. */
+  U.baseLayer = function (map) {
+    const key = (window.UNLOCK_CONFIG || {}).cartoKey;
+    const osm = '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>';
+    map.attributionControl.setPrefix(false);
+    if (key) {
+      return L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=' + encodeURIComponent(key), {
+        maxZoom: 19, subdomains: 'abcd',
+        attribution: osm + ' © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
+      }).addTo(map);
+    }
+    map.getContainer().classList.add('map--osm');
+    return L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: osm }).addTo(map);
+  };
+
+  /* Emprise d'un bloc carré : la largeur en longitude dépend de la latitude */
+  U.cellBounds = function (lat, lon, size) {
+    const w = size / Math.max(0.05, Math.cos(lat * Math.PI / 180));
+    return [[lat - size / 2, lon - w / 2], [lat + size / 2, lon + w / 2]];
+  };
+
   /* ---------------- Fetch ---------------- */
   U.getJSON = async function (url) {
     const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
@@ -28,23 +50,41 @@
 
   /* ---------------- Full-screen loader ---------------- */
   const loader = () => document.getElementById('loader');
-  let msgTimer = null;
+  let msgTimer = null, patienceTimers = [];
+  // Messages affichés si le chargement dure (1re connexion : tout l'historique Strava est lu)
+  const PATIENCE = [
+    [15000, 'Encore un peu de patience ⏳ La première connexion lit tout votre historique Strava.'],
+    [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées 🚀'],
+    [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
+  ];
+  function setHint(el, text) {
+    let h = el.querySelector('.loader__hint');
+    if (!h) { h = document.createElement('p'); h.className = 'loader__hint'; el.querySelector('.loader__msg').after(h); }
+    h.classList.add('is-fading');
+    setTimeout(() => { h.textContent = text; h.classList.remove('is-fading'); }, 250);
+  }
   U.loader = {
     show(messages) {
       const el = loader(); if (!el) return;
       el.classList.remove('is-hidden');
       const msgEl = el.querySelector('.loader__msg');
-      clearInterval(msgTimer);
+      clearInterval(msgTimer); patienceTimers.forEach(clearTimeout);
       if (msgEl && messages && messages.length) {
+        // Les étapes défilent une fois puis restent sur la dernière (pas de boucle trompeuse)
         let i = 0; msgEl.textContent = messages[0];
         msgTimer = setInterval(() => {
-          i = (i + 1) % messages.length;
+          if (i >= messages.length - 1) { clearInterval(msgTimer); return; }
+          i += 1;
           msgEl.classList.add('is-fading');
           setTimeout(() => { msgEl.textContent = messages[i]; msgEl.classList.remove('is-fading'); }, 250);
-        }, 2200);
+        }, 4000);
       }
+      patienceTimers = PATIENCE.map(([ms, text]) => setTimeout(() => setHint(el, text), ms));
     },
-    hide() { const el = loader(); if (el) el.classList.add('is-hidden'); clearInterval(msgTimer); }
+    hide() {
+      const el = loader(); if (el) el.classList.add('is-hidden');
+      clearInterval(msgTimer); patienceTimers.forEach(clearTimeout);
+    }
   };
 
   /* Busy pill for refreshes that shouldn't block the screen */
@@ -68,7 +108,8 @@
     const s = document.getElementById(id); if (!s) return;
     lastFocus = document.activeElement;
     s.classList.add('is-open'); s.setAttribute('aria-hidden', 'false');
-    const focusable = s.querySelector('[autofocus], button, a, select, input');
+    // Focus sur un bouton plutôt qu'un champ (évite d'ouvrir le clavier / une liste de recherche à l'ouverture)
+    const focusable = s.querySelector('[autofocus]') || s.querySelector('button:not([hidden]), a[href]');
     setTimeout(() => focusable && focusable.focus({ preventScroll: true }), 60);
   };
   U.closeSheet = function (id) {
@@ -84,6 +125,20 @@
     if (close) { e.preventDefault(); U.closeSheet(close.closest('.sheet') && close.closest('.sheet').id); }
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') U.closeSheet(); });
+
+  /* ---------------- Copier dans le presse-papiers ---------------- */
+  document.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-copy]'); if (!b) return;
+    try {
+      await navigator.clipboard.writeText(b.dataset.copy);
+      U.toast('📋 Identifiant copié');
+      b.classList.add('is-done'); setTimeout(() => b.classList.remove('is-done'), 1500);
+    } catch (err) {
+      const t = document.getElementById('my-athlete-id');
+      if (t) { const r = document.createRange(); r.selectNodeContents(t); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+      U.toast('Sélectionné : copiez avec Ctrl+C');
+    }
+  });
 
   /* ---------------- PWA ---------------- */
   const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;

@@ -8,7 +8,11 @@ import json
 from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response
 from dotenv import load_dotenv
 from datetime import datetime
-from shapely.geometry import Point, Polygon
+import math
+import numpy as np
+import shapely
+from shapely.geometry import Point, Polygon, shape as shp_shape
+from shapely.ops import transform as shp_transform
 from shapely.prepared import prep
 from collections import defaultdict
 from sqlalchemy import create_engine, text, table as sa_table, column as sa_column
@@ -37,7 +41,7 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.3'
+ASSET_VERSION = '2026.10.6'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -83,6 +87,7 @@ def inject_globals():
         'legal_updated': '29 octobre 2026',
         'inactive_days': INACTIVE_DAYS,
         'is_admin': is_admin(),
+        'carto_key': os.getenv('CARTO_API_KEY', ''),
         'my_athlete_id': session.get('athlete_id'),
     }
 
@@ -149,31 +154,52 @@ def _data_version(activities):
 # ============================================================
 # 6. FONCTIONS UTILITAIRES
 # ============================================================
+M_PER_DEG = 111320.0
+
+def _dlon(lat_c, dlat):
+    """Largeur d'un bloc en degrés de longitude à cette latitude, pour des blocs vraiment carrés
+    (un degré de longitude rétrécit avec la latitude : ~76 km en Bretagne, contre 111 km pour la latitude)."""
+    return dlat / max(0.05, math.cos(math.radians(lat_c)))
+
+def cell_key(lat, lon, dlat):
+    lat_c = round(lat / dlat) * dlat
+    dl = _dlon(lat_c, dlat)
+    return (round(lat_c, 6), round(round(lon / dl) * dl, 6))
+
 def get_cells_from_polyline(pts, grid_size_deg):
+    """Blocs carrés (côté = grid_size_deg × 111,32 km) traversés par une trace."""
     cells = set()
     if not pts: return cells
+    grid_m = grid_size_deg * M_PER_DEG
     prev_lat, prev_lon = pts[0]
-
-    def to_key(lat, lon):
-        return (round(round(lat / grid_size_deg) * grid_size_deg, 6),
-                round(round(lon / grid_size_deg) * grid_size_deg, 6))
-
-    cells.add(to_key(prev_lat, prev_lon))
-
-    for i in range(1, len(pts)):
-        curr_lat, curr_lon = pts[i]
-        dist = ((curr_lat - prev_lat) ** 2 + (curr_lon - prev_lon) ** 2) ** 0.5
-        if dist > grid_size_deg * 0.7:
-            num_steps = int(dist / (grid_size_deg * 0.5))
+    cells.add(cell_key(prev_lat, prev_lon, grid_size_deg))
+    for curr_lat, curr_lon in pts[1:]:
+        dy = (curr_lat - prev_lat) * M_PER_DEG
+        dx = (curr_lon - prev_lon) * M_PER_DEG * math.cos(math.radians((curr_lat + prev_lat) / 2))
+        dist_m = math.hypot(dx, dy)
+        if dist_m > grid_m * 0.7:
+            num_steps = int(dist_m / (grid_m * 0.5))
             for j in range(1, num_steps + 1):
                 frac = j / (num_steps + 1)
-                cells.add(to_key(prev_lat + (curr_lat - prev_lat) * frac,
-                                 prev_lon + (curr_lon - prev_lon) * frac))
-        cells.add(to_key(curr_lat, curr_lon))
-        prev_lat = curr_lat
-        prev_lon = curr_lon
-
+                cells.add(cell_key(prev_lat + (curr_lat - prev_lat) * frac,
+                                   prev_lon + (curr_lon - prev_lon) * frac, grid_size_deg))
+        cells.add(cell_key(curr_lat, curr_lon, grid_size_deg))
+        prev_lat, prev_lon = curr_lat, curr_lon
     return cells
+
+def commune_cells(geom, dlat):
+    """Tous les blocs dont le centre est dans la commune (géométrie en (lat, lon), toutes ses parties)."""
+    min_lat, min_lon, max_lat, max_lon = geom.bounds
+    lats, lons = [], []
+    for i in range(math.floor(min_lat / dlat), math.ceil(max_lat / dlat) + 1):
+        lat_c = i * dlat
+        dl = _dlon(lat_c, dlat)
+        js = range(math.floor(min_lon / dl), math.ceil(max_lon / dl) + 1)
+        lats.extend([lat_c] * len(js)); lons.extend(j * dl for j in js)
+    if not lats: return set()
+    la, lo = np.array(lats), np.array(lons)
+    inside = shapely.contains_xy(geom, la, lo)
+    return {(round(float(x), 6), round(float(y), 6)) for x, y in zip(la[inside], lo[inside])}
 
 def get_current_iso_period():
     year, week, _ = datetime.now().isocalendar()
@@ -753,6 +779,7 @@ def get_activities_route():
     activity_cache = {} 
     grid_store = {}
     grid_store_db = defaultdict(set)
+    filtered_cell_acts = defaultdict(set)   # blocs des activités filtrées -> activités
     
     current_year, current_week, _ = datetime.now().isocalendar()
     current_period = f"{current_year}-W{current_week:02d}"
@@ -791,6 +818,8 @@ def get_activities_route():
             
             data["stats"]["total_distance"] += act['distance'] / 1000
             data["stats"]["activity_count"] += 1
+            for b in blocks:
+                filtered_cell_acts[b].add(idx)
             
         # BASE DE DONNEES : on enregistre tous les blocks
         for b in blocks:
@@ -804,151 +833,56 @@ def get_activities_route():
     # ========================================================
     # CALCUL DES VILLES
     # ========================================================
-    if grid_store_db and DB_URL and athlete_id:
+    if filtered_cell_acts and DB_URL:
         identified_cities = {}
-        probe_points = set()
-
-        for lat, lon in grid_store_db.keys():
-            probe_points.add((round(lat, 2), round(lon, 2)))
-
-        probe_list = list(probe_points)
-        batch_size = 500  # 🚀 OPTIMISATION N°2 : Batch SQL massif pour réduire la latence réseau
+        probe_list = list({(round(lat, 2), round(lon, 2)) for lat, lon in filtered_cell_acts.keys()})
+        batch_size = 500
+        swap = lambda x, y, z=None: (y, x)   # GeoJSON (lon, lat) -> (lat, lon), comme les blocs
 
         try:
-            engine = _engine()
-            with engine.connect() as conn:
+            with _engine().connect() as conn:
                 for i in range(0, len(probe_list), batch_size):
                     batch = probe_list[i:i + batch_size]
-                    points_str = ", ".join([f"{lon} {lat}" for lat, lon in batch])
-                    wkt_multipoint = f"MULTIPOINT({points_str})"
-
-                    query = text("""
-                        SELECT DISTINCT nom_commune,
-                               ST_Area(geometry::geography) AS area_m2,
-                               ST_AsGeoJSON(geometry) AS outline
+                    wkt_multipoint = "MULTIPOINT(" + ", ".join(f"{lon} {lat}" for lat, lon in batch) + ")"
+                    rows = conn.execute(text("""
+                        SELECT DISTINCT nom_commune, ST_AsGeoJSON(geometry) AS outline
                         FROM communes
                         WHERE ST_Intersects(geometry, ST_GeomFromText(:wkt, 4326))
-                    """)
-
-                    result_proxy = conn.execute(query, {"wkt": wkt_multipoint})
-
-                    for row in result_proxy:
+                    """), {"wkt": wkt_multipoint})
+                    for row in rows:
                         if row.nom_commune in identified_cities: continue
-
                         try:
-                            geojson_geom = json.loads(row.outline)
-                            inverted_outline = []
-
-                            if geojson_geom['type'] == 'Polygon':
-                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0]]
-                            elif geojson_geom['type'] == 'MultiPolygon':
-                                inverted_outline = [[p[1], p[0]] for p in geojson_geom['coordinates'][0][0]]
-                            else:
-                                continue
-
+                            geom = shp_transform(swap, shp_shape(json.loads(row.outline))).buffer(0)
+                            if geom.is_empty: continue
+                            # Contour affiché : la plus grande partie de la commune
+                            parts = list(geom.geoms) if geom.geom_type == 'MultiPolygon' else [geom]
+                            main = max(parts, key=lambda g: g.area)
                             identified_cities[row.nom_commune] = {
-                                "name": row.nom_commune,
-                                "area_m2": row.area_m2,
-                                "outline": inverted_outline,
-                                "poly_obj": Polygon(inverted_outline).buffer(0)
+                                "geom": geom,
+                                "outline": [[round(y, 6), round(x, 6)] for y, x in main.exterior.coords],
                             }
                         except Exception as e:
                             print(f"Erreur traitement commune {row.nom_commune}: {e}")
-
                     if len(identified_cities) >= 70: break
-
         except Exception as e:
             print(f"⚠️ Erreur Batch DB: {e}")
 
-        # 🚀 OPTIMISATION N°3 : Pré-calcul des Points géométriques du quadrillage
-        # Cela évite de recréer l'objet Point des centaines de milliers de fois.
-        precomputed_points = []
-        for (clat, clon), acts_set in grid_store_db.items():
-            precomputed_points.append((clat, clon, Point(clat, clon), acts_set))
-
+        visited = set(filtered_cell_acts.keys())
         final_cities_list = []
-        scores_to_save = []
-
-        for city_name, city_data in identified_cities.items():
+        scores_to_save = []   # classement désactivé (non conforme Strava) : rien n'est enregistré
+        for city_name, city in identified_cities.items():
             try:
-                poly_geom = city_data['poly_obj']
-                prepared_poly = prep(poly_geom)
-                min_lat, min_lon, max_lat, max_lon = poly_geom.bounds
-
-                city_block_coords = set()
-                city_acts_indices = set()
-
-                # On utilise les points pré-calculés ici
-                for clat, clon, pt, acts_set in precomputed_points:
-                    if min_lat <= clat <= max_lat and min_lon <= clon <= max_lon:
-                        if prepared_poly.contains(pt):
-                            city_block_coords.add((clat, clon))
-                            city_acts_indices.update(acts_set)
-
-                if not city_block_coords: continue
-
-                count_inside = len(city_block_coords)
-                area_conquered_m2 = count_inside * (grid_meters ** 2)
-                final_pct = round(min((area_conquered_m2 / city_data['area_m2']) * 100, 100), 2)
-
+                all_cells = commune_cells(city['geom'], grid_size_deg)
+                seen = all_cells & visited
+                if not seen: continue
+                acts = set()
+                for c in seen: acts |= filtered_cell_acts[c]
+                pct = round(min(100.0, len(seen) / max(1, len(all_cells)) * 100), 2)
                 final_cities_list.append({
                     "name": city_name,
-                    "outline": city_data['outline'],
-                    "stats": {
-                        "blocks": count_inside,
-                        "percent": final_pct,
-                        "activities": 0
-                    }
+                    "outline": city['outline'],
+                    "stats": {"blocks": len(seen), "total_blocks": len(all_cells), "percent": pct, "activities": len(acts)},
                 })
-
-                stats_dim = defaultdict(lambda: defaultdict(lambda: {'blocks': set(), 'acts': set()}))
-                city_activity_count = 0
-
-                # 🚀 OPTIMISATION N°4 : On ne boucle QUE sur les activités impliquées ET filtrées
-                for act_idx in city_acts_indices:
-                    activity_data = activity_cache[act_idx]
-                    
-                    act = activity_data['act']
-                    sport = activity_data['sport']
-                    act_year = activity_data['year']
-                    act_blocks_all = activity_data['blocks']
-                    act_period = activity_data['period']
-
-                    # 🛑 CORRECTION ICI : On applique les filtres année et sport de la requête !
-                    if sel_year != 'all' and sel_year != act_year: continue
-                    if sel_sport != 'all' and sel_sport != sport: continue
-
-                    act_blocks_in = act_blocks_all & city_block_coords
-                    if not act_blocks_in: continue
-
-                    city_activity_count += 1
-                    is_current = (act_period == current_period)
-
-                    keys = [('all', 'all'), (sport, 'all')]
-                    if is_current: keys.extend([('all', current_period), (sport, current_period)])
-
-                    for k_sp, k_per in keys:
-                        stats_dim[k_sp][k_per]['blocks'].update(act_blocks_in)
-                        stats_dim[k_sp][k_per]['acts'].add(act.get('id', id(act)))
-
-                final_cities_list[-1]["stats"]["activities"] = city_activity_count
-
-                # Si après filtrage la ville n'a aucune activité pour ce sport/cette année, on l'enlève de la liste (évite le contour vide)
-                if city_activity_count == 0:
-                    final_cities_list.pop()
-                    continue
-
-                for sp, periods in stats_dim.items():
-                    for per, s_data in periods.items():
-                        b_cnt = len(s_data['blocks'])
-                        p_val = round(min(((b_cnt * (grid_meters ** 2)) / city_data['area_m2']) * 100, 100), 2)
-
-                        scores_to_save.append({
-                            "ath_id": athlete_id, "c_name": city_name, "g_size": grid_meters,
-                            "sport": sp, "period": per, "b_count": b_cnt, "pct": p_val,
-                            "act_count": len(s_data['acts'])
-                        })
-
             except Exception as e:
                 print(f"Erreur calcul stats ville {city_name}: {e}")
 

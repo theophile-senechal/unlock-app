@@ -36,17 +36,30 @@
       <h2 class="sheet__title" id="menu-title">Menu</h2>
       <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
-    <ul class="menu-list">
-      <li><button type="button" class="menu-item" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span></button></li>
-      {% if is_admin %}<li><a class="menu-item" href="/admin"><span class="emoji" aria-hidden="true">🛠️</span><span>Tableau de bord<small>Réservé à l'administrateur</small></span></a></li>{% endif %}
-      {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard"><span class="emoji" aria-hidden="true">🏆</span><span>Classement</span></a></li>{% endif %}
-      <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span></a></li>
-      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span></a></li>
-      <li class="menu-sep" role="separator"></li>
-      <li><a class="menu-item" href="/logout"><span class="emoji" aria-hidden="true">🚪</span><span>Se déconnecter</span></a></li>
-      <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete"><span class="emoji" aria-hidden="true">🗑️</span><span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span></button></li>
+    {% if my_athlete_id %}
+    <div class="idcard">
+      <div class="idcard__text">
+        <span class="idcard__label"><span class="emoji" aria-hidden="true">🆔</span>Votre identifiant Strava</span>
+        <span class="idcard__num num" id="my-athlete-id">{{ my_athlete_id }}</span>
+      </div>
+      <button type="button" class="btn btn--outline btn--sm idcard__copy" data-copy="{{ my_athlete_id }}" aria-label="Copier l'identifiant Strava">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copier
+      </button>
+    </div>
+    {% endif %}
+
+    <ul class="menu-group">
+      <li><button type="button" class="menu-item" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
+      {% if is_admin %}<li><a class="menu-item" href="/admin"><span class="emoji" aria-hidden="true">🛠️</span><span>Tableau de bord<small>Réservé à l'administrateur</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
+      {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard"><span class="emoji" aria-hidden="true">🏆</span><span>Classement</span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
+      <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
+      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
     </ul>
-    {% if my_athlete_id %}<p class="menu-id">Votre identifiant Strava : <b class="num">{{ my_athlete_id }}</b></p>{% endif %}
+
+    <ul class="menu-group">
+      <li><a class="menu-item" href="/logout"><span class="emoji" aria-hidden="true">🚪</span><span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
+      <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete"><span class="emoji" aria-hidden="true">🗑️</span><span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
+    </ul>
     <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
   </div>
 </div>
@@ -88,6 +101,7 @@
 
 <div id="busy" class="busy" aria-live="polite"><span class="busy__dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Mise à jour…</span></div>
 
+<script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key} | tojson }};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
 {% block scripts %}{% endblock %}
 </body>

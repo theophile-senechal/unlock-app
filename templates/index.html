@@ -119,7 +119,7 @@
   </div>
 </div>
 
-{{ ui.loader("Lecture de vos activités Strava…", "La première ouverture peut prendre jusqu'à 30 secondes.") }}
+{{ ui.loader("Connexion à Strava…", "La première connexion peut prendre quelques minutes, le temps de lire tout votre historique.") }}
 {% endblock %}
 
 {% block scripts %}
@@ -134,16 +134,13 @@
   /* ---------- Map ---------- */
   const map = L.map('map', { zoomControl: false, preferCanvas: true, attributionControl: true }).setView([47.65, -2.75], 12);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  map.attributionControl.setPrefix(false);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19, subdomains: 'abcd',
-    attribution: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> © <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>'
-  }).addTo(map);
+  Unlock.baseLayer(map);
   const traceLayer = L.layerGroup().addTo(map);
   const cityLayer = L.layerGroup().addTo(map);
 
   /* ---------- State ---------- */
-  let data = null, mode = 'route', sortKey = 'blocks', selectedCity = null, firstLoad = true, fitPending = true;
+  let data = null, mode = 'route', sortKey = 'blocks', selectedCity = null, firstLoad = true, fitPending = true, focusCity = false;
+  const bestCity = (list) => [...(list || [])].sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks)[0];
 
   /* ---------- Filters placement (inline on desktop, sheet otherwise) ---------- */
   const filters = $('filters');
@@ -199,14 +196,17 @@
   /* ---------- Data ---------- */
   async function load() {
     const year = $('year-select').value, sport = $('sport-select').value, grid = $('grid-select').value;
-    if (firstLoad) Unlock.loader.show(['Lecture de vos activités Strava…', 'Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Presque prêt…']);
+    if (firstLoad) Unlock.loader.show(['Connexion à Strava…', 'Lecture de vos activités…', 'Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Calcul de vos pourcentages…']);
     else Unlock.busy.on('Mise à jour de la carte…');
     try {
       data = await Unlock.getJSON(`/api/activities?year=${encodeURIComponent(year)}&grid_size=${grid}&sport_type=${encodeURIComponent(sport)}`);
       fillSelects(sport, year);
       updateSummary();
       if (selectedCity && !(data.top_municipalities || []).some((c) => c.name === selectedCity)) selectedCity = null;
-      if (!selectedCity && data.top_municipalities && data.top_municipalities.length) selectedCity = data.top_municipalities[0].name;
+      // À l'arrivée : cadrage sur la commune au plus fort pourcentage d'exploration
+      const best = bestCity(data.top_municipalities);
+      if (firstLoad && best) { selectedCity = best.name; focusCity = true; }
+      if (!selectedCity && best) selectedCity = best.name;
       fitPending = true;
       renderStats(); render();
     } catch (err) {
@@ -271,7 +271,7 @@
       const size = data.grid_size_used, cells = data.grid_cells || [];
       let max = 1; for (const c of cells) if (c[2] > max) max = c[2];
       for (const [lat, lon, count, , last] of cells) {
-        const rect = L.rectangle([[lat - size / 2, lon - size / 2], [lat + size / 2, lon + size / 2]],
+        const rect = L.rectangle(Unlock.cellBounds(lat, lon, size),
           { stroke: false, fillColor: BRAND, fillOpacity: 0.2 + Math.sqrt(count / max) * 0.6 }).addTo(traceLayer);
         const [y, mo] = (last || '').split('-');
         rect.bindTooltip(`<b>${count}</b> passage${count > 1 ? 's' : ''}<span>Dernier : ${mo}/${y}</span>`, { sticky: true, direction: 'top', className: 'cell-tip', offset: [0, -6] });
@@ -282,7 +282,15 @@
       for (const pts of data.coords || []) L.polyline(pts, { color: BRAND, weight: 2.5, opacity: 0.55 }).addTo(traceLayer);
       if ((data.coords || []).length) bounds = L.latLngBounds(data.coords.flat());
     }
-    if (fitPending && bounds && bounds.isValid()) { map.fitBounds(bounds, fitPadding()); fitPending = false; }
+    const city = (data.top_municipalities || []).find((c) => c.name === selectedCity);
+    if (mode === 'route' && city && city.outline) {
+      L.polygon(city.outline, { color: '#4A0412', weight: 2, dashArray: '6 6', fill: false, interactive: false }).addTo(cityLayer);
+    }
+    if (focusCity && city && city.outline) {
+      map.fitBounds(L.polygon(city.outline).getBounds(), fitPadding());
+      Unlock.toast(`📍 ${city.name} : votre commune la plus explorée (${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)} %)`);
+      focusCity = false; fitPending = false;
+    } else if (fitPending && bounds && bounds.isValid()) { map.fitBounds(bounds, fitPadding()); fitPending = false; }
     if (!(data.coords || []).length) Unlock.toast('🤷 Aucune activité GPS pour ces filtres.');
   }
 
@@ -303,7 +311,9 @@
     selectedCity = city.name;
     $('city-name').textContent = city.name;
     $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + ' %';
-    $('city-meta').innerHTML = `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
+    $('city-meta').innerHTML = city.stats.total_blocks
+      ? `${Unlock.fmt(city.stats.blocks)} blocs sur ${Unlock.fmt(city.stats.total_blocks)}<br>${Unlock.fmt(city.stats.activities)} sorties`
+      : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
     $('city-bar').setAttribute('aria-valuenow', city.stats.percent);
     requestAnimationFrame(() => { $('city-fill').style.width = Math.max(2, city.stats.percent) + '%'; });
     if (city.outline) {
@@ -322,7 +332,7 @@
       const sub = sortKey === 'percent' ? `${Unlock.fmt(c.stats.blocks)} blocs` : `${Unlock.fmt(c.stats.percent, 1)} %`;
       const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
       li.innerHTML = `<button type="button" class="rank__item" data-city="${Unlock.esc(c.name)}" aria-current="${c.name === selectedCity}">
-        <span class="rank__pos">${medal}</span><span class="rank__name">${Unlock.esc(c.name)}</span>
+        <span class="rank__pos">${medal}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}</span>
         <span class="rank__val">${main}<small>${sub}</small></span></button>`;
       li.firstElementChild.addEventListener('click', () => {
         showCity(c, true); $('city-search').value = '';
