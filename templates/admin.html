@@ -157,7 +157,7 @@
   function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
 
   async function load() {
-    if (first) Unlock.loader.show(['Chargement du tableau de bord…']); else Unlock.busy.on('Actualisation…');
+    if (first) Unlock.loader.show(['Chargement du tableau de bord…']); else Unlock.busy.on('Actualisation du tableau de bord');
     try {
       const s = await Unlock.getJSON('/api/admin/stats');
       render(s);

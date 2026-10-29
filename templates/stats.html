@@ -95,7 +95,7 @@
 
   async function load() {
     const g = $('grid-select').value, y = $('year-select').value, s = $('sport-select').value;
-    if (first) Unlock.loader.show(['Calcul de vos statistiques…', 'Comparaison mois par mois…']); else Unlock.busy.on('Calcul…');
+    if (first) Unlock.loader.show(['Calcul de vos statistiques…', 'Comparaison mois par mois…']); else Unlock.busy.on('Calcul de vos statistiques', 'Blocs de ' + $('grid-select').value + ' m', { veil: true });
     try {
       const d = await Unlock.getJSON(`/api/stats_history?grid_size=${g}&year=${encodeURIComponent(y)}&sport_type=${encodeURIComponent(s)}`);
       fill('year-select', d.available_years, (v) => v);

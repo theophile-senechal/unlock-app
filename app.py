@@ -41,7 +41,7 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.6'
+ASSET_VERSION = '2026.10.8'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -71,6 +71,34 @@ NAV_ITEMS = [
     ('story', '/story', '📸', 'Story'),
     ('stats', '/stats', '📊', 'Stats'),
 ]
+
+@app.before_request
+def backfill_athlete_id():
+    """Sessions ouvertes avant la mise à jour : elles n'ont pas l'identifiant Strava.
+    On le retrouve (base, sinon API Strava) une seule fois, pour l'afficher et activer le cache."""
+    if 'access_token' not in session or session.get('athlete_id') or session.get('aid_checked'):
+        return
+    if request.path.startswith('/static') or request.path in ('/sw.js', '/manifest.webmanifest', '/favicon.ico'):
+        return
+    session['aid_checked'] = True
+    token, aid = session['access_token'], None
+    if DB_URL:
+        try:
+            with _engine().begin() as conn:
+                row = conn.execute(text("SELECT athlete_id FROM strava_users WHERE access_token = :t"), {"t": token}).fetchone()
+            aid = row[0] if row else None
+        except Exception as e:
+            print(f"Recherche de l'identifiant : {e}")
+    if not aid:
+        try:
+            r = requests.get("https://www.strava.com/api/v3/athlete",
+                             headers={'Authorization': f'Bearer {token}'}, timeout=5)
+            if r.status_code == 200:
+                aid = r.json().get('id')
+        except Exception as e:
+            print(f"Identifiant via Strava : {e}")
+    if aid:
+        session['athlete_id'] = aid
 
 @app.context_processor
 def inject_globals():

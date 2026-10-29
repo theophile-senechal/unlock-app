@@ -99,7 +99,12 @@
 </div>
 {% endblock %}
 
-<div id="busy" class="busy" aria-live="polite"><span class="busy__dots" aria-hidden="true"><i></i><i></i><i></i></span><span>Mise à jour…</span></div>
+<div id="busy" class="working" role="status" aria-live="polite" hidden>
+  <div class="working__card">
+    <div class="mini-grid" aria-hidden="true">{% for i in range(9) %}<i style="--i:{{ [0,1,2,5,4,3,6,7,8].index(i) }}"></i>{% endfor %}</div>
+    <div class="working__text"><b id="busy-title">Mise à jour…</b><span id="busy-sub"></span></div>
+  </div>
+</div>
 
 <script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key} | tojson }};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>

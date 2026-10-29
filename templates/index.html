@@ -197,7 +197,7 @@
   async function load() {
     const year = $('year-select').value, sport = $('sport-select').value, grid = $('grid-select').value;
     if (firstLoad) Unlock.loader.show(['Connexion à Strava…', 'Lecture de vos activités…', 'Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Calcul de vos pourcentages…']);
-    else Unlock.busy.on('Mise à jour de la carte…');
+    else Unlock.busy.on('Mise à jour de la carte', filterLabel(), { veil: true });
     try {
       data = await Unlock.getJSON(`/api/activities?year=${encodeURIComponent(year)}&grid_size=${grid}&sport_type=${encodeURIComponent(sport)}`);
       fillSelects(sport, year);
@@ -207,7 +207,8 @@
       const best = bestCity(data.top_municipalities);
       if (firstLoad && best) { selectedCity = best.name; focusCity = true; }
       if (!selectedCity && best) selectedCity = best.name;
-      fitPending = true;
+      // Les filtres gardent la vue actuelle ; on ne recadre qu'au premier chargement
+      fitPending = firstLoad;
       renderStats(); render();
     } catch (err) {
       if (err.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos activités. Vérifiez votre connexion puis réessayez.');
@@ -231,6 +232,15 @@
     ss.value = sport;
     const active = ss.value !== 'all' || ys.value !== 'all';
     $('filter-btn').classList.toggle('has-filter', active);
+  }
+
+  function filterLabel() {
+    const ss = $('sport-select'), ys = $('year-select'), gs = $('grid-select');
+    const parts = [];
+    if (ss.value !== 'all') parts.push(ss.selectedOptions[0].text.replace(/^\S+\s+/, ''));
+    if (ys.value !== 'all') parts.push(ys.value);
+    if (mode === 'grid') parts.push(`blocs de ${gs.value} m`);
+    return parts.length ? parts.join(', ') : 'Toutes vos activités';
   }
 
   function updateSummary() {
@@ -290,7 +300,10 @@
       map.fitBounds(L.polygon(city.outline).getBounds(), fitPadding());
       Unlock.toast(`📍 ${city.name} : votre commune la plus explorée (${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)} %)`);
       focusCity = false; fitPending = false;
-    } else if (fitPending && bounds && bounds.isValid()) { map.fitBounds(bounds, fitPadding()); fitPending = false; }
+    } else if (bounds && bounds.isValid() && (fitPending || !map.getBounds().intersects(bounds))) {
+      // Premier chargement, ou plus aucune activité visible à l'écran avec ce filtre : on recadre
+      map.fitBounds(bounds, fitPadding()); fitPending = false;
+    }
     if (!(data.coords || []).length) Unlock.toast('🤷 Aucune activité GPS pour ces filtres.');
   }
 

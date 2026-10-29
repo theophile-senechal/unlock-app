@@ -88,9 +88,22 @@
   };
 
   /* Busy pill for refreshes that shouldn't block the screen */
+  let busyTimer = null;
   U.busy = {
-    on(text) { const b = document.getElementById('busy'); if (!b) return; if (text) b.querySelector('span').textContent = text; b.classList.add('is-on'); },
-    off() { const b = document.getElementById('busy'); if (b) b.classList.remove('is-on'); }
+    /* title : action en cours ; sub : précision (filtres…) ; opts.veil : voile flou sur le contenu */
+    on(title, sub, opts) {
+      const b = document.getElementById('busy'); if (!b) return;
+      clearTimeout(busyTimer);
+      document.getElementById('busy-title').textContent = title || 'Mise à jour…';
+      document.getElementById('busy-sub').textContent = sub || '';
+      b.classList.toggle('working--veil', !!(opts && opts.veil));
+      b.hidden = false; requestAnimationFrame(() => b.classList.add('is-on'));
+    },
+    off() {
+      const b = document.getElementById('busy'); if (!b) return;
+      b.classList.remove('is-on');
+      busyTimer = setTimeout(() => { b.hidden = true; }, 260);
+    }
   };
 
   /* ---------------- Toast ---------------- */

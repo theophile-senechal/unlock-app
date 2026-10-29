@@ -8,7 +8,7 @@
   .login { min-height: 100dvh; display: grid; grid-template-rows: auto 1fr; background: var(--surface); }
   .login__art {
     position: relative; overflow: hidden; background: var(--brand);
-    height: clamp(220px, 38dvh, 340px); padding-top: var(--safe-t);
+    height: clamp(150px, 24dvh, 260px); padding-top: var(--safe-t);
   }
   .login__grid {
     position: absolute; inset: -2px; display: grid; gap: 5px; padding: 5px;
@@ -26,7 +26,7 @@
   }
   @keyframes chipIn { from { opacity: 0; transform: translate(-50%, 8px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-  .login__content { padding: 28px 20px calc(24px + var(--safe-b)); display: flex; flex-direction: column; gap: 22px; max-width: 520px; width: 100%; margin: 0 auto; }
+  .login__content { padding: 24px 20px calc(20px + var(--safe-b)); display: flex; flex-direction: column; gap: 18px; max-width: 520px; width: 100%; margin: 0 auto; }
   .login__brand { display: flex; align-items: center; gap: 10px; }
   .login__brand img { width: 40px; height: 40px; border-radius: 11px; }
   .login__brand span { font-family: var(--font-display); font-weight: 800; font-size: 1.6rem; letter-spacing: -.04em; color: var(--brand); }
@@ -43,8 +43,14 @@
   .active-users { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; padding: 8px 14px; border-radius: 999px; background: var(--canvas); font-size: var(--fs-sm); color: var(--ink-2); }
   .active-users b { color: var(--ink); font-weight: 750; }
   .active-users__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); flex-shrink: 0; }
-  .consent { font-size: var(--fs-sm); color: var(--muted); line-height: 1.55; }
+  .consent { font-size: var(--fs-xs); color: var(--muted); line-height: 1.55; display: grid; gap: 6px; }
   .consent a { color: var(--ink-2); font-weight: 600; }
+  .consent summary { cursor: pointer; color: var(--ink-2); font-weight: 650; width: fit-content; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+  .consent summary::-webkit-details-marker { display: none; }
+  .consent summary::after { content: ""; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .2s; }
+  .consent details[open] summary::after { transform: rotate(-135deg) translateY(-2px); }
+  .consent details p { margin-top: 6px; }
+  .active-users--art { display: none; }
   .notice { padding: 12px 14px; border-radius: var(--r-md); font-size: var(--fs-sm); font-weight: 600; display: flex; gap: 10px; }
   .notice--err { background: #FDECEA; color: var(--danger); }
   .notice--ok { background: #EAF5EE; color: var(--ok); }
@@ -56,8 +62,32 @@
   @media (min-width: 900px) {
     .login { grid-template-rows: none; grid-template-columns: minmax(440px, 1fr) 1.1fr; }
     .login__art { order: 2; position: sticky; top: 0; height: 100dvh; }
-    .login__content { order: 1; justify-content: center; padding: 48px clamp(32px, 6vw, 88px); max-width: 640px; margin: 0 0 0 auto; }
+    .login { height: 100dvh; overflow: hidden; }
+    .login__content {
+      order: 1; justify-content: center; max-width: 620px; margin: 0 0 0 auto;
+      height: 100dvh; overflow-y: auto; gap: clamp(12px, 2.2vh, 22px);
+      padding: clamp(20px, 4vh, 48px) clamp(32px, 5vw, 80px);
+    }
+    .login__title { font-size: clamp(2rem, 5.4vh, 2.9rem); }
+    .login__lead { font-size: 1rem; }
+    .how { gap: clamp(6px, 1.2vh, 12px); }
+    .how .emoji { width: 36px; height: 36px; }
+    .how li { grid-template-columns: 36px 1fr; }
     .login__chip { bottom: 32px; font-size: var(--fs-md); padding: 10px 18px; }
+    /* Sur PC, le compteur d'explorateurs se pose sur l'illustration */
+    .active-users--content { display: none; }
+    .active-users--art { display: inline-flex; position: absolute; top: 28px; left: 28px; z-index: 2; background: rgba(255,255,255,.96); box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); }
+  }
+  /* Écrans de PC peu hauts : on resserre pour que tout tienne sans défiler */
+  @media (min-width: 900px) and (max-height: 820px), (min-width: 900px) and (max-width: 1100px) {
+    .how small { display: none; }
+    .how .emoji { width: 32px; height: 32px; font-size: 1.05rem; }
+    .how li { grid-template-columns: 32px 1fr; }
+    .login__lead { font-size: .95rem; }
+  }
+  @media (min-width: 900px) and (max-width: 1100px) { .login__title { font-size: 2rem; } }
+  @media (min-width: 900px) and (max-height: 680px) {
+    .login__lead { display: none; }
   }
   @media (max-width: 899px) and (orientation: landscape) and (max-height: 500px) {
     .login { grid-template-rows: none; grid-template-columns: 38% 1fr; }
@@ -70,6 +100,9 @@
 <main class="login">
   <div class="login__art" aria-hidden="true">
     <div class="login__grid" id="login-grid"></div>
+    {% if active_users %}
+    <p class="active-users active-users--art"><span class="active-users__dot" aria-hidden="true"></span><span><b class="num">{{ '{:,}'.format(active_users).replace(',', ' ') }}</b> explorateur{{ 's' if active_users > 1 }} actif{{ 's' if active_users > 1 }} ces {{ active_days }} derniers jours</span></p>
+    {% endif %}
     <div class="login__chip"><span class="emoji">🔓</span><span>+<span id="chip-n">24</span> blocs débloqués</span></div>
   </div>
 
@@ -99,7 +132,7 @@
     </ul>
 
     {% if active_users %}
-    <p class="active-users"><span class="active-users__dot" aria-hidden="true"></span><span><b class="num">{{ '{:,}'.format(active_users).replace(',', ' ') }}</b> explorateur{{ 's' if active_users > 1 }} actif{{ 's' if active_users > 1 }} ces {{ active_days }} derniers jours</span></p>
+    <p class="active-users active-users--content"><span class="active-users__dot" aria-hidden="true"></span><span><b class="num">{{ '{:,}'.format(active_users).replace(',', ' ') }}</b> explorateur{{ 's' if active_users > 1 }} actif{{ 's' if active_users > 1 }} ces {{ active_days }} derniers jours</span></p>
     {% endif %}
 
     <div class="cta">
@@ -107,12 +140,16 @@
       <button type="button" class="btn btn--outline btn--block" data-install hidden><span class="emoji" aria-hidden="true">📲</span> Installer l'app sur ce téléphone</button>
     </div>
 
-    <p class="consent">
-      En continuant, vous autorisez Unlock à lire vos activités Strava, privées comprises : tracés GPS, date, distance et type de sport.
-      Ces données servent uniquement à dessiner votre carte, ne sont visibles que par vous et sont effacées au bout de 48 heures au plus.
-      Sans connexion pendant {{ inactive_days }} jours, l'accès est retiré et vos données effacées automatiquement. Vous pouvez aussi retirer cet accès et tout effacer à tout moment depuis le menu (« Supprimer mes données ») ou depuis vos réglages Strava.
-      Détails dans la <a href="/confidentialite">politique de confidentialité</a> ; la connexion vaut acceptation des <a href="/cgu">CGU</a>.
-    </p>
+    <div class="consent">
+      <p>En vous connectant, vous autorisez Unlock à lire vos activités Strava, privées comprises. Elles ne sont visibles que par vous, effacées sous 48 h, et vous pouvez tout supprimer à tout moment.</p>
+      <details>
+        <summary>Ce que lit Unlock et comment tout effacer</summary>
+        <p>Unlock lit les tracés GPS, dates, distances et types de sport de vos activités, uniquement pour dessiner votre carte.
+        Sans connexion pendant {{ inactive_days }} jours, l'accès est retiré et vos données effacées automatiquement.
+        Vous pouvez aussi retirer l'accès et tout effacer depuis le menu (« Supprimer mes données ») ou depuis vos réglages Strava.
+        Détails dans la <a href="/confidentialite">politique de confidentialité</a> ; la connexion vaut acceptation des <a href="/cgu">CGU</a>.</p>
+      </details>
+    </div>
 
     <footer class="login__foot">
       {{ ui.footer_links() }}

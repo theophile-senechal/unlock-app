@@ -49,8 +49,7 @@
     background: var(--surface); border-radius: var(--r-lg); box-shadow: var(--shadow-float); }
   .stage-busy__card b { font-family: var(--font-display); font-size: var(--fs-lg); letter-spacing: -.02em; margin-top: 10px; }
   .stage-busy__card span { color: var(--muted); font-size: var(--fs-sm); }
-  .mini-grid { display: grid; grid-template-columns: repeat(3, 16px); gap: 4px; }
-  .mini-grid i { width: 16px; height: 16px; border-radius: 4px; background: var(--line); animation: unlock 2.2s var(--ease) infinite; animation-delay: calc(var(--i) * 120ms); }
+  .stage-busy .mini-grid { --cell: 16px; gap: 4px; }
 
   /* Interrupteurs */
   .switches { display: grid; gap: 2px; border-radius: var(--r-md); border: 1px solid var(--line); overflow: hidden; }

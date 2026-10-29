@@ -139,7 +139,7 @@
 
   async function load() {
     stop();
-    if (first) Unlock.loader.show(['Chargement de votre historique…', 'Datation de chaque bloc…']); else Unlock.busy.on('Recalcul des blocs…');
+    if (first) Unlock.loader.show(['Chargement de votre historique…', 'Datation de chaque bloc…']); else Unlock.busy.on('Recalcul des blocs', 'Blocs de ' + $('grid-select').value + ' m', { veil: true });
     try {
       data = await Unlock.getJSON(`/api/activities?year=all&sport_type=all&grid_size=${$('grid-select').value}`);
       const dl = $('city-list'); dl.innerHTML = '';
