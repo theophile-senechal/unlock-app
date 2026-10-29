@@ -41,7 +41,7 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.8'
+ASSET_VERSION = '2026.10.11'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -183,6 +183,7 @@ def _data_version(activities):
 # 6. FONCTIONS UTILITAIRES
 # ============================================================
 M_PER_DEG = 111320.0
+MAX_COMMUNES = 100   # communes analysées au maximum (les plus fréquentées d'abord)
 
 def _dlon(lat_c, dlat):
     """Largeur d'un bloc en degrés de longitude à cette latitude, pour des blocs vraiment carrés
@@ -708,6 +709,7 @@ def get_stats_history():
 
     monthly_data = {}
     global_seen = set()
+    habit_times = []          # (date/heure locale, distance) des sorties filtrées
     available_years = set()
     available_sports = set()
     total_blocks = 0
@@ -725,6 +727,7 @@ def get_stats_history():
         if sel_sport != 'all' and sport != sel_sport: continue
 
         if m_key not in monthly_data: monthly_data[m_key] = {'new': 0, 'routine': 0}
+        habit_times.append((dt, act.get('distance', 0) or 0))
 
         pts = polyline.decode(act['polyline'])
         blocks = get_cells_from_polyline(pts, grid_size_deg)
@@ -751,11 +754,51 @@ def get_stats_history():
         "labels": labels, "conquest": conquest, "exploration": explore, "routine": routine,
         "total_blocks": total_blocks,
         "available_years": sorted(list(available_years), reverse=True),
-        "available_sports": sorted(list(available_sports))
+        "available_sports": sorted(list(available_sports)),
+        "habits": compute_habits(habit_times, sel_year),
     }
 
     cache[cache_key] = result
     return jsonify(result)
+
+# Créneaux horaires (heure locale de départ de la sortie)
+HABIT_SLOTS = [
+    ('Avant 8 h', 5, 8), ('8 h – 12 h', 8, 12), ('12 h – 14 h', 12, 14),
+    ('14 h – 18 h', 14, 18), ('18 h – 21 h', 18, 21), ('Après 21 h', 21, 29),
+]
+WEEKDAYS_FR = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche']
+
+def compute_habits(times, sel_year):
+    """Habitudes de l'utilisateur (ses propres sorties) : créneau, jour, sorties par semaine."""
+    if not times:
+        return None
+    slots = [0] * len(HABIT_SLOTS)
+    days = [0] * 7
+    for dt, _ in times:
+        h = dt.hour if dt.hour >= 5 else dt.hour + 24          # 0 h – 5 h compte comme « après 21 h »
+        for i, (_, a, b) in enumerate(HABIT_SLOTS):
+            if a <= h < b:
+                slots[i] += 1; break
+        days[dt.weekday()] += 1
+    today = datetime.now()
+    first = min(dt for dt, _ in times)
+    if sel_year != 'all':
+        start = datetime(int(sel_year), 1, 1)
+        end = min(today, datetime(int(sel_year), 12, 31, 23, 59))
+    else:
+        start, end = first, today
+    weeks = max(1.0, (end - start).days / 7)
+    recent = [dt for dt, _ in times if (today - dt).days < 28]
+    is_current = sel_year == 'all' or int(sel_year) == today.year
+    total_km = sum(d for _, d in times) / 1000
+    return {
+        "count": len(times),
+        "slots": [{"label": l, "count": c} for (l, _, _), c in zip(HABIT_SLOTS, slots)],
+        "weekdays": [{"label": l, "count": c} for l, c in zip(WEEKDAYS_FR, days)],
+        "per_week": round(len(times) / weeks, 2),
+        "per_week_recent": round(len(recent) / 4, 2) if is_current else None,
+        "km_per_week": round(total_km / weeks, 1),
+    }
 
 # ============================================================
 # 10. API ACTIVITÉS / CARTE / COMMUNES
@@ -788,12 +831,21 @@ def get_activities_route():
 
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
-    grid_meters = _grid_size()
+    return jsonify(_activities_data(sel_year, sel_sport, _grid_size()))
 
+@app.route('/api/communes')
+def get_communes_route():
+    """Tableau « Mes communes » (Stats) : mêmes calculs que la carte, sans les contours."""
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    data = _activities_data(request.args.get('year', 'all'), request.args.get('sport_type', 'all'), _grid_size())
+    rows = [{"name": c["name"], **c["stats"]} for c in data.get("top_municipalities", [])]
+    return jsonify({"communes": rows, "db": bool(DB_URL)})
+
+def _activities_data(sel_year, sel_sport, grid_meters):
     activities = get_strava_activities_cached()
     cache_key = f"act_{grid_meters}_{sel_year}_{sel_sport}_{_data_version(activities)}"
     cache = _result_cache(_user_key())
-    if cache_key in cache: return jsonify(cache[cache_key])
+    if cache_key in cache: return cache[cache_key]
     grid_size_deg = grid_meters / 111320
 
     data = {
@@ -808,6 +860,7 @@ def get_activities_route():
     grid_store = {}
     grid_store_db = defaultdict(set)
     filtered_cell_acts = defaultdict(set)   # blocs des activités filtrées -> activités
+    seg_lat, seg_lon, seg_len, seg_act = [], [], [], []   # milieux des segments des traces filtrées
     
     current_year, current_week, _ = datetime.now().isocalendar()
     current_period = f"{current_year}-W{current_week:02d}"
@@ -848,6 +901,12 @@ def get_activities_route():
             data["stats"]["activity_count"] += 1
             for b in blocks:
                 filtered_cell_acts[b].add(idx)
+            arr = np.asarray(pts, dtype=float)
+            mid = (arr[1:] + arr[:-1]) / 2
+            d_lat = (arr[1:, 0] - arr[:-1, 0]) * M_PER_DEG
+            d_lon = (arr[1:, 1] - arr[:-1, 1]) * M_PER_DEG * np.cos(np.radians(mid[:, 0]))
+            seg_lat.append(mid[:, 0]); seg_lon.append(mid[:, 1])
+            seg_len.append(np.hypot(d_lat, d_lon)); seg_act.append(np.full(len(mid), idx))
             
         # BASE DE DONNEES : on enregistre tous les blocks
         for b in blocks:
@@ -863,7 +922,10 @@ def get_activities_route():
     # ========================================================
     if filtered_cell_acts and DB_URL:
         identified_cities = {}
-        probe_list = list({(round(lat, 2), round(lon, 2)) for lat, lon in filtered_cell_acts.keys()})
+        probe_weight = defaultdict(int)
+        for (lat, lon), acts_in in filtered_cell_acts.items():
+            probe_weight[(round(lat, 2), round(lon, 2))] += len(acts_in)
+        probe_list = sorted(probe_weight, key=probe_weight.get, reverse=True)
         batch_size = 500
         swap = lambda x, y, z=None: (y, x)   # GeoJSON (lon, lat) -> (lat, lon), comme les blocs
 
@@ -891,11 +953,14 @@ def get_activities_route():
                             }
                         except Exception as e:
                             print(f"Erreur traitement commune {row.nom_commune}: {e}")
-                    if len(identified_cities) >= 70: break
+                    if len(identified_cities) >= MAX_COMMUNES: break
         except Exception as e:
             print(f"⚠️ Erreur Batch DB: {e}")
 
         visited = set(filtered_cell_acts.keys())
+        if seg_lat:
+            S_lat, S_lon = np.concatenate(seg_lat), np.concatenate(seg_lon)
+            S_len, S_act = np.concatenate(seg_len), np.concatenate(seg_act)
         final_cities_list = []
         scores_to_save = []   # classement désactivé (non conforme Strava) : rien n'est enregistré
         for city_name, city in identified_cities.items():
@@ -906,10 +971,20 @@ def get_activities_route():
                 acts = set()
                 for c in seen: acts |= filtered_cell_acts[c]
                 pct = round(min(100.0, len(seen) / max(1, len(all_cells)) * 100), 2)
+                # Distance parcourue DANS la commune : segments dont le milieu est à l'intérieur
+                km = 0.0
+                if seg_lat:
+                    g = city['geom']; a0, b0, a1, b1 = g.bounds
+                    box = (S_lat >= a0) & (S_lat <= a1) & (S_lon >= b0) & (S_lon <= b1)
+                    if box.any():
+                        inside = shapely.contains_xy(g, S_lat[box], S_lon[box])
+                        km = float(S_len[box][inside].sum()) / 1000
+                days = sorted(activity_cache[i]['dt'].strftime('%Y-%m-%d') for i in acts)
                 final_cities_list.append({
                     "name": city_name,
                     "outline": city['outline'],
-                    "stats": {"blocks": len(seen), "total_blocks": len(all_cells), "percent": pct, "activities": len(acts)},
+                    "stats": {"blocks": len(seen), "total_blocks": len(all_cells), "percent": pct, "activities": len(acts),
+                              "km": round(km, 1), "first": days[0] if days else None, "last": days[-1] if days else None},
                 })
             except Exception as e:
                 print(f"Erreur calcul stats ville {city_name}: {e}")
@@ -937,7 +1012,7 @@ def get_activities_route():
                 print(f"Erreur sauvegarde scores: {e}")
 
     cache[cache_key] = data
-    return jsonify(data)
+    return data
 
 # ============================================================
 # 11. KEEP ALIVE

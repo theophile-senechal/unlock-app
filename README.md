@@ -54,3 +54,37 @@ Dans Supabase (SQL Editor), **avant** de déployer :
 - si `tout_en_un.sql` a déjà été lancé avant le tableau de bord : `migrations/2026-10-29_admin.sql`.
 
 Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_events`, `app_daily_stats`, `app_kv`.
+
+## Prochaines étapes
+
+### Avant / pendant la mise en ligne
+- [ ] Supabase : exécuter `migrations/2026-10-29_tout_en_un.sql`.
+- [ ] Vercel : `SECRET_KEY`, `CRON_SECRET`, `CARTO_API_KEY` (clé gratuite : carto.com/basemaps/apikey), puis `ADMIN_ATHLETE_IDS` une fois l'identifiant Strava connu (+ redéploiement). Optionnel : `MIN_ACTIVE_DISPLAY=1`.
+- [ ] Pousser sur GitHub (supprimer les anciens HTML de la racine).
+- [ ] Vérifier sur le site : fond de carte, pourcentages des communes, tableau de bord admin (« Santé de l'app »).
+- [ ] Demande en cours chez Strava : confirmer qu'une révocation libère une place sur le quota, et l'attribution Garmin (§4.4).
+
+### Prochaines fonctionnalités (dans l'ordre)
+1. **Dons via Ko-fi** : ligne « ☕ Soutenir Unlock » dans le menu, lien dans une variable Vercel (remplaçable par Stripe plus tard). Dons libres, sans contrepartie (Strava §5.8) ; montant minimum ~3 € ; phrase dans les CGU.
+2. **Améliorations de l'interface** : à préciser à partir des retours d'usage.
+3. **Unlock Rewind** (bilan de l'année) : à préparer vers mi-novembre pour décembre.
+4. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
+
+### Fait récemment
+- **Mes communes** (Stats, `/api/communes`) : km parcourus *dans* chaque commune, sorties, % exploré, blocs, 1re et dernière visite ; tri par colonne (ordinateur) ou menu « Trier par » (mobile, en cartes) ; recherche ; 10 premières puis « Voir tout ». Filtres année/sport/taille appliqués. Jusqu'à 100 communes, les plus fréquentées d'abord (`MAX_COMMUNES`).
+- **Vos habitudes** (Stats) : sorties par semaine (comparées aux 4 dernières semaines), km par semaine, créneau horaire favori, jour favori, deux graphiques. Les filtres année/sport s'appliquent.
+
+### Boîte à idées (à trancher)
+Pas de champ libre public (risque de contenu n'importe quoi). Deux options sans modération :
+- **Vote fermé** : l'admin propose 3 à 5 idées, les utilisateurs votent seulement (1 vote par compte, résultats dans `/admin`).
+- **Retour privé** : message court (280 caractères) visible uniquement dans `/admin`, jamais affiché publiquement, limité à 1 envoi par jour et par compte.
+
+### Idées en réserve
+Séries de semaines avec nouveaux blocs, « ville de cœur » déclarée (compteur d'explorateurs par ville, affiché à partir de 5), trous à combler, plus grand carré exploré, communes voisines jamais visitées, journal des premières fois, calendrier d'exploration, exploration par sport, bilan hebdo en notification, « Où aller pour débloquer ? », objectifs par commune, badges, toi contre l'an dernier, timelapse en vidéo, carte de France des communes, poster HD, import GPX/FIT, masquer le domicile dans la Story, tests automatiques sur GitHub, contours de communes simplifiés (performance).
+
+### Écarté
+- **Météo** : absente de l'API Strava ; un service externe impliquerait de partager lieu et heure des sorties avec un tiers (Strava §6.2).
+- **Statistiques globales entre utilisateurs** : interdites par la Strava API Policy (§5.4, §5.7).
+
+### En attente d'un accord de Strava
+- **Multijoueur / classement entre amis** : à demander à Strava (developers@strava.com) sous forme de dérogation écrite : opt-in explicite de chaque participant, amis uniquement, aucune donnée stockée au-delà du cache. Le code du classement est conservé (désactivé, `ENABLE_LEADERBOARD=false`).

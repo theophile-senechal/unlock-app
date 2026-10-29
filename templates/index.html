@@ -159,6 +159,48 @@
     requestAnimationFrame(syncPanelHeight);
   }
   $('panel-toggle').addEventListener('click', () => setPanel(panel.classList.contains('is-collapsed')));
+
+  /* Swipe (phones): up to open, down to close. Only takes over the gesture when
+     the content has nothing to scroll in that direction, so normal scrolling is untouched. */
+  (function swipePanel() {
+    const scroller = panel.querySelector('.panel__scroll');
+    let y0 = 0, x0 = 0, t0 = 0, dy = 0, drag = null; // drag: null (undecided) | 'open' | 'close' | false
+    panel.addEventListener('touchstart', (e) => {
+      if (mqFloat.matches || e.touches.length !== 1) { drag = false; return; }
+      y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = Date.now(); dy = 0; drag = null;
+    }, { passive: true });
+    panel.addEventListener('touchmove', (e) => {
+      if (drag === false) return;
+      const t = e.touches[0];
+      dy = t.clientY - y0;
+      if (drag === null) {
+        const ax = Math.abs(t.clientX - x0), ay = Math.abs(dy);
+        if (ax + ay < 4) return;
+        const collapsed = panel.classList.contains('is-collapsed');
+        if (ax > ay) drag = false;
+        else if (collapsed && dy < 0) drag = 'open';
+        else if (!collapsed && dy > 0 && scroller.scrollTop <= 0) drag = 'close';
+        else drag = false;
+        if (!drag) return;
+        panel.classList.add('is-dragging');
+      }
+      if (e.cancelable) e.preventDefault();
+      // Follow the finger when closing; small elastic lift when opening.
+      const off = drag === 'close' ? Math.max(0, dy) : Math.max(-60, dy * 0.35);
+      panel.style.transform = `translateY(${off}px)`;
+    }, { passive: false });
+    function end() {
+      if (!drag) { drag = null; return; }
+      const fast = Math.abs(dy) / Math.max(1, Date.now() - t0) > 0.5;
+      panel.classList.remove('is-dragging');
+      panel.style.transform = '';
+      if (drag === 'open' && (dy < -30 || (fast && dy < -10))) setPanel(true);
+      if (drag === 'close' && (dy > 70 || (fast && dy > 20))) setPanel(false);
+      drag = null;
+    }
+    panel.addEventListener('touchend', end);
+    panel.addEventListener('touchcancel', end);
+  })();
   function syncPanelHeight() {
     const h = mqFloat.matches ? 0 : panel.getBoundingClientRect().height;
     $('mapview').style.setProperty('--panel-h', h + 'px');

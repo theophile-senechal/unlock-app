@@ -73,6 +73,83 @@
         <div class="chart__box"><canvas id="ratio" aria-label="Part des blocs inédits et déjà connus par mois" role="img"></canvas></div>
       </section>
 
+      <section class="communes" id="communes" aria-labelledby="t-title">
+        <div class="habits__head">
+          <h2 class="habits__title" id="t-title"><span class="emoji" aria-hidden="true">🏘️</span>Mes communes</h2>
+          <p class="chart__note" id="t-note"></p>
+        </div>
+        <div class="surface ctable">
+          <div class="ctable__tools" id="t-tools" hidden>
+            <div class="search ctable__search" id="t-search-wrap">
+              <span class="emoji" aria-hidden="true">🔍</span>
+              <label class="sr-only" for="t-search">Chercher une commune</label>
+              <input class="input" id="t-search" type="search" placeholder="Chercher une commune" autocomplete="off">
+            </div>
+            <div class="field ctable__sort">
+              <label class="field__label" for="t-sort">Trier par</label>
+              <select class="select" id="t-sort">
+                <option value="km">Km parcourus</option>
+                <option value="activities">Sorties</option>
+                <option value="percent">% exploré</option>
+                <option value="blocks">Blocs</option>
+                <option value="last">Dernière visite</option>
+                <option value="first">1re visite</option>
+                <option value="name">Nom (A → Z)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="ctable__state" id="t-state"><span class="mini-grid" aria-hidden="true">{% for i in range(9) %}<i style="--i:{{ [0,1,2,5,4,3,6,7,8].index(i) }}"></i>{% endfor %}</span><span>Calcul de vos communes…</span></div>
+
+          <!-- Ordinateur / tablette : vrai tableau -->
+          <div class="ctable__wrap" id="t-wrap">
+            <table class="ctable__table">
+              <thead><tr>
+                <th scope="col" class="ctable__num">#</th>
+                <th scope="col"><button type="button" data-sort="name">Commune</button></th>
+                <th scope="col"><button type="button" data-sort="km">Km</button></th>
+                <th scope="col"><button type="button" data-sort="activities">Sorties</button></th>
+                <th scope="col" class="ctable__pctcol"><button type="button" data-sort="percent">Exploré</button></th>
+                <th scope="col"><button type="button" data-sort="blocks">Blocs</button></th>
+                <th scope="col"><button type="button" data-sort="first">1re visite</button></th>
+                <th scope="col"><button type="button" data-sort="last">Dernière</button></th>
+              </tr></thead>
+              <tbody id="t-body"></tbody>
+            </table>
+          </div>
+
+          <!-- Mobile : cartes -->
+          <ol class="ccards" id="t-cards"></ol>
+
+          <div class="ctable__foot" id="t-foot" hidden>
+            <button type="button" class="btn btn--ghost btn--sm" id="t-more"></button>
+          </div>
+          <p class="ctable__help">Km et sorties comptés à l'intérieur de chaque commune. % exploré : blocs traversés sur l'ensemble des blocs de la commune.</p>
+        </div>
+      </section>
+
+      <section class="habits" id="habits" aria-labelledby="h-title">
+        <div class="habits__head">
+          <h2 class="habits__title" id="h-title"><span class="emoji" aria-hidden="true">⏰</span>Vos habitudes</h2>
+          <p class="chart__note" id="h-note"></p>
+        </div>
+        <div class="kpis kpis--3">
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📆</span>Sorties par semaine</span><span class="kpi__val" id="h-week">–</span><span class="kpi__sub" id="h-week-sub"></span><span class="kpi__help">Moyenne sur la période choisie</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🕒</span>Créneau favori</span><span class="kpi__val kpi__val--text" id="h-slot">–</span><span class="kpi__sub" id="h-slot-sub"></span><span class="kpi__help">Heure de départ la plus fréquente</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📅</span>Jour favori</span><span class="kpi__val kpi__val--text" id="h-day">–</span><span class="kpi__sub" id="h-day-sub"></span><span class="kpi__help">Jour où vous sortez le plus</span></div>
+        </div>
+        <div class="habits__charts">
+          <section class="surface chart" aria-labelledby="g-slot">
+            <div class="chart__head"><h3 class="chart__title" id="g-slot">Par créneau horaire</h3><span class="chart__note">Heure de départ</span></div>
+            <div class="chart__box chart__box--sm"><canvas id="c-slots" role="img" aria-label="Nombre de sorties par créneau horaire"></canvas></div>
+          </section>
+          <section class="surface chart" aria-labelledby="g-day">
+            <div class="chart__head"><h3 class="chart__title" id="g-day">Par jour de la semaine</h3></div>
+            <div class="chart__box chart__box--sm"><canvas id="c-days" role="img" aria-label="Nombre de sorties par jour de la semaine"></canvas></div>
+          </section>
+        </div>
+      </section>
+
       <div class="empty" id="empty" hidden><span class="emoji">🏁</span>Aucune activité GPS pour ces filtres. Essayez une autre année ou un autre sport.</div>
     </div>
   </main>
@@ -97,6 +174,7 @@
     const g = $('grid-select').value, y = $('year-select').value, s = $('sport-select').value;
     if (first) Unlock.loader.show(['Calcul de vos statistiques…', 'Comparaison mois par mois…']); else Unlock.busy.on('Calcul de vos statistiques', 'Blocs de ' + $('grid-select').value + ' m', { veil: true });
     try {
+      loadCommunes(g, y, s);
       const d = await Unlock.getJSON(`/api/stats_history?grid_size=${g}&year=${encodeURIComponent(y)}&sport_type=${encodeURIComponent(s)}`);
       fill('year-select', d.available_years, (v) => v);
       fill('sport-select', d.available_sports, Unlock.sportLabel);
@@ -138,7 +216,7 @@
     lastData = d;
     const has = d.labels.length > 0;
     $('empty').hidden = has;
-    document.querySelectorAll('.chart, .kpis, .period-note').forEach((c) => (c.hidden = !has));
+    document.querySelectorAll('.chart, .kpis, .period-note, .habits, .communes').forEach((c) => (c.hidden = !has));
     if (!has) return;
 
     // Continuous month series (months without activity count as 0)
@@ -187,6 +265,7 @@
     $('k2-help').textContent = year === 'all' ? 'Blocs jamais traversés auparavant' : `Blocs pas encore traversés en ${year}`;
 
     drawCharts(months, cum, nNew, nOld);
+    drawHabits(d.habits);
   }
 
   function drawCharts(months, cum, nNew, nOld) {
@@ -225,6 +304,148 @@
         scales: { x: { stacked: true, grid: { display: false }, ticks: xTicks },
           y: { stacked: true, max: asPct ? 100 : undefined, grid, border: { display: false }, ticks: { padding: 8, stepSize: asPct ? 25 : undefined, callback: (v) => asPct ? v + ' %' : Unlock.fmt(v) } } } }
     });
+  }
+
+
+  /* ---------- Mes communes ---------- */
+  const T = { rows: [], sort: 'km', dir: -1, q: '', open: false, req: 0 };
+  const LIMIT = 10;
+  const norm = (t) => (t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[-’']/g, ' ');
+  const mdate = (iso) => iso ? cap(new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' })) : '–';
+  const tbl = document.querySelector('.ctable');
+
+  async function loadCommunes(g, y, s) {
+    const req = ++T.req;
+    tbl.classList.remove('is-ready');
+    $('t-state').hidden = false; $('t-state').classList.remove('is-empty');
+    $('t-state').lastElementChild.textContent = 'Calcul de vos communes…';
+    $('t-tools').hidden = true; $('t-foot').hidden = true; $('t-note').textContent = '';
+    try {
+      const d = await Unlock.getJSON(`/api/communes?grid_size=${g}&year=${encodeURIComponent(y)}&sport_type=${encodeURIComponent(s)}`);
+      if (req !== T.req) return;
+      T.rows = d.communes || []; T.open = false;
+      renderCommunes();
+    } catch (e) {
+      if (req !== T.req || e.message === 'auth') return;
+      $('t-state').classList.add('is-empty');
+      $('t-state').lastElementChild.textContent = 'Impossible de calculer vos communes pour le moment.';
+    }
+  }
+
+  function sorted() {
+    const k = T.sort, dir = T.dir, q = norm(T.q);
+    return T.rows.filter((r) => !q || norm(r.name).includes(q)).sort((a, b) => {
+      if (k === 'name') return a.name.localeCompare(b.name, 'fr') * dir;
+      const va = a[k] ?? '', vb = b[k] ?? '';
+      return (va < vb ? -1 : va > vb ? 1 : 0) * dir || b.km - a.km;
+    });
+  }
+
+  function renderCommunes() {
+    const n = T.rows.length;
+    if (!n) {
+      tbl.classList.remove('is-ready'); $('t-tools').hidden = true; $('t-foot').hidden = true;
+      $('t-state').hidden = false; $('t-state').classList.add('is-empty');
+      $('t-state').lastElementChild.textContent = 'Aucune commune française traversée pour ces filtres.';
+      return;
+    }
+    $('t-state').hidden = true; tbl.classList.add('is-ready');
+    $('t-note').textContent = `${Unlock.fmt(n)} commune${n > 1 ? 's' : ''}${n >= 100 ? ' (les plus fréquentées)' : ''}`;
+    $('t-tools').hidden = false;
+    $('t-search-wrap').hidden = n <= 8;
+    $('t-tools').classList.toggle('no-search', n <= 8);
+    $('t-sort').value = T.sort;
+
+    const all = sorted(), list = T.open || T.q ? all : all.slice(0, LIMIT);
+    const rank = (r) => all.indexOf(r) + 1;
+    const pctTxt = (p) => Unlock.fmt(p, p < 10 ? 1 : 0) + ' %';
+    const on = (k) => (T.sort === k ? ' is-sorted' : '');
+    const name = (r) => Unlock.esc(r.name);
+
+    $('t-body').innerHTML = list.map((r) => `<tr>
+      <td class="ctable__num">${rank(r)}</td>
+      <th scope="row" class="ctable__name${on('name')}" title="${name(r)}">${name(r)}</th>
+      <td class="${on('km')}">${Unlock.fmt(r.km, r.km < 10 ? 1 : 0)}</td>
+      <td class="${on('activities')}">${Unlock.fmt(r.activities)}</td>
+      <td class="ctable__pctcol${on('percent')}"><span class="ctable__pct"><span class="bar"><span class="bar__fill" style="width:${Math.min(100, r.percent)}%"></span></span><b>${pctTxt(r.percent)}</b></span></td>
+      <td class="${on('blocks')}">${Unlock.fmt(r.blocks)}<small> / ${Unlock.fmt(r.total_blocks)}</small></td>
+      <td class="ctable__date${on('first')}">${mdate(r.first)}</td>
+      <td class="ctable__date${on('last')}">${mdate(r.last)}</td>
+    </tr>`).join('') || `<tr><td colspan="8" class="ctable__none">Aucune commune ne correspond à « ${Unlock.esc(T.q)} ».</td></tr>`;
+
+    $('t-cards').innerHTML = list.map((r) => `<li class="ccard">
+      <div class="ccard__top"><span class="ccard__rank">${rank(r)}</span><span class="ccard__name">${name(r)}</span><span class="ccard__pct${on('percent')}">${pctTxt(r.percent)}</span></div>
+      <div class="bar"><div class="bar__fill" style="width:${Math.min(100, r.percent)}%"></div></div>
+      <div class="ccard__meta">
+        <span class="${on('km')}"><b>${Unlock.fmt(r.km, r.km < 10 ? 1 : 0)}</b> km</span>
+        <span class="${on('activities')}"><b>${Unlock.fmt(r.activities)}</b> sortie${r.activities > 1 ? 's' : ''}</span>
+        <span class="${on('blocks')}"><b>${Unlock.fmt(r.blocks)}</b>/${Unlock.fmt(r.total_blocks)} blocs</span>
+      </div>
+      <div class="ccard__dates"><span class="${on('first')}">Depuis ${mdate(r.first).toLowerCase()}</span><span class="${on('last')}">Dernière : ${mdate(r.last).toLowerCase()}</span></div>
+    </li>`).join('') || `<li class="ctable__none">Aucune commune ne correspond à « ${Unlock.esc(T.q)} ».</li>`;
+
+    document.querySelectorAll('.ctable__table th button').forEach((b) => {
+      const th = b.parentElement;
+      th.setAttribute('aria-sort', b.dataset.sort === T.sort ? (T.dir > 0 ? 'ascending' : 'descending') : 'none');
+    });
+    const hiddenCount = all.length - list.length;
+    $('t-foot').hidden = !T.open && hiddenCount <= 0 || !!T.q;
+    $('t-more').textContent = T.open ? 'Afficher moins' : `Voir les ${Unlock.fmt(all.length)} communes`;
+  }
+
+  const defaultDir = (k) => (k === 'name' ? 1 : -1);
+  function setSort(k, toggle) {
+    T.dir = toggle && T.sort === k ? -T.dir : defaultDir(k);
+    T.sort = k; renderCommunes();
+  }
+  document.querySelectorAll('.ctable__table th button').forEach((b) => b.addEventListener('click', () => setSort(b.dataset.sort, true)));
+  $('t-sort').addEventListener('change', (e) => setSort(e.target.value, false));
+  $('t-search').addEventListener('input', (e) => { T.q = e.target.value.trim(); renderCommunes(); });
+  $('t-more').addEventListener('click', () => {
+    T.open = !T.open; renderCommunes();
+    if (!T.open) $('communes').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  });
+
+  /* ---------- Habitudes ---------- */
+  let cSlots = null, cDays = null;
+  function drawHabits(h) {
+    $('habits').hidden = !h; if (!h) return;
+    const pct = (n) => Unlock.fmt(h.count ? n / h.count * 100 : 0) + ' %';
+    const top = (arr) => arr.reduce((a, b) => (b.count > a.count ? b : a), arr[0]);
+    const ss = $('sport-select'), year = $('year-select').value;
+    const sportTxt = ss.value !== 'all' ? ' en ' + ss.selectedOptions[0].text.replace(/^\S+\s+/, '').toLowerCase() : '';
+    $('h-note').textContent = `${Unlock.fmt(h.count)} sortie${h.count > 1 ? 's' : ''}${sportTxt}${year !== 'all' ? ' en ' + year : ''}`;
+
+    $('h-week').textContent = Unlock.fmt(h.per_week, h.per_week < 10 ? 1 : 0);
+    if (h.per_week_recent !== null && h.per_week_recent !== undefined) {
+      const diff = h.per_week ? (h.per_week_recent - h.per_week) / h.per_week * 100 : 0;
+      const cls = Math.abs(diff) < 5 ? '' : diff > 0 ? ' delta--up' : ' delta--down';
+      const arrow = Math.abs(diff) < 5 ? '≈' : diff > 0 ? '▲' : '▼';
+      $('h-week-sub').innerHTML = `<span class="delta${cls}">${arrow} ${Unlock.fmt(h.per_week_recent, 1)}</span> <span class="delta__ref">sur les 4 dernières semaines</span><br><span class="delta__ref">${Unlock.fmt(h.km_per_week)} km par semaine en moyenne</span>`;
+    } else {
+      $('h-week-sub').innerHTML = `<span class="delta__ref">${Unlock.fmt(h.km_per_week)} km par semaine en moyenne</span>`;
+    }
+
+    const s = top(h.slots), d = top(h.weekdays);
+    $('h-slot').textContent = s.label;
+    $('h-slot-sub').innerHTML = `<span class="delta">${pct(s.count)}</span> <span class="delta__ref">de vos sorties</span>`;
+    $('h-day').textContent = d.label;
+    $('h-day-sub').innerHTML = `<span class="delta">${pct(d.count)}</span> <span class="delta__ref">de vos sorties</span>`;
+
+    // Catégories ordonnées : une seule couleur, le favori mis en avant
+    const bars = (rows) => {
+      const best = top(rows);
+      return { labels: rows.map((r) => r.label), datasets: [{ data: rows.map((r) => r.count),
+        backgroundColor: rows.map((r) => (r === best ? '#6D071A' : '#D9B3BA')), borderRadius: 4, maxBarThickness: 34 }] };
+    };
+    const opts = { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: '#18161B', padding: 10, cornerRadius: 10, displayColors: false,
+        callbacks: { label: (c) => `${Unlock.fmt(c.parsed.y)} sortie${c.parsed.y > 1 ? 's' : ''} (${pct(c.parsed.y)})` } } },
+      scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, font: { size: 11 } } },
+        y: { beginAtZero: true, grid: { color: '#EFEDF0', drawTicks: false }, border: { display: false }, ticks: { precision: 0, padding: 8 } } } };
+    const days = h.weekdays.map((r) => ({ label: r.label.slice(0, 3) + '.', count: r.count }));
+    if (cSlots) cSlots.destroy(); cSlots = new Chart($('c-slots'), { type: 'bar', data: bars(h.slots), options: opts });
+    if (cDays) cDays.destroy(); cDays = new Chart($('c-days'), { type: 'bar', data: bars(days), options: opts });
   }
 
   document.querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => {
