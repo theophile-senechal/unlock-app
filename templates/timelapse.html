@@ -50,6 +50,7 @@
         <span class="emoji" aria-hidden="true">🔍</span>
         <label class="sr-only" for="city-input">Filtrer sur une commune</label>
         <input class="input" id="city-input" list="city-list" placeholder="Toutes les communes" autocomplete="off">
+        <button type="button" class="search__clear" id="city-clear" aria-label="Voir toutes les communes" hidden>×</button>
         <datalist id="city-list"></datalist>
       </div>
       <div class="maptools__spacer"></div>
@@ -124,7 +125,7 @@
   Unlock.baseLayer(map);
   const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
 
-  let data = null, months = [], byMonth = [], cum = [], shown = -1, timer = null, speed = 300, outline = null, first = true;
+  let data = null, months = [], byMonth = [], cum = [], shown = -1, timer = null, speed = 300, outline = null, cityName = null, first = true;
 
   const monthText = (k) => { const [y, m] = k.split('-'); return new Date(+y, +m - 1).toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }).replace('.', ''); };
 
@@ -144,6 +145,18 @@
       data = await Unlock.getJSON(`/api/activities?year=all&sport_type=all&grid_size=${$('grid-select').value}`);
       const dl = $('city-list'); dl.innerHTML = '';
       [...(data.top_municipalities || [])].sort((a, b) => a.name.localeCompare(b.name, 'fr')).forEach((c) => dl.appendChild(new Option(c.name)));
+      // À l'arrivée : animation centrée sur la commune la plus explorée (comme la carte)
+      if (first && !outline) {
+        const best = [...(data.top_municipalities || [])].sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks)[0];
+        if (best && best.outline) {
+          setCity(best);
+          Unlock.toast(`📍 ${best.name}, votre commune la plus explorée. Touchez × pour voir toutes vos communes.`);
+        }
+      } else if (outline && cityName) {
+        // nouvelle taille de blocs : on garde la même commune
+        const same = (data.top_municipalities || []).find((x) => x.name === cityName);
+        if (same && same.outline) setCity(same); else setCity(null);
+      }
       build();
     } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger votre historique.'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
@@ -197,17 +210,24 @@
     if (timer) { clearInterval(timer); timer = null; start(); }
   }));
   $('grid-select').addEventListener('change', load);
-  $('city-input').addEventListener('change', (e) => {
-    const v = e.target.value.trim().toLowerCase();
-    borderLayer.clearLayers(); outline = null;
-    const c = v && (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v || x.name.toLowerCase().includes(v));
+  // Choisir une commune (ou null = toutes) ; fit = recadrer la carte
+  function setCity(c) {
+    borderLayer.clearLayers(); outline = null; cityName = null;
     if (c && c.outline) {
-      outline = c.outline; e.target.value = c.name;
+      outline = c.outline; cityName = c.name; $('city-input').value = c.name;
       const poly = L.polygon(c.outline, { color: '#4A0412', weight: 2, dashArray: '6 6', fill: false, interactive: false }).addTo(borderLayer);
       map.fitBounds(poly.getBounds(), { padding: [40, 40], paddingBottomRight: [40, 120] });
-    } else if (v) { Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`); e.target.value = ''; }
+    } else { $('city-input').value = ''; }
+    $('city-clear').hidden = !outline;
+  }
+  $('city-input').addEventListener('change', (e) => {
+    const v = e.target.value.trim().toLowerCase();
+    const c = v && (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v) || v && (data.top_municipalities || []).find((x) => x.name.toLowerCase().includes(v));
+    if (v && !(c && c.outline)) { Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`); setCity(outline ? (data.top_municipalities || []).find((x) => x.name === cityName) : null); return; }
+    setCity(c || null);
     stop(); build();
   });
+  $('city-clear').addEventListener('click', () => { setCity(null); stop(); build(); $('city-input').blur(); });
   load();
 })();
 </script>

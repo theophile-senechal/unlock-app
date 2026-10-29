@@ -219,6 +219,9 @@ p { margin: 0; }
 .search { position: relative; }
 .search .emoji { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); font-size: .95rem; pointer-events: none; }
 .search .input { padding-left: 38px; }
+.search__clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--canvas); color: var(--muted); font-size: 18px; line-height: 1; display: grid; place-items: center; }
+.search__clear:hover { color: var(--ink); background: var(--line); }
+.search:has(.search__clear:not([hidden])) .input { padding-right: 42px; }
 
 /* =====================================================================
    Loader: blocks unlocking along a route
@@ -697,7 +700,9 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .habits__head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; margin-bottom: 14px; }
 .habits__title { font-size: var(--fs-xl); display: flex; align-items: center; gap: 10px; }
 .kpis--3 { grid-template-columns: minmax(0, 1fr); }
-@media (min-width: 560px) { .kpis--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* 560-1023 px : 3 colonnes trop étroites -> la 1re carte sur toute la largeur, les 2 autres côte à côte */
+@media (min-width: 560px) { .kpis--3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpis--3 > .kpi:first-child { grid-column: 1 / -1; } }
+@media (min-width: 1024px) { .kpis--3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .kpis--3 > .kpi:first-child { grid-column: auto; } }
 .habits__charts { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .habits__charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .habits__charts .chart { margin-bottom: 0; }

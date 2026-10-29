@@ -134,7 +134,7 @@
           <p class="chart__note" id="h-note"></p>
         </div>
         <div class="kpis kpis--3">
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📆</span>Sorties par semaine</span><span class="kpi__val" id="h-week">–</span><span class="kpi__sub" id="h-week-sub"></span><span class="kpi__help">Moyenne sur la période choisie</span></div>
+          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📆</span>Sorties par semaine</span><span class="kpi__val" id="h-week">–</span><span class="kpi__sub" id="h-week-sub"></span><span class="kpi__help">Semaines complètes, hors semaine en cours</span></div>
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🕒</span>Créneau favori</span><span class="kpi__val kpi__val--text" id="h-slot">–</span><span class="kpi__sub" id="h-slot-sub"></span><span class="kpi__help">Heure de départ la plus fréquente</span></div>
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📅</span>Jour favori</span><span class="kpi__val kpi__val--text" id="h-day">–</span><span class="kpi__sub" id="h-day-sub"></span><span class="kpi__help">Jour où vous sortez le plus</span></div>
         </div>
@@ -422,9 +422,9 @@
       const diff = h.per_week ? (h.per_week_recent - h.per_week) / h.per_week * 100 : 0;
       const cls = Math.abs(diff) < 5 ? '' : diff > 0 ? ' delta--up' : ' delta--down';
       const arrow = Math.abs(diff) < 5 ? '≈' : diff > 0 ? '▲' : '▼';
-      $('h-week-sub').innerHTML = `<span class="delta${cls}">${arrow} ${Unlock.fmt(h.per_week_recent, 1)}</span> <span class="delta__ref">sur les 4 dernières semaines</span><br><span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine en moyenne</span>`;
+      $('h-week-sub').innerHTML = `<span class="delta${cls}">${arrow} ${Unlock.fmt(h.per_week_recent, 1)}</span> <span class="delta__ref">ces 4 dernières semaines</span><br><span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine</span>`;
     } else {
-      $('h-week-sub').innerHTML = `<span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine en moyenne</span>`;
+      $('h-week-sub').innerHTML = `<span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine</span>`;
     }
 
     const s = top(h.slots), d = top(h.weekdays);

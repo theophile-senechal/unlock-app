@@ -7,7 +7,7 @@ import polyline
 import json
 from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timedelta
 import math
 import numpy as np
 import shapely
@@ -41,7 +41,7 @@ ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
 
 SITE_OWNER = os.getenv('SITE_OWNER', 'Théophile Sénéchal')
 LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-5119181a9/'
-ASSET_VERSION = '2026.10.14'
+ASSET_VERSION = '2026.10.16'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -780,24 +780,33 @@ def compute_habits(times, sel_year):
             if a <= h < b:
                 slots[i] += 1; break
         days[dt.weekday()] += 1
+    # Moyennes calculées sur des SEMAINES COMPLÈTES (lundi → dimanche) : la semaine en cours,
+    # pas encore finie, ferait baisser artificiellement la moyenne.
     today = datetime.now()
+    this_monday = datetime(today.year, today.month, today.day) - timedelta(days=today.weekday())
     first = min(dt for dt, _ in times)
     if sel_year != 'all':
-        start = datetime(int(sel_year), 1, 1)
-        end = min(today, datetime(int(sel_year), 12, 31, 23, 59))
+        y = int(sel_year)
+        start = datetime(y, 1, 1)
+        end = min(this_monday, datetime(y + 1, 1, 1))
     else:
-        start, end = first, today
-    weeks = max(1.0, (end - start).days / 7)
-    recent = [dt for dt, _ in times if (today - dt).days < 28]
+        start = datetime(first.year, first.month, first.day) - timedelta(days=first.weekday())
+        end = this_monday
+    done = [(dt, d) for dt, d in times if start <= dt < end]
+    weeks = (end - start).days / 7
+    if weeks < 1 or not done:            # moins d'une semaine complète : on garde tout, sur 1 semaine
+        done, weeks = list(times), 1.0
     is_current = sel_year == 'all' or int(sel_year) == today.year
-    total_km = sum(d for _, d in times) / 1000
+    recent = [dt for dt, _ in times if this_monday - timedelta(days=28) <= dt < this_monday]
+    total_km = sum(d for _, d in done) / 1000
     return {
         "count": len(times),
         "slots": [{"label": l, "count": c} for (l, _, _), c in zip(HABIT_SLOTS, slots)],
         "weekdays": [{"label": l, "count": c} for l, c in zip(WEEKDAYS_FR, days)],
-        "per_week": round(len(times) / weeks, 2),
+        "per_week": round(len(done) / weeks, 2),
         "per_week_recent": round(len(recent) / 4, 2) if is_current else None,
         "km_per_week": round(total_km / weeks, 1),
+        "full_weeks": int(round(weeks)),
     }
 
 # ============================================================
