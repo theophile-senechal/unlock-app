@@ -161,12 +161,38 @@
   $('panel-toggle').addEventListener('click', () => setPanel(panel.classList.contains('is-collapsed')));
 
   /* Swipe (phones): up to open, down to close. Only takes over the gesture when
-     the content has nothing to scroll in that direction, so normal scrolling is untouched. */
+     the content has nothing to scroll in that direction, so normal scrolling is untouched.
+     Open/close are animated with transforms only (no height animation = no layout jank). */
   (function swipePanel() {
     const scroller = panel.querySelector('.panel__scroll');
-    let y0 = 0, x0 = 0, t0 = 0, dy = 0, drag = null; // drag: null (undecided) | 'open' | 'close' | false
+    const stats = panel.querySelector('.stats');
+    let y0 = 0, x0 = 0, t0 = 0, dy = 0, drag = null, animating = false;
+    // Visible height of the panel once collapsed (grip + stat row)
+    const collapsedH = () => Math.round(stats.getBoundingClientRect().bottom - panel.getBoundingClientRect().top + 16);
+    const noAnim = (fn) => { panel.classList.add('is-dragging'); fn(); void panel.offsetHeight; };
+    function slide(to, done) {
+      animating = true;
+      panel.classList.remove('is-dragging');
+      panel.style.transform = `translateY(${to}px)`;
+      let finished = false;
+      const end = () => { if (finished) return; finished = true; panel.removeEventListener('transitionend', end); animating = false; done && done(); };
+      panel.addEventListener('transitionend', end); setTimeout(end, 320);
+    }
+    function closeAnimated(from) {
+      const target = panel.getBoundingClientRect().height - collapsedH();
+      slide(Math.max(from, target), () => { noAnim(() => { setPanel(false); panel.style.transform = ''; }); panel.classList.remove('is-dragging'); });
+    }
+    function openAnimated(from) {
+      const before = collapsedH();
+      noAnim(() => { setPanel(true); });
+      const off = panel.getBoundingClientRect().height - before + from;
+      noAnim(() => { panel.style.transform = `translateY(${off}px)`; });
+      requestAnimationFrame(() => slide(0, () => { panel.style.transform = ''; }));
+    }
+    function snapBack() { slide(0, () => { panel.style.transform = ''; }); }
+
     panel.addEventListener('touchstart', (e) => {
-      if (mqFloat.matches || e.touches.length !== 1) { drag = false; return; }
+      if (mqFloat.matches || animating || e.touches.length !== 1) { drag = false; return; }
       y0 = e.touches[0].clientY; x0 = e.touches[0].clientX; t0 = Date.now(); dy = 0; drag = null;
     }, { passive: true });
     panel.addEventListener('touchmove', (e) => {
@@ -178,28 +204,35 @@
         if (ax + ay < 4) return;
         const collapsed = panel.classList.contains('is-collapsed');
         if (ax > ay) drag = false;
-        else if (collapsed && dy < 0) drag = 'open';
-        else if (!collapsed && dy > 0 && scroller.scrollTop <= 0) drag = 'close';
+        else if (collapsed) drag = dy < 0 ? 'open' : 'pull';
+        else if (dy > 0 && scroller.scrollTop <= 0) drag = 'close';
         else drag = false;
         if (!drag) return;
         panel.classList.add('is-dragging');
       }
       if (e.cancelable) e.preventDefault();
-      // Follow the finger when closing; small elastic lift when opening.
-      const off = drag === 'close' ? Math.max(0, dy) : Math.max(-60, dy * 0.35);
+      const off = drag === 'close' ? Math.max(0, dy)
+        : drag === 'open' ? Math.max(-80, dy * 0.4)
+        : Math.min(24, Math.max(0, dy) * 0.25);   // already collapsed: tiny resistance only
       panel.style.transform = `translateY(${off}px)`;
     }, { passive: false });
     function end() {
       if (!drag) { drag = null; return; }
-      const fast = Math.abs(dy) / Math.max(1, Date.now() - t0) > 0.5;
-      panel.classList.remove('is-dragging');
-      panel.style.transform = '';
-      if (drag === 'open' && (dy < -30 || (fast && dy < -10))) setPanel(true);
-      if (drag === 'close' && (dy > 70 || (fast && dy > 20))) setPanel(false);
-      drag = null;
+      const kind = drag; drag = null;
+      const fast = Math.abs(dy) / Math.max(1, Date.now() - t0) > 0.45;
+      const cur = new DOMMatrix(getComputedStyle(panel).transform).m42 || 0;
+      if (kind === 'open' && (dy < -30 || (fast && dy < -10))) openAnimated(cur);
+      else if (kind === 'close' && (dy > 70 || (fast && dy > 20))) closeAnimated(cur);
+      else snapBack();
     }
     panel.addEventListener('touchend', end);
     panel.addEventListener('touchcancel', end);
+    // Grip tap: same smooth animations
+    $('panel-toggle').addEventListener('click', (e) => {
+      if (mqFloat.matches || animating) return;
+      e.stopImmediatePropagation();
+      panel.classList.contains('is-collapsed') ? openAnimated(0) : closeAnimated(0);
+    }, true);
   })();
   function syncPanelHeight() {
     const h = mqFloat.matches ? 0 : panel.getBoundingClientRect().height;

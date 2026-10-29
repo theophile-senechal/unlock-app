@@ -375,9 +375,12 @@ p { margin: 0; }
   position: absolute; z-index: 950; left: 0; right: 0; bottom: 0;
   background: var(--surface); border-radius: var(--r-lg) var(--r-lg) 0 0; box-shadow: var(--shadow-sheet);
   display: flex; flex-direction: column; max-height: 62%;
-  transition: max-height .35s var(--ease), transform .25s var(--ease);
+  transition: transform .28s cubic-bezier(.2,.8,.2,1); will-change: transform;
 }
 .panel.is-dragging { transition: none; }
+@media (max-width: 767px) { .panel.is-collapsed .panel__scroll { touch-action: none; overflow: hidden; } }
+/* Pages à écran fixe (carte) : la page elle-même ne doit jamais bouger ni rebondir */
+html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .panel__toggle {
   border: 0; background: transparent; width: 100%; padding: 10px 16px 4px; display: grid; justify-items: center;
   -webkit-tap-highlight-color: transparent; touch-action: none; cursor: grab;

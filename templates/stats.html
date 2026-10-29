@@ -407,7 +407,7 @@
   });
 
   /* ---------- Habitudes ---------- */
-  let cSlots = null, cDays = null;
+  let cSlots = null, cDays = null, slotsNarrow = null;
   function drawHabits(h) {
     $('habits').hidden = !h; if (!h) return;
     const pct = (n) => Unlock.fmt(h.count ? n / h.count * 100 : 0) + ' %';
@@ -444,9 +444,22 @@
       scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: false, font: { size: 11 } } },
         y: { beginAtZero: true, grid: { color: '#EFEDF0', drawTicks: false }, border: { display: false }, ticks: { precision: 0, padding: 8 } } } };
     const days = h.weekdays.map((r) => ({ label: r.label.slice(0, 3) + '.', count: r.count }));
-    if (cSlots) cSlots.destroy(); cSlots = new Chart($('c-slots'), { type: 'bar', data: bars(h.slots), options: opts });
+    // Créneaux : barres horizontales quand la place manque (mobile), sinon les étiquettes se chevauchent
+    const narrow = $('c-slots').parentElement.clientWidth < 480;
+    slotsNarrow = narrow;
+    const hOpts = { ...opts, indexAxis: 'y',
+      plugins: { ...opts.plugins, tooltip: { ...opts.plugins.tooltip, callbacks: { label: (c) => `${Unlock.fmt(c.parsed.x)} sortie${c.parsed.x > 1 ? 's' : ''} (${pct(c.parsed.x)})` } } },
+      scales: { y: { grid: { display: false }, border: { display: false }, ticks: { autoSkip: false, font: { size: 12 }, color: '#45424B' } },
+        x: { beginAtZero: true, grid: { color: '#EFEDF0', drawTicks: false }, border: { display: false }, ticks: { precision: 0, padding: 6, maxTicksLimit: 5 } } } };
+    if (cSlots) cSlots.destroy(); cSlots = new Chart($('c-slots'), { type: 'bar', data: bars(h.slots), options: narrow ? hOpts : opts });
     if (cDays) cDays.destroy(); cDays = new Chart($('c-days'), { type: 'bar', data: bars(days), options: opts });
   }
+
+  // Rotation / redimensionnement : on bascule l'orientation du graphique des créneaux si besoin
+  let rT = 0;
+  window.addEventListener('resize', () => { clearTimeout(rT); rT = setTimeout(() => {
+    if (lastData && lastData.habits && slotsNarrow !== null && ($('c-slots').parentElement.clientWidth < 480) !== slotsNarrow) drawHabits(lastData.habits);
+  }, 200); });
 
   document.querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => {
     unit = b.dataset.unit;
