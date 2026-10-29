@@ -119,7 +119,7 @@
 
   function render() {
     const rows = [...board].sort((a, b) => b[sortKey] - a[sortKey] || b.blocks - a.blocks);
-    $('lb-body').innerHTML = rows.map((r, i) => `<tr><td>${['🥇','🥈','🥉'][i] || i + 1}</td><td>${Unlock.esc(r.name)}</td><td class="r">${Unlock.fmt(r.percent, 1)} %</td><td class="r">${Unlock.fmt(r.blocks)}</td><td class="r">${Unlock.fmt(r.activities)}</td></tr>`).join('');
+    $('lb-body').innerHTML = rows.map((r, i) => `<tr><td>${['🥇','🥈','🥉'][i] || i + 1}</td><td>${Unlock.esc(r.name)}</td><td class="r">${Unlock.fmt(r.percent, 1)}\u00a0%</td><td class="r">${Unlock.fmt(r.blocks)}</td><td class="r">${Unlock.fmt(r.activities)}</td></tr>`).join('');
     document.querySelectorAll('th[data-k]').forEach((th) => th.toggleAttribute('aria-sort', th.dataset.k === sortKey) || (th.dataset.k === sortKey && th.setAttribute('aria-sort', 'descending')));
   }
   document.querySelectorAll('th[data-k] button').forEach((b) => b.addEventListener('click', () => { sortKey = b.parentElement.dataset.k; render(); }));

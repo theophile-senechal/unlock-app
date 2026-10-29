@@ -13,7 +13,8 @@
   }
   .studio__fit { position: relative; }
   .studio__actions { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 10px; justify-content: center; }
-  .studio__actions .btn { box-shadow: var(--shadow-float); }
+  .studio__actions .btn { box-shadow: var(--shadow-float); flex: 0 1 auto; min-width: 0; }
+  @media (max-width: 359px) { .studio__actions { left: 10px; right: 10px; gap: 8px; } .studio__actions .btn { flex: 1 1 0; padding-inline: 10px; } }
   @media (min-width: 900px) {
     .studio { grid-template-columns: 360px 1fr; }
     .studio__side { display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
@@ -273,7 +274,7 @@
     if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
     const name = city.name; const el = $('sc-city');
     el.textContent = name; el.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
-    $('sc-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + ' %';
+    $('sc-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
     $('sc-blocks').textContent = Unlock.fmt(city.stats.blocks);
     const g = +$('grid-select').value; $('sc-grid').textContent = `de ${g} m × ${g} m`;
     if (!city.outline) return;
@@ -331,7 +332,7 @@
     if (nq) shown.sort((a, b) => norm(a.name).indexOf(nq) - norm(b.name).indexOf(nq) || b.stats.blocks - a.stats.blocks);
     active = shown.length ? 0 : -1;
     list.innerHTML = shown.length ? shown.map((c, i) => `<li class="combo__opt" role="option" id="opt-${i}" data-name="${Unlock.esc(c.name)}" aria-selected="${i === active}" data-current="${c.name === $('city-select').value}">
-        <span class="combo__name" title="${Unlock.esc(c.name)}">${highlight(c.name, q)}</span><span class="combo__pct">${Unlock.fmt(c.stats.percent, c.stats.percent < 10 ? 1 : 0)} %</span></li>`).join('')
+        <span class="combo__name" title="${Unlock.esc(c.name)}">${highlight(c.name, q)}</span><span class="combo__pct">${Unlock.fmt(c.stats.percent, c.stats.percent < 10 ? 1 : 0)}\u00a0%</span></li>`).join('')
       : `<li class="combo__empty">Aucune commune ne correspond à « ${Unlock.esc(q)} »</li>`;
     list.hidden = false; input.setAttribute('aria-expanded', 'true');
     input.setAttribute('aria-activedescendant', active >= 0 ? 'opt-0' : '');

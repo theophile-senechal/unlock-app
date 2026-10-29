@@ -436,6 +436,12 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
   .panel .stat { padding: 10px; }
   .panel .stat__val { font-size: var(--fs-lg); }
   .panel .stat__sub { display: none; }
+}
+@media (max-width: 359px) {
+  .panel .stats { gap: 6px; }
+  .panel .stat { padding: 9px 8px; }
+  .panel .stat__val { font-size: var(--fs-md); }
+  .panel .stat__top { font-size: .6875rem; gap: 4px; }
   .mapview .leaflet-bottom { bottom: var(--panel-h, 120px); }
 }
 
@@ -495,12 +501,21 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: 100%; }
 .filters .select { padding-left: 12px; padding-right: 30px; background-position: right 9px center; }
 @media (min-width: 768px) { .filters { width: auto; gap: 10px; grid-template-columns: repeat(3, minmax(130px, 170px)); } }
+/* Très petits écrans : 3 menus côte à côte ne tiennent pas sans couper le texte */
+@media (max-width: 380px) { .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .filters > .field:last-child { grid-column: 1 / -1; } }
 
 .surface { background: var(--surface); border-radius: var(--r-lg); border: 1px solid var(--line); }
 .kpis { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 14px; }
 @media (min-width: 560px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1024px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
 .kpi { padding: 16px; display: flex; flex-direction: column; min-width: 0; }
+/* Cartes d'une même rangée : titres, chiffres, comparaisons et définitions alignés ligne à ligne */
+@supports (grid-template-rows: subgrid) {
+  .kpis { grid-auto-rows: auto; }
+  .kpi { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: 0; align-content: start; }
+  .kpi > .kpi__help { margin-top: 0; align-self: start; }
+}
+.nobr { white-space: nowrap; }
 .kpi__val--text { font-size: clamp(1.15rem, 2.4vw, 1.6rem) !important; }
 .kpi__sub { margin-top: 10px; font-size: var(--fs-sm); line-height: 1.35; }
 .kpi__help { margin-top: auto; padding-top: 10px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.35; }
@@ -540,7 +555,7 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .ccard { padding: 12px 12px 11px; border-radius: var(--r-md); background: var(--canvas); min-width: 0; }
 .ccard__top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 8px; }
 .ccard__rank { font-size: var(--fs-xs); font-weight: 700; color: var(--muted); min-width: 1.4em; font-variant-numeric: tabular-nums; }
-.ccard__name { font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ccard__name { font-weight: 700; color: var(--ink); overflow-wrap: anywhere; line-height: 1.3; }
 .ccard__pct { font-family: var(--font-display); font-weight: 750; color: var(--brand); font-variant-numeric: tabular-nums; }
 .ccard .bar { margin-top: 8px; height: 6px; }
 .ccard__meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 9px; font-size: var(--fs-sm); color: var(--ink-2); }
@@ -647,6 +662,7 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 /* Onglets des pages légales : tiennent sur une ligne sur petit téléphone */
 @media (max-width: 430px) { .legal-nav { gap: 6px; } .legal-nav a { padding: 7px 10px; font-size: var(--fs-xs); } }
 @media (max-width: 380px) { .legal-nav .emoji { display: none; } }
+@media (max-width: 340px) { .legal-nav { gap: 5px; } .legal-nav a { padding: 7px 8px; } }
 
 /* Barres de défilement fines et discrètes (au lieu de la grosse barre grise du système) */
 * { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }

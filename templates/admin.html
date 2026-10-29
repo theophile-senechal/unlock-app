@@ -152,7 +152,7 @@
   const delta = (cur, prev, ref) => {
     if (!prev) return cur ? `<span class="delta delta--up">▲ nouveau</span> <span class="delta__ref">${ref}</span>` : `<span class="delta__ref">${ref} : 0</span>`;
     const p = (cur - prev) / prev * 100, cls = Math.abs(p) < .5 ? '' : p > 0 ? ' delta--up' : ' delta--down';
-    return `<span class="delta${cls}">${p > 0 ? '▲' : p < 0 ? '▼' : '='} ${p >= 0 ? '+' : '−'}${fmt(Math.abs(p))} %</span> <span class="delta__ref">${ref} (${fmt(prev)})</span>`;
+    return `<span class="delta${cls}">${p > 0 ? '▲' : p < 0 ? '▼' : '='} ${p >= 0 ? '+' : '−'}${fmt(Math.abs(p))}\u00a0%</span> <span class="delta__ref">${ref} (${fmt(prev)})</span>`;
   };
   function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
 
@@ -179,7 +179,7 @@
     const net = (+s.flow_30.arrivals || 0) - (+s.flow_30.departures || 0);
     const side = [];
     const level = pct >= 95 ? 'bad' : pct >= 80 ? 'warn' : '';
-    side.push(`<div class="callout${level ? ' callout--' + level : ''}"><span class="emoji">${level === 'bad' ? '🚨' : level === 'warn' ? '⚠️' : '✅'}</span><span><b>${fmt(pct, pct < 10 ? 1 : 0)} % du quota utilisé.</b> ${level === 'bad' ? 'Les nouveaux utilisateurs risquent d\'être refusés : demande une hausse du quota à Strava.' : level === 'warn' ? 'Pense à demander une hausse du quota à Strava.' : 'Il reste de la marge.'}</span></div>`);
+    side.push(`<div class="callout${level ? ' callout--' + level : ''}"><span class="emoji">${level === 'bad' ? '🚨' : level === 'warn' ? '⚠️' : '✅'}</span><span><b>${fmt(pct, pct < 10 ? 1 : 0)}\u00a0% du quota utilisé.</b> ${level === 'bad' ? 'Les nouveaux utilisateurs risquent d\'être refusés : demande une hausse du quota à Strava.' : level === 'warn' ? 'Pense à demander une hausse du quota à Strava.' : 'Il reste de la marge.'}</span></div>`);
     if (net > 0) {
       const days = Math.round(free / (net / 30));
       side.push(`<div class="callout"><span class="emoji">🔮</span><span>Au rythme des 30 derniers jours (<b>+${fmt(net)}</b> comptes nets), l'app serait pleine dans <b>~${fmt(days)} jours</b>.</span></div>`);
@@ -195,11 +195,11 @@
     $('k-today').textContent = fmt(u.seen_today);
     $('k-today-sub').innerHTML = delta(today, yesterday, 'visiteurs vs hier');
     $('k-week').textContent = fmt(u.active_7);
-    $('k-week-sub').innerHTML = `<span class="delta__ref">${fmt(u.connected ? u.active_7 / u.connected * 100 : 0)} % des comptes connectés</span>`;
+    $('k-week-sub').innerHTML = `<span class="delta__ref">${fmt(u.connected ? u.active_7 / u.connected * 100 : 0)}\u00a0% des comptes connectés</span>`;
     $('k-new').textContent = fmt(u.new_7);
     $('k-new-sub').innerHTML = delta(u.new_7, u.new_prev_7, 'vs 7 jours précédents');
     const ret = u.older_than_1d ? u.returned / u.older_than_1d * 100 : null;
-    $('k-ret').textContent = ret === null ? '–' : fmt(ret) + ' %';
+    $('k-ret').textContent = ret === null ? '–' : fmt(ret) + '\u00a0%';
     $('k-ret-sub').innerHTML = `<span class="delta__ref">${fmt(u.returned)} sur ${fmt(u.older_than_1d)} comptes de plus d'un jour</span>`;
 
     /* Visiteurs / jour */

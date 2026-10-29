@@ -373,7 +373,7 @@
     }
     if (focusCity && city && city.outline) {
       map.fitBounds(L.polygon(city.outline).getBounds(), fitPadding());
-      Unlock.toast(`📍 ${city.name} : votre commune la plus explorée (${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)} %)`);
+      Unlock.toast(`📍 ${city.name} : votre commune la plus explorée (${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)}\u00a0%)`);
       focusCity = false; fitPending = false;
     } else if (bounds && bounds.isValid() && (fitPending || !map.getBounds().intersects(bounds))) {
       // Premier chargement, ou plus aucune activité visible à l'écran avec ce filtre : on recadre
@@ -398,7 +398,7 @@
     if (!city) return;
     selectedCity = city.name;
     $('city-name').textContent = city.name;
-    $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + ' %';
+    $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
     $('city-meta').innerHTML = city.stats.total_blocks
       ? `${Unlock.fmt(city.stats.blocks)} blocs sur ${Unlock.fmt(city.stats.total_blocks)}<br>${Unlock.fmt(city.stats.activities)} sorties`
       : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
@@ -416,8 +416,8 @@
     const cities = [...(data.top_municipalities || [])].sort((a, b) => b.stats[sortKey] - a.stats[sortKey]).slice(0, 5);
     cities.forEach((c, i) => {
       const li = document.createElement('li');
-      const main = sortKey === 'percent' ? `${Unlock.fmt(c.stats.percent, 1)} %` : `${Unlock.fmt(c.stats.blocks)} blocs`;
-      const sub = sortKey === 'percent' ? `${Unlock.fmt(c.stats.blocks)} blocs` : `${Unlock.fmt(c.stats.percent, 1)} %`;
+      const main = sortKey === 'percent' ? `${Unlock.fmt(c.stats.percent, 1)}\u00a0%` : `${Unlock.fmt(c.stats.blocks)} blocs`;
+      const sub = sortKey === 'percent' ? `${Unlock.fmt(c.stats.blocks)} blocs` : `${Unlock.fmt(c.stats.percent, 1)}\u00a0%`;
       const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
       li.innerHTML = `<button type="button" class="rank__item" data-city="${Unlock.esc(c.name)}" aria-current="${c.name === selectedCity}">
         <span class="rank__pos">${medal}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}</span>

@@ -117,7 +117,7 @@
     {% if error %}
     <p class="notice notice--err" role="alert"><span class="emoji">⚠️</span>
       {% if error == 'denied' %}Connexion annulée. Autorisez l'accès à vos activités pour afficher votre carte.
-      {% elif error == 'expired' %}Votre session Strava a expiré. Reconnectez-vous pour continuer.
+      {% elif error == 'expired' %}Votre session Strava a expiré. <span class="nobr">Reconnectez-vous</span> pour continuer.
       {% elif error == 'scope' %}Unlock a besoin de lire vos activités. Cochez « Voir vos activités » lors de la connexion.
       {% else %}La connexion à Strava n'a pas abouti. Réessayez dans quelques instants.{% endif %}
     </p>
