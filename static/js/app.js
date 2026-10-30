@@ -89,6 +89,7 @@
 
   /* Busy pill for refreshes that shouldn't block the screen */
   let busyTimer = null;
+  let busyWanted = false;   // un « off » très rapide ne doit pas être suivi d'un affichage différé
   U.busy = {
     /* title : action en cours ; sub : précision (filtres…) ; opts.veil : voile flou sur le contenu */
     on(title, sub, opts) {
@@ -97,10 +98,12 @@
       document.getElementById('busy-title').textContent = title || 'Mise à jour…';
       document.getElementById('busy-sub').textContent = sub || '';
       b.classList.toggle('working--veil', !!(opts && opts.veil));
-      b.hidden = false; requestAnimationFrame(() => b.classList.add('is-on'));
+      busyWanted = true;
+      b.hidden = false; requestAnimationFrame(() => { if (busyWanted) b.classList.add('is-on'); });
     },
     off() {
       const b = document.getElementById('busy'); if (!b) return;
+      busyWanted = false;
       b.classList.remove('is-on');
       busyTimer = setTimeout(() => { b.hidden = true; }, 260);
     }

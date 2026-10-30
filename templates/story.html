@@ -95,6 +95,13 @@
   .sc-city { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; line-height: .95; font-size: 64px; text-transform: none; overflow-wrap: break-word; text-wrap: balance; }
   .sc-stats { display: grid; grid-template-columns: 1fr 1fr; margin-top: 26px; padding-top: 22px; border-top: 2px solid rgba(255,255,255,.85); }
   .sc-num { font-family: var(--font-display); font-weight: 800; font-size: 44px; letter-spacing: -.04em; line-height: 1; color: var(--t-light); }
+  .sc-num small { font-size: 24px; opacity: .75; letter-spacing: -.02em; margin-left: 2px; }
+  /* Story « Département » : communes dessinées directement (pas de fond de carte) */
+  #story-dep { position: absolute; inset: 0; width: 450px; height: 800px; display: block; }
+  #story-card.is-dep #story-map { display: none; }
+  /* Communes pas encore explorées : voile clair sur fond sombre (transparent), silhouette plus foncée sur fond coloré */
+  #story-dep .dz { fill: rgba(255,255,255,.07); stroke: rgba(255,255,255,.22); }
+  #story-card.solid #story-dep .dz { fill: rgba(0,0,0,.34); stroke: rgba(255,255,255,.26); }
   .sc-lbl { margin-top: 8px; font-size: 14px; font-weight: 700; }
   .sc-sub { margin-top: 2px; font-size: 12px; opacity: .75; }
   body.exporting #story-card { box-shadow: none; border-radius: 0; }
@@ -113,12 +120,13 @@
       <div class="studio__fit" id="fit">
         <div id="story-card">
           <div id="story-map"></div>
+          <svg id="story-dep" viewBox="0 0 450 800" aria-hidden="true" hidden></svg>
           <div class="sc-ui">
             <div class="sc-bottom">
               <div class="sc-city" id="sc-city">…</div>
               <div class="sc-stats" id="sc-stats">
-                <div><div class="sc-num" id="sc-pct">–</div><div class="sc-lbl">explorés</div></div>
-                <div><div class="sc-num" id="sc-blocks">–</div><div class="sc-lbl">blocs</div><div class="sc-sub" id="sc-grid"></div></div>
+                <div><div class="sc-num" id="sc-pct">–</div><div class="sc-lbl" id="sc-lbl1">explorés</div></div>
+                <div><div class="sc-num" id="sc-blocks">–</div><div class="sc-lbl" id="sc-lbl2">blocs</div><div class="sc-sub" id="sc-grid"></div></div>
               </div>
               <!-- Signature toujours présente, non désactivable -->
               <div class="sc-brand"><span>unlock</span></div>
@@ -148,7 +156,17 @@
     <h1>Story</h1>
     <p class="lead">Une image prête à poster, avec vos blocs sur fond transparent ou coloré.</p>
   </div>
-  <div class="field">
+  <div class="field"><span class="field__label" id="kind-l">Format</span>
+    <div class="seg seg--block" role="group" aria-labelledby="kind-l">
+      <button type="button" class="seg__btn" data-kind="commune" aria-pressed="true">Commune</button>
+      <button type="button" class="seg__btn" data-kind="dep" aria-pressed="false">Département</button>
+    </div>
+  </div>
+  <div class="field" id="field-dep" hidden>
+    <label class="field__label" for="dep-select">Département</label>
+    <select class="select" id="dep-select"></select>
+  </div>
+  <div class="field" id="field-city">
     <label class="field__label" for="city-input">Commune</label>
     <div class="combo" id="combo">
       <div class="search">
@@ -170,8 +188,8 @@
   </div>
   <div class="field"><span class="field__label" id="show-l">Afficher sur l'image</span>
     <div class="switches" role="group" aria-labelledby="show-l">
-      <label class="switch"><span>🏘️ Nom de la commune</span><input type="checkbox" id="show-city" checked><span class="switch__ui" aria-hidden="true"></span></label>
-      <label class="switch"><span>📊 Chiffres (% et blocs)</span><input type="checkbox" id="show-kpi" checked><span class="switch__ui" aria-hidden="true"></span></label>
+      <label class="switch"><span id="show-city-l">🏘️ Nom de la commune</span><input type="checkbox" id="show-city" checked><span class="switch__ui" aria-hidden="true"></span></label>
+      <label class="switch"><span id="show-kpi-l">📊 Chiffres (% et blocs)</span><input type="checkbox" id="show-kpi" checked><span class="switch__ui" aria-hidden="true"></span></label>
     </div>
     <p class="switch-note">« unlock » reste toujours affiché en bas de l'image.</p>
   </div>
@@ -181,7 +199,7 @@
       <button type="button" class="seg__btn" data-bg="solid" aria-pressed="false">Coloré</button>
     </div>
   </div>
-  <div class="field"><label class="field__label" for="grid-select">Taille des blocs</label>
+  <div class="field" id="field-grid"><label class="field__label" for="grid-select">Taille des blocs</label>
     <select class="select" id="grid-select"><option value="100" selected>100 m</option><option value="250">250 m</option></select></div>
   <p class="set-tip" style="font-size:var(--fs-sm); color:var(--muted)">💡 Déplacez et zoomez la carte dans l'aperçu pour cadrer votre story.</p>
   <button type="button" class="btn btn--primary btn--block set-dl" data-download style="margin-top:auto"><span class="emoji" aria-hidden="true">📸</span>Télécharger l'image</button>
@@ -206,7 +224,8 @@
 (function () {
   const $ = (id) => document.getElementById(id);
   const THEMES = { bordeaux: ['#FF5A6E', '#8A0920', '#3A0410'], ocean: ['#5AB4FF', '#0B3A66', '#06213B'], foret: ['#5BE38F', '#0B5C2C', '#05301A'] };
-  let theme = 'bordeaux', data = null, first = true;
+  let theme = 'bordeaux', data = null, first = true, kind = 'commune', depCode = null;
+  const depGeo = {};
 
   /* Settings placement */
   const mq = window.matchMedia('(min-width: 900px)');
@@ -254,6 +273,7 @@
       if (!cities.some((c) => c.name === cur)) setCity(cities[0] ? cities[0].name : '', false);
       else setCity(cur, false);
       $('city-input').placeholder = cities.length ? `Rechercher parmi ${cities.length} commune${cities.length > 1 ? 's' : ''}` : 'Aucune commune disponible';
+      fillDeps();
       draw(true);
     } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos communes.'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } stageBusy(false); }
@@ -275,6 +295,7 @@
     const [light, dark, bg] = THEMES[theme];
     const card = $('story-card');
     card.style.setProperty('--t-light', light); card.style.setProperty('--t-dark', dark); card.style.setProperty('--t-bg', bg);
+    if (kind === 'dep') { drawDep(); return; }
     const city = (data && data.top_municipalities || []).find((c) => c.name === $('city-select').value);
     gridLayer.clearLayers(); borderLayer.clearLayers();
     if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
@@ -293,6 +314,71 @@
     if (center) { map.invalidateSize(); map.fitBounds(poly.getBounds(), { paddingTopLeft: [30, 60], paddingBottomRight: [30, bottomSpace()] }); }
   }
 
+  /* ---------- Story « Département » ---------- */
+  const deps = () => (data && data.departements) || [];
+  function fillDeps() {
+    const sel = $('dep-select'), list = deps();
+    sel.innerHTML = list.length ? list.map((d) => `<option value="${Unlock.esc(d.code)}">${Unlock.esc(d.name)} (${Unlock.esc(d.code)}) · ${Unlock.fmt(d.visited)}/${Unlock.fmt(d.total)}</option>`).join('')
+      : '<option value="">Aucun département pour l\u2019instant</option>';
+    if (!list.some((d) => d.code === depCode)) depCode = list.length ? list[0].code : null;
+    sel.value = depCode || '';
+  }
+  function setKind(k) {
+    kind = k;
+    document.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
+    const dep = k === 'dep';
+    $('field-dep').hidden = !dep; $('field-city').hidden = dep; $('field-grid').hidden = dep;
+    document.querySelectorAll('.set-tip').forEach((t) => (t.hidden = dep));
+    $('show-city-l').textContent = dep ? '🗺️ Nom du département' : '🏘️ Nom de la commune';
+    $('show-kpi-l').textContent = dep ? '📊 Chiffres (% et communes)' : '📊 Chiffres (% et blocs)';
+    $('story-card').classList.toggle('is-dep', dep);
+    $('story-dep').toggleAttribute('hidden', !dep);   // élément SVG : .hidden n'existe pas, on passe par l'attribut
+    $('sc-lbl1').textContent = dep ? 'du département' : 'explorés';
+    $('sc-lbl2').textContent = dep ? 'communes explorées' : 'blocs';
+    $('sc-grid').hidden = dep;
+    if (!dep) { map.invalidateSize(); }
+    draw(true);
+  }
+  async function drawDep() {
+    const svg = $('story-dep'), d = deps().find((x) => x.code === depCode);
+    const nameEl = $('sc-city');
+    if (!d) { svg.innerHTML = ''; nameEl.textContent = 'Votre département'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
+    const name = d.name;
+    nameEl.textContent = name; nameEl.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
+    $('sc-pct').textContent = Unlock.fmt(d.percent, d.percent > 0 && d.percent < 10 ? 1 : 0) + '\u00a0%';
+    $('sc-blocks').innerHTML = `${Unlock.fmt(d.visited)}<small>/${Unlock.fmt(d.total)}</small>`;
+    let geo = depGeo[d.code];
+    if (!geo) {
+      stageBusy(true, 'Chargement du département', name);
+      try { geo = depGeo[d.code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(d.code)}/geo`); }
+      catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Contours du département indisponibles pour le moment.'); return; }
+      finally { stageBusy(false); }
+      if (kind !== 'dep' || depCode !== d.code) return;
+    }
+    const [light] = THEMES[theme];
+    const byCode = {}; (data.top_municipalities || []).forEach((c) => { if (c.code) byCode[c.code] = c.stats.percent; });
+    // Projection simple (longitude corrigée par la latitude), cadrée au-dessus des textes
+    let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+    geo.communes.forEach((c) => c.shape.forEach((poly) => poly[0].forEach(([la, lo]) => {
+      if (la < minLa) minLa = la; if (la > maxLa) maxLa = la; if (lo < minLo) minLo = lo; if (lo > maxLo) maxLo = lo; })));
+    const kx = Math.cos((minLa + maxLa) / 2 * Math.PI / 180);
+    const box = { x: 14, y: 56, w: 450 - 28, h: 800 - 56 - bottomSpace() };
+    const s = Math.min(box.w / ((maxLo - minLo) * kx || 1), box.h / ((maxLa - minLa) || 1));
+    const ox = box.x + (box.w - (maxLo - minLo) * kx * s) / 2, oy = box.y + (box.h - (maxLa - minLa) * s) / 2;
+    const P = (la, lo) => `${(ox + (lo - minLo) * kx * s).toFixed(1)},${(oy + (maxLa - la) * s).toFixed(1)}`;
+    const path = (shape) => shape.map((poly) => poly.map((ring) => 'M' + ring.map(([la, lo]) => P(la, lo)).join('L') + 'Z').join('')).join('');
+    // Teinte minimale assez forte : même à 1 %, une commune explorée doit se détacher d'une commune vierge (y compris sur fond coloré)
+    const alpha = (p) => (p < 10 ? .48 : p < 25 ? .6 : p < 50 ? .74 : p < 75 ? .87 : 1);
+    const zero = [], vis = [];
+    geo.communes.forEach((c) => (c.code in byCode ? vis : zero).push(c));
+    svg.innerHTML =
+      zero.map((c) => `<path class="dz" d="${path(c.shape)}" stroke-width="1" stroke-linejoin="round"/>`).join('') +
+      vis.map((c) => `<path d="${path(c.shape)}" fill="${light}" fill-opacity="${alpha(byCode[c.code])}" stroke="rgba(18,16,20,.55)" stroke-width="1" stroke-linejoin="round"/>`).join('') +
+      (geo.outline || []).map((poly) => `<path d="${'M' + poly[0].map(([la, lo]) => P(la, lo)).join('L') + 'Z'}" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.6" stroke-linejoin="round"/>`).join('');
+  }
+  document.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.kind !== kind) setKind(b.dataset.kind); }));
+  $('dep-select').addEventListener('change', (e) => { depCode = e.target.value; draw(true); if (!mq.matches) setTimeout(() => Unlock.closeSheet('sheet-studio'), 150); });
+
   async function download() {
     const card = $('story-card'), prev = card.style.transform;
     document.body.classList.add('exporting');
@@ -304,7 +390,8 @@
         style: { transform: 'scale(2)', transformOrigin: 'top left', width: '450px', height: '800px' }
       });
       const a = document.createElement('a');
-      a.download = `unlock-story-${($('city-select').value || 'ville').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
+      const label = kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
+      a.download = `unlock-story-${label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
       a.href = url; a.click();
       Unlock.toast('📸 Image enregistrée, à vous de poster !');
     } catch (e) { console.error(e); Unlock.toast("⚠️ L'export a échoué. Réessayez, ou faites une capture d'écran de l'aperçu."); }
@@ -368,10 +455,14 @@
   input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement === input) return; closeList(); input.value = $('city-select').value; $('city-clear').hidden = !input.value; }, 120));
   $('city-clear').addEventListener('mousedown', (e) => { e.preventDefault(); input.value = ''; $('city-clear').hidden = true; input.focus(); openList(''); });
 
+  // Voile « chargement » sur l'aperçu. busyOn évite qu'un affichage différé (frame suivante)
+  // ne réapparaisse après un « off » très rapide (réponse en cache, ou erreur immédiate).
+  let busyOn = false;
   function stageBusy(on, title, sub) {
     const el = $('stage-busy');
-    if (on) { $('stage-busy-title').textContent = title; $('stage-busy-sub').textContent = sub || ''; el.hidden = false; requestAnimationFrame(() => el.classList.add('is-on')); }
-    else { el.classList.remove('is-on'); setTimeout(() => { if (!el.classList.contains('is-on')) el.hidden = true; }, 250); }
+    busyOn = on;
+    if (on) { $('stage-busy-title').textContent = title; $('stage-busy-sub').textContent = sub || ''; el.hidden = false; requestAnimationFrame(() => { if (busyOn) el.classList.add('is-on'); }); }
+    else { el.classList.remove('is-on'); setTimeout(() => { if (!busyOn) el.hidden = true; }, 250); }
   }
   $('grid-select').addEventListener('change', load);
   place(); mq.addEventListener('change', place);
