@@ -2,11 +2,11 @@
    - Met en cache uniquement l'interface (CSS, JS, polices, icônes).
    - Ne met JAMAIS en cache les données Strava (/api/*) : la Strava API Policy
      limite leur conservation et elles doivent pouvoir être supprimées à tout moment. */
-const VERSION = 'unlock-2026.10.18';
+const VERSION = 'unlock-2026.10.20';
 const SHELL = [
   '/offline',
-  '/static/css/app.css?v=2026.10.18',
-  '/static/js/app.js?v=2026.10.18',
+  '/static/css/app.css?v=2026.10.20',
+  '/static/js/app.js?v=2026.10.20',
   '/static/fonts/sora.woff2',
   '/static/img/logo.svg',
   '/static/icons/icon-192.png',

@@ -289,6 +289,16 @@ p { margin: 0; }
   transform: translateY(100%); transition: transform .32s var(--ease);
 }
 .sheet.is-open .sheet__panel { transform: none; }
+/* Fenêtres : pas de barre de défilement visible (on fait toujours défiler à la molette, au pavé ou au doigt).
+   Un léger fondu en bas signale qu'il reste du contenu, et disparaît une fois en bas. */
+.sheet__panel { scrollbar-width: none; }
+.sheet__panel::-webkit-scrollbar { display: none; }
+.sheet__panel::after {
+  content: ""; position: sticky; bottom: calc(-24px - var(--safe-b)); display: block; height: 44px; margin-top: -44px;
+  pointer-events: none; background: linear-gradient(rgba(255, 255, 255, 0), var(--surface) 80%);
+  opacity: 0; transition: opacity .2s;
+}
+.sheet__panel.has-more::after { opacity: 1; }
 .sheet__grip { width: 40px; height: 5px; border-radius: 99px; background: var(--line-2); margin: 4px auto 14px; }
 .sheet__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .sheet__title { font-size: var(--fs-xl); overflow-wrap: break-word; }
@@ -486,8 +496,28 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .support__costs li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; }
 .support__costs b { color: var(--ink); font-weight: 650; }
 .support__muted { font-size: var(--fs-sm); color: var(--muted); }
-.support__cta { margin-top: 4px; gap: 8px; }
-.support__thanks { text-align: center; font-size: var(--fs-sm); color: var(--muted); font-style: italic; }
+.support__cta { gap: 8px; }
+.support__thanks { text-align: center; font-size: var(--fs-sm); color: var(--muted); font-style: italic; margin: 0; }
+/* Bouton de don toujours visible en bas de la fenêtre ; le texte défile au-dessus */
+.support__foot { position: sticky; bottom: calc(-24px - var(--safe-b)); z-index: 1; display: grid; gap: 10px;
+  margin: 4px -20px calc(-24px - var(--safe-b)); padding: 12px 20px calc(16px + var(--safe-b)); background: var(--surface); }
+.support__foot::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 28px; pointer-events: none;
+  background: linear-gradient(rgba(255, 255, 255, 0), var(--surface)); }
+.sheet__panel:has(.support__foot)::after { display: none; }
+/* Ordinateur : les fenêtres s'affichent en entier, sans défilement (2 colonnes pour le menu et « Soutenir ») */
+.menu-cols, .menu-col, .support__col { display: contents; }
+@media (min-width: 640px) { .sheet__panel { max-height: calc(100dvh - 32px); } }
+@media (min-width: 720px) {
+  #sheet-menu .sheet__panel, #sheet-support .sheet__panel { max-width: min(780px, 100%); }
+  .menu-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+  .menu-col { display: grid; gap: 12px; align-content: start; }
+  .menu-col > * { margin-top: 0 !important; margin-bottom: 0 !important; }
+  .support { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 28px; align-items: start; }
+  .support__col { display: grid; gap: 12px; align-content: start; }
+  .support__foot { position: static; margin: 4px 0 0; padding: 0; }
+  .support__foot::before { display: none; }
+}
+@media (min-width: 640px) and (max-width: 719px) { .support__foot { margin-left: -24px; margin-right: -24px; padding-left: 24px; padding-right: 24px; } }
 
 /* ---------- Carte : mode « Communes » (un département) ---------- */
 .iconbtn--sm { width: 32px; height: 32px; }

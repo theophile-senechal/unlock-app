@@ -124,7 +124,12 @@
     // Focus sur un bouton plutôt qu'un champ (évite d'ouvrir le clavier / une liste de recherche à l'ouverture)
     const focusable = s.querySelector('[autofocus]') || s.querySelector('button:not([hidden]), a[href]');
     setTimeout(() => focusable && focusable.focus({ preventScroll: true }), 60);
+    const p = s.querySelector('.sheet__panel'); if (p) { p.scrollTop = 0; requestAnimationFrame(() => moreHint(p)); setTimeout(() => moreHint(p), 320); }
   };
+  // Fondu en bas d'une fenêtre tant qu'il reste du contenu à faire défiler
+  function moreHint(p) { p.classList.toggle('has-more', p.scrollTop + p.clientHeight < p.scrollHeight - 6); }
+  document.addEventListener('scroll', (e) => { if (e.target.classList && e.target.classList.contains('sheet__panel')) moreHint(e.target); }, true);
+  window.addEventListener('resize', () => document.querySelectorAll('.sheet.is-open .sheet__panel').forEach(moreHint));
   U.closeSheet = function (id) {
     const s = id ? document.getElementById(id) : document.querySelector('.sheet.is-open');
     if (!s) return;

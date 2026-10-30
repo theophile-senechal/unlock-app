@@ -36,6 +36,8 @@
       <h2 class="sheet__title" id="menu-title">Menu</h2>
       <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
+    <div class="menu-cols">
+    <div class="menu-col">
     {% if my_athlete_id %}
     <div class="idcard">
       <div class="idcard__text">
@@ -56,12 +58,15 @@
       <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
       <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
     </ul>
-
+    </div>
+    <div class="menu-col">
     <ul class="menu-group">
       <li><a class="menu-item" href="/logout"><span class="emoji" aria-hidden="true">🚪</span><span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
       <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete"><span class="emoji" aria-hidden="true">🗑️</span><span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
     </ul>
     <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
+    </div>
+    </div>
   </div>
 </div>
 
@@ -92,17 +97,23 @@
       <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
     </div>
     <div class="support">
+      <div class="support__col">
       <p>Unlock est gratuit et sans publicité. Toutes les fonctionnalités sont ouvertes à tous, que vous fassiez un don ou non.</p>
       <p>Si l'app vous plaît, vos dons servent à couvrir ses frais.</p>
       <ul class="support__costs">
         <li><span class="emoji" aria-hidden="true">🔑</span><span><b>L'accès à l'API Strava</b>, un abonnement payant sans lequel Unlock ne peut pas lire vos sorties.</span></li>
         <li><span class="emoji" aria-hidden="true">🌐</span><span><b>Le nom de domaine</b> (l'adresse du site).</span></li>
       </ul>
+      </div>
+      <div class="support__col">
       <p>L'hébergement et la base de données ne coûtent rien pour l'instant. Au-delà de ces frais, votre don peut aussi m'offrir un gel pour ma prochaine <span class="nobr">sortie <span class="emoji" aria-hidden="true">🏃</span></span></p>
       <p class="support__muted">Les dons passent par Ko-fi, une plateforme de soutien aux créateurs. Le montant minimum est de 2&nbsp;€. Unlock ne voit jamais vos informations de paiement.</p>
+      <div class="support__foot">
       <a class="btn btn--primary btn--block support__cta" href="/soutenir/go" target="_blank" rel="noopener">Faire un don sur Ko-fi
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
-      <p class="support__thanks">Un don ne débloque aucune fonctionnalité. Merci pour votre soutien !</p>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+        <p class="support__thanks">Un don ne débloque aucune fonctionnalité. Merci pour votre soutien !</p>
+      </div>
+      </div>
     </div>
   </div>
 </div>

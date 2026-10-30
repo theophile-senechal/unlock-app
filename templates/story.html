@@ -21,6 +21,12 @@
     .studio__stage { padding: 32px; }
     .studio__actions { display: none; }
   }
+  /* Petite fenêtre d'ordinateur (720-899 px) : réglages en 2 colonnes pour tout voir sans défiler */
+  @media (min-width: 720px) and (max-width: 899px) {
+    #sheet-studio .sheet__panel { max-width: min(700px, 100%); }
+    #sheet-studio .sheet__body { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 24px; align-items: start; }
+    #sheet-studio .set-head, #sheet-studio .set-tip, #sheet-studio .set-dl { grid-column: 1 / -1; }
+  }
   .studio__side h1 { font-size: var(--fs-2xl); }
   .studio__side p.lead { color: var(--muted); font-size: var(--fs-sm); margin-top: 6px; }
   /* Recherche de commune */
