@@ -34,6 +34,12 @@
   .hbar__val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
   @media (max-width: 480px) { .hbar__row { grid-template-columns: 110px minmax(0, 1fr) 40px; } }
 
+  .uniq { margin-bottom: 14px; }
+  .uniq__head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px 24px; margin-bottom: 14px; }
+  .uniq__total { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; font-family: var(--font-display); font-weight: 800; font-size: var(--fs-3xl); letter-spacing: -.04em; line-height: 1.05; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .uniq__total small { font-family: var(--font-ui); font-size: var(--fs-sm); font-weight: 600; letter-spacing: 0; color: var(--muted); }
+  .uniq__head .kpi__sub { margin-top: 6px; }
+  .uniq__note { max-width: 420px; margin: 0; }
   .health { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .health li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
   .health li:last-child { border-bottom: 0; }
@@ -88,6 +94,19 @@
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🆕</span>Nouveaux sur 7 jours</span><span class="kpi__val" id="k-new">–</span><span class="kpi__sub" id="k-new-sub"></span><span class="kpi__help">Premières connexions</span></div>
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🔁</span>Taux de retour</span><span class="kpi__val" id="k-ret">–</span><span class="kpi__sub" id="k-ret-sub"></span><span class="kpi__help">Utilisateurs revenus un autre jour que leur inscription</span></div>
         </div>
+
+        <!-- Utilisateurs uniques depuis le lancement -->
+        <section class="surface chart uniq" aria-labelledby="g0">
+          <div class="uniq__head">
+            <div>
+              <h2 class="chart__title" id="g0"><span class="emoji" aria-hidden="true">🌍</span>Utilisateurs depuis le lancement</h2>
+              <div class="uniq__total"><span id="u-total">–</span><small>utilisateurs uniques</small></div>
+              <div class="kpi__sub" id="u-sub"></div>
+            </div>
+            <p class="note uniq__note" id="u-note"></p>
+          </div>
+          <div class="chart__box"><canvas id="c-uniq" role="img" aria-label="Nombre cumulé d'utilisateurs depuis le lancement"></canvas></div>
+        </section>
 
         <div class="dash-grid">
           <section class="surface chart" aria-labelledby="g1">
@@ -201,6 +220,24 @@
     const ret = u.older_than_1d ? u.returned / u.older_than_1d * 100 : null;
     $('k-ret').textContent = ret === null ? '–' : fmt(ret) + '\u00a0%';
     $('k-ret-sub').innerHTML = `<span class="delta__ref">${fmt(u.returned)} sur ${fmt(u.older_than_1d)} comptes de plus d'un jour</span>`;
+
+    /* Utilisateurs depuis le lancement */
+    const U = s.unique;
+    if (U && U.series && U.series.length) {
+      $('u-total').textContent = fmt(U.total);
+      const up = U.new_7 > U.new_prev_7 ? ' delta--up' : U.new_7 < U.new_prev_7 ? ' delta--down' : '';
+      $('u-sub').innerHTML = `<span class="delta${up}">+${fmt(U.new_7)} ces 7 derniers jours</span> <span class="delta__ref">contre +${fmt(U.new_prev_7)} les 7 jours d'avant</span>`;
+      $('u-note').textContent = `Depuis le ${d(U.since).toLocaleDateString('fr-FR')}. Le total continue de monter quand des comptes inactifs sont supprimés. Une personne qui supprime ses données puis revient est comptée deux fois.`;
+      const us = U.series;
+      draw('c-uniq', { type: 'line',
+        data: { labels: us.map((r) => dayLbl(r.day)), datasets: [{ label: 'Utilisateurs', data: us.map((r) => r.total), borderColor: C1, backgroundColor: 'rgba(158,42,63,.10)', fill: true, borderWidth: 2.2, pointRadius: us.length < 3 ? 4 : 0, pointHoverRadius: 5, tension: .25, stepped: false }] },
+        options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+          plugins: { legend: { display: false }, tooltip: { ...tooltip, displayColors: false, callbacks: {
+            title: (it) => d(us[it[0].dataIndex].day).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' }),
+            label: (c) => `${fmt(c.parsed.y)} utilisateurs au total`,
+            afterLabel: (c) => { const n = us[c.dataIndex].new; return n ? `+${fmt(n)} nouveau${n > 1 ? 'x' : ''} ce jour-là` : 'Aucun nouveau ce jour-là'; } } } },
+          scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 16 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8, callback: (v) => fmt(v) } } } } });
+    }
 
     /* Visiteurs / jour */
     draw('c-daily', { type: 'bar',

@@ -44,7 +44,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.10.20'
+ASSET_VERSION = '2026.10.21'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -1312,6 +1312,37 @@ def get_city_leaderboard():
 # ============================================================
 # 17. TABLEAU DE BORD ADMIN
 # ============================================================
+def _unique_users(conn, series):
+    """Utilisateurs uniques depuis le lancement = comptes présents avant le début du suivi (figé une fois)
+    + nouvelles inscriptions jour par jour. Limite connue : quelqu'un qui supprime ses données puis revient
+    est compté deux fois (on n'en garde aucune trace, c'est voulu)."""
+    base = series("SELECT value FROM app_kv WHERE key = 'unique_baseline'")
+    if base:
+        baseline = int(base[0]["value"].get("count", 0)); base_day = base[0]["value"].get("day")
+    else:
+        first = series("SELECT MIN(created_at) AS t FROM app_events")
+        t0 = first[0]["t"] if first and first[0]["t"] else None
+        n = series("SELECT COUNT(*) AS n FROM strava_users WHERE first_login_date < COALESCE(:t, NOW())", t=t0)
+        baseline = int(n[0]["n"]) if n else 0
+        base_day = (t0 or datetime.utcnow()).strftime('%Y-%m-%d')
+        kv_set('unique_baseline', {"count": baseline, "day": base_day})
+    per_day = {}
+    for r in series("SELECT day, new_users FROM app_daily_stats WHERE new_users IS NOT NULL"):
+        per_day[str(r["day"])] = int(r["new_users"])
+    ev = series("SELECT created_at::date AS day, COUNT(*) AS n FROM app_events WHERE kind = 'signup' GROUP BY 1")
+    # Pour chaque jour : la plus grande des deux valeurs. Le relevé peut être en retard (jour en cours),
+    # le journal peut être incomplet (jour à cheval sur la purge des 400 jours).
+    for r in ev: per_day[str(r["day"])] = max(per_day.get(str(r["day"]), 0), int(r["n"]))
+    today = datetime.utcnow().date()
+    days = sorted(per_day)
+    start = min([datetime.strptime(base_day, '%Y-%m-%d').date()] + [datetime.strptime(d, '%Y-%m-%d').date() for d in days])
+    out, total, d = [], baseline, start
+    while d <= today:
+        k = d.strftime('%Y-%m-%d'); new = per_day.get(k, 0); total += new
+        out.append({"day": k, "new": new, "total": total}); d += timedelta(days=1)
+    last7 = sum(r["new"] for r in out[-7:]); prev7 = sum(r["new"] for r in out[-14:-7])
+    return {"total": total, "baseline": baseline, "since": start.strftime('%Y-%m-%d'), "new_7": last7, "new_prev_7": prev7, "series": out}
+
 def _daily_snapshot():
     """Relevé quotidien anonyme (comptes connectés, actifs 7 j / 31 j) + purge du journal > 400 jours."""
     try:
@@ -1327,6 +1358,18 @@ def _daily_snapshot():
             conn.execute(text("DELETE FROM app_events WHERE created_at < NOW() - INTERVAL '400 days'"))
     except Exception as e:
         print(f"Relevé quotidien : {e}")
+    # Nouveaux utilisateurs par jour, recopiés dans app_daily_stats (conservé sans limite) : le total
+    # « depuis le lancement » reste juste même après la purge du journal (400 jours). Un nombre par jour, rien d'autre.
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("""
+                INSERT INTO app_daily_stats (day, new_users)
+                SELECT created_at::date, COUNT(*) FROM app_events WHERE kind = 'signup' GROUP BY 1
+                ON CONFLICT (day) DO UPDATE SET new_users = GREATEST(COALESCE(app_daily_stats.new_users, 0), EXCLUDED.new_users)"""))
+            # GREATEST : un jour ne peut que gagner des inscriptions ; après la purge du journal,
+            # un recalcul partiel ne doit jamais écraser la valeur complète déjà relevée.
+    except Exception as e:
+        print(f"Relevé des nouveaux utilisateurs (migration 2026-10-30_utilisateurs_uniques.sql lancée ?) : {e}")
 
 @app.route('/admin')
 def admin_page():
@@ -1380,7 +1423,8 @@ def admin_stats():
             LEFT JOIN app_events e ON date_trunc('week', e.created_at) = w
             GROUP BY w ORDER BY w""")
         out["snapshots"] = series("""SELECT day, connected, active_7, active_31 FROM app_daily_stats
-                                     WHERE day > CURRENT_DATE - 90 ORDER BY day""")
+                                     WHERE day > CURRENT_DATE - 90 AND connected IS NOT NULL ORDER BY day""")
+        out["unique"] = _unique_users(conn, series)
         out["recent"] = series("""SELECT kind, created_at FROM app_events
                                   WHERE kind IN ('signup', 'logout', 'delete', 'revoke_inactive')
                                   ORDER BY created_at DESC LIMIT 10""")
