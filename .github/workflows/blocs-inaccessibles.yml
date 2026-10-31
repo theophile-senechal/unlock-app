@@ -1,0 +1,85 @@
+# Calcul mensuel des blocs inaccessibles (aucun chemin à moins de 20 m) pour toute la France,
+# à partir des données OpenStreetMap par département. Le résultat (data/acces, environ 10 Mo)
+# est ajouté au dépôt seulement s'il a changé ; Vercel redéploie alors l'app tout seul.
+# Lancement manuel : onglet « Actions » > « Blocs inaccessibles » > « Run workflow ».
+name: Blocs inaccessibles
+
+on:
+  schedule:
+    - cron: '17 2 3 * *'     # le 3 de chaque mois, 2 h 17 (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: blocs-inaccessibles
+  cancel-in-progress: false
+
+jobs:
+  liste:
+    runs-on: ubuntu-latest
+    outputs:
+      lots: ${{ steps.lots.outputs.lots }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - id: lots
+        run: echo "lots=$(python tools/acces/sources.py 12)" >> "$GITHUB_OUTPUT"
+
+  calcul:
+    needs: liste
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 6          # par politesse pour le serveur de téléchargement
+      matrix: ${{ fromJson(needs.liste.outputs.lots) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install osmium shapely numpy
+      - name: Calcul des départements du lot
+        run: |
+          for url in ${{ matrix.lot.urls }}; do
+            echo "::group::$url"
+            python tools/acces/calcul.py "$url" parts || echo "::warning::échec $url"
+            echo "::endgroup::"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: parts-${{ matrix.lot.id }}
+          path: parts/
+          if-no-files-found: ignore
+          retention-days: 3
+
+  fusion:
+    needs: calcul
+    if: always() && needs.calcul.result != 'cancelled'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install numpy
+      - uses: actions/download-artifact@v4
+        with:
+          path: parts
+          pattern: parts-*
+      - run: python tools/acces/fusion.py parts data/acces
+      - name: Ajout au dépôt si changement
+        run: |
+          git config user.name "unlock-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/acces
+          if git diff --cached --quiet -- data/acces/*.bin; then
+            echo "Aucun changement des blocs inaccessibles"
+          else
+            git commit -m "Blocs inaccessibles : mise à jour OpenStreetMap du $(date +%Y-%m-%d)"
+            git push
+          fi
