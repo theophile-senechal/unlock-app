@@ -444,14 +444,15 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 /* Blocs sans chemin (non comptés) : même hachure que sur la carte */
 .hatch {
   display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px;
-  background: repeating-linear-gradient(135deg, #B9B3BF 0 1.2px, #EEECF0 1.2px 5.5px);
+  background: repeating-linear-gradient(135deg, #A39CAB 0 1.3px, #EEECF0 1.3px 5px);
   box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
 }
 .legend__off { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.4; }
 .legend__off .hatch { margin-top: 1px; }
-.legend__off small { color: var(--muted); }
-.city__off { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
-.city__off .hatch { width: 12px; height: 12px; vertical-align: 0; }
+.legend__off small { display: block; margin-top: 2px; color: var(--muted); }
+.city__off { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: var(--fs-xs); line-height: 1.3; color: var(--ink-2); }
+.city__off[hidden] { display: none; }
+.city__off .hatch { width: 12px; height: 12px; }
 
 .calc-note {
   display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start;

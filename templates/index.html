@@ -137,6 +137,7 @@
                   <span class="city__meta" id="city-meta"></span>
                 </div>
                 <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="city-bar"><div class="bar__fill" id="city-fill"></div></div>
+                <div class="city__off" id="city-off" hidden><i class="hatch" aria-hidden="true"></i><span id="city-off-txt"></span></div>
               </div>
               <div class="empty" id="city-empty" hidden><span class="emoji">🗺️</span>Aucune commune trouvée pour ces filtres. Les communes françaises apparaissent dès que vos blocs les traversent.</div>
             </section>
@@ -156,7 +157,7 @@
               <div class="section__title" style="font-size:var(--fs-md)">Fréquence de passage</div>
               <div class="legend__scale" style="margin-top:10px"></div>
               <div class="legend__labels"><span>Rare</span><span>Fréquent</span></div>
-              <div class="legend__off"><i class="hatch" aria-hidden="true"></i><span>Sans chemin à moins de 20&nbsp;m, non compté <small>(commune choisie, données © OpenStreetMap)</small></span></div>
+              <div class="legend__off"><i class="hatch" aria-hidden="true"></i><span>Bloc sans chemin, non compté<small>Commune choisie · chemins © OpenStreetMap</small></span></div>
             </div>
           </div>
         </div>
@@ -192,7 +193,9 @@
   </div>
 </div>
 
-{{ ui.loader("Connexion à Strava…", "La première connexion peut prendre quelques minutes, le temps de lire tout votre historique.") }}
+{% if sync_state == 'first' %}{{ ui.loader("Connexion à Strava…", "La première connexion peut prendre quelques minutes, le temps de lire tout votre historique.") }}
+{% elif sync_state == 'refresh' %}{{ ui.loader("Mise à jour de vos activités…", "Après quelques jours d'absence, on relit votre historique Strava. Ça peut prendre une minute ou deux.") }}
+{% else %}{{ ui.loader("Chargement de votre carte…") }}{% endif %}
 {% endblock %}
 
 {% block scripts %}
@@ -375,7 +378,8 @@
   /* ---------- Data ---------- */
   async function load() {
     const year = $('year-select').value, sport = $('sport-select').value, grid = $('grid-select').value;
-    if (firstLoad) Unlock.loader.show(['Connexion à Strava…', 'Lecture de vos activités…', 'Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Calcul de vos pourcentages…']);
+    if (firstLoad) Unlock.loader.show((Unlock.sync === 'fast' ? ['Chargement de votre carte…'] : ['Connexion à Strava…', 'Lecture de vos activités…'])
+      .concat(['Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Calcul de vos pourcentages…']));
     else Unlock.busy.on('Mise à jour de la carte', filterLabel(), { veil: true });
     try {
       data = await Unlock.getJSON(`/api/activities?year=${encodeURIComponent(year)}&grid_size=${grid}&sport_type=${encodeURIComponent(sport)}`);
@@ -504,11 +508,12 @@
     selectedCity = city.name;
     $('city-name').textContent = city.name;
     $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
-    const off = city.stats.inaccessible
-      ? `<span class="city__off"><i class="hatch" aria-hidden="true"></i>${Unlock.fmt(city.stats.inaccessible)} sans chemin, non compté${city.stats.inaccessible > 1 ? 's' : ''}</span>` : '';
-    $('city-meta').innerHTML = (city.stats.total_blocks
+    const nOff = city.stats.inaccessible || 0;
+    $('city-off').hidden = !nOff;
+    $('city-off-txt').textContent = nOff ? `${Unlock.fmt(nOff)} bloc${nOff > 1 ? 's' : ''} sans chemin, non compté${nOff > 1 ? 's' : ''} dans le %` : '';
+    $('city-meta').innerHTML = city.stats.total_blocks
       ? `${Unlock.fmt(city.stats.blocks)} blocs sur ${Unlock.fmt(city.stats.total_blocks)}<br>${Unlock.fmt(city.stats.activities)} sorties`
-      : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`) + off;
+      : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
     drawBlocked(city);
     $('city-bar').setAttribute('aria-valuenow', city.stats.percent);
     requestAnimationFrame(() => { $('city-fill').style.width = Math.max(2, city.stats.percent) + '%'; });

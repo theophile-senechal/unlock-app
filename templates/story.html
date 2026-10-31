@@ -12,6 +12,26 @@
     padding: 16px 16px 92px;
   }
   .studio__fit { position: relative; }
+  /* Zoom du dessin (hors de l'image exportée) */
+  .stage-zoom {
+    position: absolute; right: 12px; top: 50%; transform: translateY(-50%); z-index: 5;
+    display: flex; flex-direction: column; padding: 4px; gap: 2px; border-radius: 99px;
+    background: rgba(255,255,255,.94); box-shadow: var(--shadow-float); backdrop-filter: blur(8px);
+  }
+  .stage-zoom[hidden] { display: none; }
+  .stage-zoom button {
+    width: 40px; height: 40px; border: 0; border-radius: 99px; background: transparent; color: var(--ink);
+    font-size: 22px; font-weight: 600; line-height: 1; display: grid; place-items: center; cursor: pointer;
+  }
+  .stage-zoom button:hover { background: var(--canvas); }
+  .stage-zoom button:active { background: var(--brand-50); color: var(--brand); }
+  .stage-zoom .z-fit { font-size: 17px; }
+  @media (max-width: 899px) {   /* téléphone : en haut à droite, sur la zone de carte, loin du texte */
+    .stage-zoom { top: 26px; transform: none; right: 10px; }
+    .stage-zoom button { width: 34px; height: 34px; font-size: 19px; }
+    .stage-zoom .z-fit { font-size: 15px; }
+  }
+  @media (min-width: 900px) { .stage-zoom { right: 24px; } }
   .studio__actions { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 10px; justify-content: center; }
   .studio__actions .btn { box-shadow: var(--shadow-float); flex: 0 1 auto; min-width: 0; }
   @media (max-width: 359px) { .studio__actions { left: 10px; right: 10px; gap: 8px; } .studio__actions .btn { flex: 1 1 0; padding-inline: 10px; } }
@@ -117,6 +137,11 @@
     <aside class="studio__side" id="side-desk"></aside>
 
     <div class="studio__stage" id="stage">
+      <div class="stage-zoom" id="stage-zoom" role="group" aria-label="Zoom du dessin">
+        <button type="button" data-z="in" aria-label="Zoomer" title="Zoomer">+</button>
+        <button type="button" class="z-fit" data-z="fit" aria-label="Recentrer la commune" title="Recentrer">⤢</button>
+        <button type="button" data-z="out" aria-label="Dézoomer" title="Dézoomer">−</button>
+      </div>
       <div class="studio__fit" id="fit">
         <div id="story-card">
           <div id="story-map"></div>
@@ -248,8 +273,10 @@
   }
   new ResizeObserver(fit).observe($('stage'));
 
-  L.Browser.any3d = false;
-  const map = L.map('story-map', { zoomControl: false, attributionControl: false, preferCanvas: true, zoomSnap: .25 });
+  // Zoom et déplacement fluides : zoom continu, molette plus douce, inertie au glisser
+  const map = L.map('story-map', { zoomControl: false, attributionControl: false, preferCanvas: true,
+    zoomSnap: 0, zoomDelta: 0.25, wheelPxPerZoomLevel: 220, wheelDebounceTime: 20,
+    inertia: true, inertiaDeceleration: 2600, bounceAtZoomLimits: false });
   map.setView([46.6, 1.9], 6);
   const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
   // Blocs sans chemin (non comptés dans le %) : sous les blocs explorés, pour que l'image corresponde au %
@@ -323,6 +350,26 @@
     finally { if (first) { Unlock.loader.hide(); first = false; } stageBusy(false); }
   }
 
+  /* Nom de la commune ou du département : sur une seule ligne tant que possible (taille réduite
+     progressivement, jamais coupé au milieu d'un nom composé comme « Loir-et-Cher »). Au-delà, deux lignes
+     équilibrées, coupées de préférence sur un espace. */
+  function fitTitle(el) {
+    const max = 64, min = 38;
+    el.style.whiteSpace = 'nowrap';
+    let size = max;
+    el.style.fontSize = size + 'px';
+    const room = el.parentElement.clientWidth || 378;
+    while (el.scrollWidth > room && size > min) { size -= 2; el.style.fontSize = size + 'px'; }
+    if (el.scrollWidth > room) {          // vraiment trop long : deux lignes, au plus
+      el.style.whiteSpace = '';
+      size = 48; el.style.fontSize = size + 'px';
+      while (el.offsetHeight > size * 2.1 && size > 28) {   // offsetHeight : hauteur réelle, sans l'échelle de l'aperçu
+        size -= 2; el.style.fontSize = size + 'px';
+      }
+    }
+  }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { const el = $('sc-city'); if (el.textContent) fitTitle(el); });
+
   /* Place occupée en bas de la carte par les textes visibles (pour cadrer la commune au-dessus) */
   function bottomSpace() {
     const city = $('show-city').checked, kpi = $('show-kpi').checked;
@@ -344,7 +391,7 @@
     gridLayer.clearLayers(); borderLayer.clearLayers(); offLayer.clearLayers(); offReq++;
     if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
     const name = city.name; const el = $('sc-city');
-    el.textContent = name; el.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
+    el.textContent = name; fitTitle(el);
     $('sc-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
     $('sc-blocks').textContent = Unlock.fmt(city.stats.blocks);
     const g = +$('grid-select').value; $('sc-grid').textContent = `de ${g} m × ${g} m`;
@@ -377,7 +424,8 @@
     $('show-city-l').textContent = dep ? '🗺️ Nom du département' : '🏘️ Nom de la commune';
     $('show-kpi-l').textContent = dep ? '📊 Chiffres (% et communes)' : '📊 Chiffres (% et blocs)';
     $('story-card').classList.toggle('is-dep', dep);
-    $('story-dep').toggleAttribute('hidden', !dep);   // élément SVG : .hidden n'existe pas, on passe par l'attribut
+    $('story-dep').toggleAttribute('hidden', !dep);
+    $('stage-zoom').hidden = dep;   // élément SVG : .hidden n'existe pas, on passe par l'attribut
     $('sc-lbl1').textContent = dep ? 'du département' : 'explorés';
     $('sc-lbl2').textContent = dep ? 'communes explorées' : 'blocs';
     $('sc-grid').hidden = dep;
@@ -389,7 +437,7 @@
     const nameEl = $('sc-city');
     if (!d) { svg.innerHTML = ''; nameEl.textContent = 'Votre département'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
     const name = d.name;
-    nameEl.textContent = name; nameEl.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
+    nameEl.textContent = name; fitTitle(nameEl);
     $('sc-pct').textContent = Unlock.fmt(d.percent, d.percent > 0 && d.percent < 10 ? 1 : 0) + '\u00a0%';
     $('sc-blocks').innerHTML = `${Unlock.fmt(d.visited)}<small>/${Unlock.fmt(d.total)}</small>`;
     let geo = depGeo[d.code];
@@ -444,6 +492,13 @@
   }
 
   document.addEventListener('click', (e) => {
+    const z = e.target.closest('[data-z]');
+    if (z) {
+      if (z.dataset.z === 'in') map.zoomIn(0.25);
+      else if (z.dataset.z === 'out') map.zoomOut(0.25);
+      else draw(true);   // recentre la commune
+      return;
+    }
     if (e.target.closest('[data-download]')) { Unlock.closeSheet('sheet-studio'); download(); }
     const sw = e.target.closest('[data-theme]');
     if (sw) { theme = sw.dataset.theme; document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); draw(false); }

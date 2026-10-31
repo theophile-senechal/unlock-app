@@ -51,12 +51,25 @@
   /* ---------------- Full-screen loader ---------------- */
   const loader = () => document.getElementById('loader');
   let msgTimer = null, patienceTimers = [];
-  // Messages affichés si le chargement dure (1re connexion : tout l'historique Strava est lu)
-  const PATIENCE = [
-    [15000, 'Encore un peu de patience ⏳ La première connexion lit tout votre historique Strava.'],
-    [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées 🚀'],
-    [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
-  ];
+  // Messages affichés si le chargement dure, selon la situation connue du serveur :
+  // 'first' = 1re connexion (tout l'historique Strava est lu), 'refresh' = relecture après quelques jours, 'fast' = cache prêt
+  U.sync = (window.UNLOCK_CONFIG || {}).sync || 'fast';
+  const PATIENCE = {
+    first: [
+      [15000, 'Encore un peu de patience ⏳ La première connexion lit tout votre historique Strava.'],
+      [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées 🚀'],
+      [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
+    ],
+    refresh: [
+      [15000, 'On relit votre historique Strava après quelques jours d\u2019absence ⏳'],
+      [60000, 'Encore un instant, ensuite tout sera de nouveau rapide 🚀'],
+      [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
+    ],
+    fast: [
+      [12000, 'Encore quelques secondes ⏳'],
+      [45000, 'Toujours en cours… Merci pour votre patience 🙏']
+    ]
+  }[U.sync] || [];
   function setHint(el, text) {
     let h = el.querySelector('.loader__hint');
     if (!h) { h = document.createElement('p'); h.className = 'loader__hint'; el.querySelector('.loader__msg').after(h); }

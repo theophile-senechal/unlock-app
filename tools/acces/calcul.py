@@ -2,12 +2,13 @@
 
     python tools/acces/calcul.py <fichier.osm.pbf ou URL> <dossier_sortie>
 
-Produit <dossier_sortie>/<dep>.npz :
-  - pour chaque taille (100, 250 m) et profil (pied, velo) : blocs inaccessibles des communes du département ;
-  - les blocs accessibles HORS du département (bordure couverte par le fichier), pour corriger
-    les départements voisins lors de la fusion (un sentier peut passer juste de l'autre côté de la limite).
+Produit <dossier_sortie>/<nom du fichier>.pkl, pour chaque taille (100, 250 m) :
+  - pour CHAQUE département dont le fichier contient des communes complètes : ses blocs, et ceux sans
+    voie à pied / à vélo d'après ce fichier ;
+  - les blocs accessibles hors de ces communes (bordure), pour les départements voisins.
+La fusion combine tous les fichiers : un bloc n'est inaccessible que si aucun ne trouve de voie.
 """
-import os, sys, time, tempfile, urllib.request, shutil
+import os, sys, time, tempfile, urllib.request, shutil, pickle
 from collections import Counter
 import numpy as np
 import osmium
@@ -49,6 +50,22 @@ def zone_fermee(t):
     """Terrains militaires et aérodromes : les voies qui s'y trouvent ne comptent pas."""
     return t.get('landuse') == 'military' or t.get('aeroway') == 'aerodrome' or \
         t.get('military') in ('base', 'range', 'training_area', 'danger_area')
+
+
+def _norm(t):
+    import unicodedata
+    t = unicodedata.normalize('NFD', t).encode('ascii', 'ignore').decode().lower()
+    return ''.join(ch for ch in t if ch.isalnum())
+
+
+def _noms_departements():
+    """Nom normalisé -> code, lu dans app.py (DEPARTEMENTS) : « val_de_marne » et « Val-de-Marne » -> 94."""
+    import ast
+    src = os.path.join(os.path.dirname(__file__), '..', '..', 'app.py')
+    for n in ast.parse(open(src, encoding='utf-8').read()).body:
+        if isinstance(n, ast.Assign) and getattr(n.targets[0], 'id', '') == 'DEPARTEMENTS':
+            return {_norm(nom): code for code, nom in ast.literal_eval(n.value).items()}
+    return {}
 
 
 def dep_of(code):
@@ -113,25 +130,38 @@ def main(src, outdir):
         if tmp: os.unlink(tmp.name)
     if not communes:
         print(f'{src} : aucune commune, ignoré'); return
-    dep = Counter(dep_of(c) for c in communes).most_common(1)[0][0]
-    propres = [g for c, g in communes.items() if dep_of(c) == dep]
     fermees = shapely.union_all([g.buffer(0) for g in fermees]) if fermees else None
     if fermees is not None: shapely.prepare(fermees)
     # Les voies sont en (lat, lon) ; les géométries OSM en (lon, lat)
     masque = (lambda la, lo: ~shapely.contains_xy(fermees, lo, la)) if fermees is not None else None
 
+    # Toutes les communes complètes du fichier, regroupées par département. Un fichier de département
+    # contient aussi quelques communes voisines : la fusion combine tous les fichiers qui couvrent un bloc.
+    par_dep = {}
+    for c, g in communes.items(): par_dep.setdefault(dep_of(c), []).append(g)
+    # Département du fichier : d'après son nom (« paris-latest » -> 75), sinon la plus grande surface
+    nom_src = os.path.basename(src).split('-latest')[0].split('.osm')[0]
+    principal = _noms_departements().get(_norm(nom_src))
+    if principal not in par_dep:
+        principal = max(par_dep, key=lambda d: sum(g.area for g in par_dep[d]))
     res = {}
     for size in SIZES:
         dlat = size / acces.M_PER_DEG
-        mine = cles_communes(propres, dlat)
-        for nom, voies in (('pied', pied), ('velo', velo)):
-            acc = acces.line_keys(voies, dlat, acces.MARGE_M, masque)
-            res[f'{nom}_{size}'] = np.setdiff1d(mine, acc, assume_unique=True)     # inaccessibles du département
-            res[f'ext_{nom}_{size}'] = np.setdiff1d(acc, mine, assume_unique=True)  # accessibles hors département
-        print(f'  {size} m : {len(mine)} blocs, {len(res[f"pied_{size}"])} inaccessibles à pied')
+        acc = {nom: acces.line_keys(voies, dlat, acces.MARGE_M, masque) for nom, voies in (('pied', pied), ('velo', velo))}
+        tout = []
+        for dep, geoms in par_dep.items():
+            mine = cles_communes(geoms, dlat); tout.append(mine)
+            res[f'{dep}|{size}|blocs'] = acces.pack_keys(mine)
+            for nom in ('pied', 'velo'):
+                res[f'{dep}|{size}|{nom}'] = acces.pack_keys(np.setdiff1d(mine, acc[nom], assume_unique=True))
+        dehors = np.unique(np.concatenate(tout))
+        for nom in ('pied', 'velo'):   # voies trouvées hors des communes complètes du fichier (bordure)
+            res[f'*|{size}|{nom}'] = acces.pack_keys(np.setdiff1d(acc[nom], dehors, assume_unique=True))
     os.makedirs(outdir, exist_ok=True)
-    np.savez_compressed(os.path.join(outdir, f'{dep}.npz'), communes=len(propres), **res)
-    print(f'{dep} : {len(propres)} communes, {len(pied)} voies à pied, {time.time() - t0:.0f} s')
+    nom_fichier = os.path.basename(src).replace('-latest.osm.pbf', '').replace('.osm.pbf', '') or principal
+    with open(os.path.join(outdir, f'{nom_fichier}.pkl'), 'wb') as fh:
+        pickle.dump({'source': src, 'principal': principal, 'communes': {d: len(g) for d, g in par_dep.items()}, 'cles': res}, fh)
+    print(f'{nom_fichier} : département principal {principal}, communes {dict((d, len(g)) for d, g in par_dep.items())}, {time.time() - t0:.0f} s')
 
 
 if __name__ == '__main__':

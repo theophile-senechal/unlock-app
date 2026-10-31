@@ -46,7 +46,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.10.24'
+ASSET_VERSION = '2026.10.25'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -123,7 +123,27 @@ def inject_globals():
         'is_admin': is_admin(),
         'carto_key': os.getenv('CARTO_API_KEY', ''),
         'my_athlete_id': session.get('athlete_id'),
+        'sync_state': sync_state(),
     }
+
+def sync_state():
+    """Durée probable du prochain chargement, pour adapter les messages d'attente :
+    'first' (jamais synchronisé : tout l'historique Strava est lu, quelques minutes),
+    'refresh' (cache de 47 h expiré : relecture complète, une à deux minutes), 'fast' (quelques secondes)."""
+    if 'access_token' not in session: return 'fast'
+    if _user_key() in RAW_DATA_CACHE: return 'fast'
+    aid = session.get('athlete_id')
+    if not (DB_URL and aid): return 'first'
+    try:
+        with _engine().connect() as conn:
+            row = conn.execute(text("""SELECT full_sync_at IS NULL AS never,
+                                              full_sync_at > NOW() - make_interval(hours => :h) AS fresh
+                                       FROM strava_users WHERE athlete_id = :a"""),
+                               {"h": DB_CACHE_MAX_AGE_HOURS, "a": aid}).fetchone()
+    except Exception:
+        return 'fast'
+    if not row or row.never: return 'first'
+    return 'fast' if row.fresh else 'refresh'
 
 # ============================================================
 # 2. CONFIGURATION DATABASE
