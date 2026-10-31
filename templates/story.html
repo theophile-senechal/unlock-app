@@ -252,6 +252,50 @@
   const map = L.map('story-map', { zoomControl: false, attributionControl: false, preferCanvas: true, zoomSnap: .25 });
   map.setView([46.6, 1.9], 6);
   const gridLayer = L.layerGroup().addTo(map), borderLayer = L.layerGroup().addTo(map);
+  // Blocs sans chemin (non comptés dans le %) : sous les blocs explorés, pour que l'image corresponde au %
+  map.createPane('off').style.zIndex = 390;
+  const offRenderer = L.canvas({ pane: 'off' });
+  const offLayer = L.layerGroup().addTo(map);
+  const offCache = new Map();
+  let offReq = 0;
+  async function drawOff(city, size) {
+    offLayer.clearLayers();
+    const req = ++offReq;
+    if (!city || !city.code || !city.stats.inaccessible) return;
+    const g = Math.round(size * 111320);
+    const url = `/api/commune/${encodeURIComponent(city.code)}/inaccessibles?grid=${g}&profil=${data.acces_profil || 'tous'}`;
+    let res = offCache.get(url);
+    if (!res) { try { res = await Unlock.getJSON(url); offCache.set(url, res); } catch (e) { return; } }
+    if (req !== offReq) return;
+    const seen = new Set((data.grid_cells || []).map((c) => c[0] + ',' + c[1]));
+    const rows = new Map();
+    for (const [lat, lon] of res.cells || []) {
+      if (seen.has(lat + ',' + lon)) continue;
+      if (!rows.has(lat)) rows.set(lat, []);
+      rows.get(lat).push(lon);
+    }
+    // Une seule forme (bandes fusionnées par ligne) : pas de liseré entre deux blocs voisins
+    const rings = [];
+    rows.forEach((lons, lat) => {
+      lons.sort((a, b) => a - b);
+      const w = size / Math.max(0.05, Math.cos(lat * Math.PI / 180));
+      let start = lons[0], prev = lons[0];
+      const flush = () => {
+        const a = Unlock.cellBounds(lat, start, size), b = Unlock.cellBounds(lat, prev, size);
+        rings.push([[a[0][0], a[0][1]], [a[1][0], a[0][1]], [a[1][0], b[1][1]], [a[0][0], b[1][1]]]);
+      };
+      for (let k = 1; k < lons.length; k++) { if (lons[k] - prev > w * 1.5) { flush(); start = lons[k]; } prev = lons[k]; }
+      flush();
+    });
+    if (!rings.length) return;
+    // Gris légèrement teinté par la couleur choisie : voile clair sur fond transparent, plus sombre sur fond coloré
+    const solid = $('story-card').classList.contains('solid');
+    const light = THEMES[theme][0];
+    const mix = (hex, t) => { const n = parseInt(hex.slice(1), 16), c = [n >> 16, (n >> 8) & 255, n & 255];
+      return '#' + c.map((v) => Math.round(v * t + (solid ? 0 : 255) * (1 - t)).toString(16).padStart(2, '0')).join(''); };
+    L.polygon(rings.map((r) => [r]), { renderer: offRenderer, stroke: false, interactive: false,
+      fillColor: mix(light, solid ? 0.10 : 0.22), fillOpacity: solid ? 0.5 : 0.13 }).addTo(offLayer);
+  }
 
   function inside(pt, vs) {
     let x = pt[0], y = pt[1], ins = false;
@@ -297,7 +341,7 @@
     card.style.setProperty('--t-light', light); card.style.setProperty('--t-dark', dark); card.style.setProperty('--t-bg', bg);
     if (kind === 'dep') { drawDep(); return; }
     const city = (data && data.top_municipalities || []).find((c) => c.name === $('city-select').value);
-    gridLayer.clearLayers(); borderLayer.clearLayers();
+    gridLayer.clearLayers(); borderLayer.clearLayers(); offLayer.clearLayers(); offReq++;
     if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
     const name = city.name; const el = $('sc-city');
     el.textContent = name; el.style.fontSize = name.length > 18 ? '40px' : name.length > 12 ? '50px' : '64px';
@@ -311,6 +355,7 @@
     let max = 1; cells.forEach((c) => { if (c[2] > max) max = c[2]; });
     cells.forEach(([lat, lon, count]) => L.rectangle(Unlock.cellBounds(lat, lon, size),
       { stroke: false, fillColor: light, fillOpacity: .6 + Math.sqrt(count / max) * .4, interactive: false }).addTo(gridLayer));
+    drawOff(city, size);
     if (center) { map.invalidateSize(); map.fitBounds(poly.getBounds(), { paddingTopLeft: [30, 60], paddingBottomRight: [30, bottomSpace()] }); }
   }
 
@@ -403,7 +448,7 @@
     const sw = e.target.closest('[data-theme]');
     if (sw) { theme = sw.dataset.theme; document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); draw(false); }
     const bg = e.target.closest('[data-bg]');
-    if (bg) { document.querySelectorAll('[data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b === bg))); $('story-card').classList.toggle('solid', bg.dataset.bg === 'solid'); }
+    if (bg) { document.querySelectorAll('[data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b === bg))); $('story-card').classList.toggle('solid', bg.dataset.bg === 'solid'); if (kind !== 'dep') draw(false); }
   });
   /* ---------- Recherche de commune ---------- */
   let cities = [], active = -1, shown = [];
