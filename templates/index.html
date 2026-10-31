@@ -510,7 +510,7 @@
     $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
     const nOff = city.stats.inaccessible || 0;
     $('city-off').hidden = !nOff;
-    $('city-off-txt').textContent = nOff ? `${Unlock.fmt(nOff)} bloc${nOff > 1 ? 's' : ''} sans chemin, non compté${nOff > 1 ? 's' : ''} dans le %` : '';
+    $('city-off-txt').textContent = nOff ? `${Unlock.fmt(nOff)} bloc${nOff > 1 ? 's' : ''} sans chemin, non compté${nOff > 1 ? 's' : ''}` : '';
     $('city-meta').innerHTML = city.stats.total_blocks
       ? `${Unlock.fmt(city.stats.blocks)} blocs sur ${Unlock.fmt(city.stats.total_blocks)}<br>${Unlock.fmt(city.stats.activities)} sorties`
       : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
