@@ -117,6 +117,11 @@
           <div class="empty" id="dep-empty" hidden><span class="emoji">🗺️</span>Aucune commune française traversée pour ces filtres.</div>
 
           <div id="grid-extra" hidden>
+            <div class="calc-note" id="calc-note" hidden>
+              <span class="emoji" aria-hidden="true">✨</span>
+              <p><b>Nouveau calcul plus juste.</b> Les blocs sans aucun chemin ne comptent plus dans le % de vos communes. Une marge de 20&nbsp;m compense aussi l'imprécision du GPS.</p>
+              <button type="button" class="calc-note__x" id="calc-note-x" aria-label="Masquer">×</button>
+            </div>
             <section class="section">
               <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🏘️</span>Communes</h2></div>
               <div class="search">
@@ -151,6 +156,7 @@
               <div class="section__title" style="font-size:var(--fs-md)">Fréquence de passage</div>
               <div class="legend__scale" style="margin-top:10px"></div>
               <div class="legend__labels"><span>Rare</span><span>Fréquent</span></div>
+              <div class="legend__off"><i class="hatch" aria-hidden="true"></i><span>Sans chemin à moins de 20&nbsp;m, non compté <small>(commune choisie, données © OpenStreetMap)</small></span></div>
             </div>
           </div>
         </div>
@@ -203,8 +209,34 @@
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   Unlock.map = map;   // accès pour les tests automatiques
   Unlock.baseLayer(map);
+  // Blocs sans chemin : sous les blocs explorés (calque à part, hachures dessinées sur le canvas)
+  map.createPane('blocked').style.zIndex = 390;
+  const blockedRenderer = L.canvas({ pane: 'blocked' });
+  const blockedLayer = L.layerGroup().addTo(map);
   const traceLayer = L.layerGroup().addTo(map);
   const cityLayer = L.layerGroup().addTo(map);
+  const HATCH = (() => {
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    const x = c.getContext('2d');
+    x.fillStyle = '#EEECF0'; x.fillRect(0, 0, 8, 8);
+    x.strokeStyle = '#B9B3BF'; x.lineWidth = 1.2;
+    x.beginPath(); x.moveTo(-2, 10); x.lineTo(10, -2); x.moveTo(-2, 2); x.lineTo(2, -2); x.moveTo(6, 10); x.lineTo(10, 6); x.stroke();
+    return x.createPattern(c, 'repeat');
+  })();
+  const blockedCache = new Map();
+  let blockedReq = 0;
+
+  /* ---------- Annonce du nouveau calcul (une seule fois par appareil) ---------- */
+  (function () {
+    const KEY = 'unlock.calcul2';
+    let seenNote = false;
+    try { seenNote = localStorage.getItem(KEY) === '1'; } catch (e) { /* stockage indisponible */ }
+    $('calc-note').hidden = seenNote;
+    $('calc-note-x').addEventListener('click', () => {
+      $('calc-note').hidden = true;
+      try { localStorage.setItem(KEY, '1'); } catch (e) { /* rien */ }
+    });
+  })();
 
   /* ---------- State ---------- */
   let data = null, mode = 'route', sortKey = 'blocks', selectedCity = null, firstLoad = true, fitPending = true, focusCity = false;
@@ -422,7 +454,7 @@
 
   function render() {
     if (!data) return;
-    traceLayer.clearLayers(); cityLayer.clearLayers();
+    traceLayer.clearLayers(); cityLayer.clearLayers(); blockedLayer.clearLayers(); blockedReq++;
     if (mode === 'communes') { Dep.refresh(); return; }
     let bounds = null;
     if (mode === 'grid') {
@@ -468,13 +500,16 @@
   function showCity(city, fit) {
     cityLayer.clearLayers();
     $('city-card').hidden = !city;
-    if (!city) return;
+    if (!city) { blockedLayer.clearLayers(); blockedReq++; return; }
     selectedCity = city.name;
     $('city-name').textContent = city.name;
     $('city-pct').textContent = Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0) + '\u00a0%';
-    $('city-meta').innerHTML = city.stats.total_blocks
+    const off = city.stats.inaccessible
+      ? `<span class="city__off"><i class="hatch" aria-hidden="true"></i>${Unlock.fmt(city.stats.inaccessible)} sans chemin, non compté${city.stats.inaccessible > 1 ? 's' : ''}</span>` : '';
+    $('city-meta').innerHTML = (city.stats.total_blocks
       ? `${Unlock.fmt(city.stats.blocks)} blocs sur ${Unlock.fmt(city.stats.total_blocks)}<br>${Unlock.fmt(city.stats.activities)} sorties`
-      : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`;
+      : `${Unlock.fmt(city.stats.blocks)} blocs<br>${Unlock.fmt(city.stats.activities)} sorties`) + off;
+    drawBlocked(city);
     $('city-bar').setAttribute('aria-valuenow', city.stats.percent);
     requestAnimationFrame(() => { $('city-fill').style.width = Math.max(2, city.stats.percent) + '%'; });
     if (city.outline) {
@@ -482,6 +517,41 @@
       if (fit) map.fitBounds(poly.getBounds(), fitPadding());
     }
     document.querySelectorAll('.rank__item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.city === city.name)));
+  }
+
+  /* Blocs sans chemin de la commune choisie (mode Blocs) : bandes fusionnées par ligne, hors blocs visités */
+  async function drawBlocked(city) {
+    blockedLayer.clearLayers();
+    const req = ++blockedReq;
+    if (mode !== 'grid' || !city || !city.code || !city.stats.inaccessible || !data) return;
+    const size = data.grid_size_used, gridM = Math.round(size * 111320);
+    const url = `/api/commune/${encodeURIComponent(city.code)}/inaccessibles?grid=${gridM}&profil=${data.acces_profil || 'tous'}`;
+    let res = blockedCache.get(url);
+    if (!res) {
+      try { res = await Unlock.getJSON(url); blockedCache.set(url, res); } catch (e) { return; }
+    }
+    if (req !== blockedReq) return;   // une autre commune a été choisie entre-temps
+    const seen = new Set((data.grid_cells || []).map((c) => c[0] + ',' + c[1]));
+    const rows = new Map();
+    for (const [lat, lon] of res.cells || []) {
+      if (seen.has(lat + ',' + lon)) continue;
+      if (!rows.has(lat)) rows.set(lat, []);
+      rows.get(lat).push(lon);
+    }
+    rows.forEach((lons, lat) => {
+      lons.sort((a, b) => a - b);
+      const w = size / Math.max(0.05, Math.cos(lat * Math.PI / 180));
+      let start = lons[0], prev = lons[0];
+      const flush = () => {
+        const b = Unlock.cellBounds(lat, start, size), e = Unlock.cellBounds(lat, prev, size);
+        L.rectangle([b[0], [e[1][0], e[1][1]]], { renderer: blockedRenderer, stroke: false, fillColor: HATCH, fillOpacity: 1, interactive: false }).addTo(blockedLayer);
+      };
+      for (let k = 1; k < lons.length; k++) {
+        if (lons[k] - prev > w * 1.5) { flush(); start = lons[k]; }
+        prev = lons[k];
+      }
+      flush();
+    });
   }
 
   function renderTop() {

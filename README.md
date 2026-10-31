@@ -17,6 +17,9 @@ templates/
   deleted.html          Confirmation écrite de suppression des données
   offline.html, error.html
   leaderboard.html      Classement (DÉSACTIVÉ, voir plus bas)
+acces.py               Grille des blocs, marge GPS de 20 m, blocs sans chemin
+data/acces/            Blocs sans chemin par département (calcul mensuel, voir tools/acces)
+tools/acces/           Calcul OpenStreetMap + .github/workflows/blocs-inaccessibles.yml
 static/
   css/app.css           Design system
   js/app.js             Chargement, menus, installation PWA, toasts
@@ -63,6 +66,7 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 - [ ] Supabase : exécuter `migrations/2026-10-29_tout_en_un.sql`.
 - [ ] Vercel : `SECRET_KEY`, `CRON_SECRET`, `CARTO_API_KEY` (clé gratuite : carto.com/basemaps/apikey), puis `ADMIN_ATHLETE_IDS` une fois l'identifiant Strava connu (+ redéploiement). Optionnel : `MIN_ACTIVE_DISPLAY=1`.
 - [ ] Pousser sur GitHub (supprimer les anciens HTML de la racine).
+- [ ] Blocs sans chemin : après avoir poussé, lancer une fois la tâche GitHub « Blocs inaccessibles » (onglet Actions > Run workflow) pour calculer toute la France. Le Morbihan est déjà inclus.
 - [ ] Vérifier sur le site : fond de carte, pourcentages des communes, tableau de bord admin (« Santé de l'app »).
 - [ ] Demande en cours chez Strava : confirmer qu'une révocation libère une place sur le quota, et l'attribution Garmin (§4.4).
 
@@ -72,6 +76,7 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Blocs sans chemin et marge GPS** : un bloc sans aucune voie praticable à moins de 20 m (champ, marais, terrain militaire, aérodrome…) n'est plus compté dans le % de la commune, sauf s'il a été visité. Hachures grises sur la commune choisie (mode Blocs). La même marge de 20 m s'applique aux traces (imprécision du GPS) : 100 % devient atteignable partout. Profils à pied / vélo selon les sports affichés. Données OpenStreetMap calculées chaque mois par une tâche GitHub (`tools/acces`, environ 10 Mo pour la France dans `data/acces`, rien dans Supabase). Ski, natation et sports virtuels ne sont plus suivis.
 - **Story « Département »** : choix Commune / Département dans l'éditeur Story. Carte de toutes les communes du département (dessinée en SVG, sans fond de carte), communes explorées colorées selon leur %, nom du département, % du département et communes explorées / total. Couleurs, fond transparent ou coloré, nom et chiffres masquables, « unlock » toujours en bas.
 - **Utilisateurs depuis le lancement** (`/admin`) : total d'utilisateurs uniques et courbe cumulée jour par jour (nouveaux du jour au survol). Le total ne redescend jamais : il continue de monter quand des comptes inactifs sont révoqués, et survit à la purge du journal (400 jours) grâce à un relevé quotidien `app_daily_stats.new_users` (un nombre par jour, jamais revu à la baisse). Point de départ figé une fois (`app_kv.unique_baseline`) pour les comptes antérieurs au suivi. Limite assumée : une personne qui supprime ses données puis revient est comptée deux fois.
 - **Dons Ko-fi** : « Soutenir Unlock » dans le menu ☰ et en pied de page, fenêtre d'explication dans l'app puis page Ko-fi dans un nouvel onglet (via `/soutenir/go`, qui compte les clics de façon anonyme, visibles dans `/admin`). Activé uniquement si `KOFI_URL` est renseignée dans Vercel. Dons libres, sans contrepartie (Strava §5.8), minimum 2 € réglé côté Ko-fi. Paragraphes ajoutés aux CGU et à la politique de confidentialité.

@@ -1,0 +1,18 @@
+{
+ "departements": {
+  "56": {
+   "100": {
+    "pied": 306495,
+    "velo": 310210
+   },
+   "250": {
+    "pied": 17645,
+    "velo": 18010
+   },
+   "communes": 249
+  }
+ },
+ "maj": "2026-10-31",
+ "marge_m": 20.0,
+ "source": "© contributeurs OpenStreetMap (ODbL)"
+}

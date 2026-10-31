@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import secrets
 import requests
@@ -10,6 +11,7 @@ from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import math
 import numpy as np
+import acces   # grille des blocs, marge GPS, blocs inaccessibles (données OpenStreetMap)
 import shapely
 from shapely.geometry import Point, Polygon, shape as shp_shape
 from shapely.ops import transform as shp_transform
@@ -44,7 +46,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.10.23'
+ASSET_VERSION = '2026.10.24'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -138,12 +140,10 @@ REDIRECT_URI = os.getenv('STRAVA_REDIRECT_URI', 'http://localhost:5000/callback'
 # ============================================================
 # 4. SPORTS
 # ============================================================
+# Sports suivis : à pied ou à vélo uniquement (ski, natation et sports virtuels ne débloquent rien)
 SPORT_TRANSLATIONS = {
-    'Run': 'Course à pied', 'Ride': 'Vélo', 'Hike': 'Randonnée', 'Walk': 'Marche',
-    'AlpineSki': 'Ski Alpin', 'BackcountrySki': 'Ski de Rando', 'VirtualRide': 'Vélo Virtuel',
-    'VirtualRun': 'Course Virtuelle', 'GravelRide': 'Gravel', 'TrailRun': 'Trail',
-    'E-BikeRide': 'Vélo Électrique', 'Velomobile': 'Vélomobile', 'NordicSki': 'Ski de Fond',
-    'Snowshoe': 'Raquettes'
+    'Run': 'Course à pied', 'TrailRun': 'Trail', 'Hike': 'Randonnée', 'Walk': 'Marche', 'Snowshoe': 'Raquettes',
+    'Ride': 'Vélo', 'GravelRide': 'Gravel', 'E-BikeRide': 'Vélo Électrique', 'Velomobile': 'Vélomobile'
 }
 GPS_SPORTS = list(SPORT_TRANSLATIONS.keys())
 
@@ -200,25 +200,9 @@ def cell_key(lat, lon, dlat):
     return (round(lat_c, 6), round(round(lon / dl) * dl, 6))
 
 def get_cells_from_polyline(pts, grid_size_deg):
-    """Blocs carrés (côté = grid_size_deg × 111,32 km) traversés par une trace."""
-    cells = set()
-    if not pts: return cells
-    grid_m = grid_size_deg * M_PER_DEG
-    prev_lat, prev_lon = pts[0]
-    cells.add(cell_key(prev_lat, prev_lon, grid_size_deg))
-    for curr_lat, curr_lon in pts[1:]:
-        dy = (curr_lat - prev_lat) * M_PER_DEG
-        dx = (curr_lon - prev_lon) * M_PER_DEG * math.cos(math.radians((curr_lat + prev_lat) / 2))
-        dist_m = math.hypot(dx, dy)
-        if dist_m > grid_m * 0.7:
-            num_steps = int(dist_m / (grid_m * 0.5))
-            for j in range(1, num_steps + 1):
-                frac = j / (num_steps + 1)
-                cells.add(cell_key(prev_lat + (curr_lat - prev_lat) * frac,
-                                   prev_lon + (curr_lon - prev_lon) * frac, grid_size_deg))
-        cells.add(cell_key(curr_lat, curr_lon, grid_size_deg))
-        prev_lat, prev_lon = curr_lat, curr_lon
-    return cells
+    """Blocs carrés (côté = grid_size_deg × 111,32 km) traversés par une trace, ou longés à moins de
+    20 m de leur bord : marge d'imprécision du GPS, la même que pour les chemins (voir acces.py)."""
+    return acces.trace_cells(pts, grid_size_deg)
 
 def commune_cells(geom, dlat):
     """Tous les blocs dont le centre est dans la commune (géométrie en (lat, lon), toutes ses parties)."""
@@ -429,6 +413,8 @@ def get_strava_activities_cached(_token=None):
     if acts is None:
         acts = _fetch_strava(token) or []
         acts = [{k: v for k, v in a.items() if k != 'start_epoch'} for a in sorted(acts, key=lambda a: a['start_epoch'])]
+    # Sports non suivis (le cache en base peut encore en contenir pendant 47 h)
+    acts = [a for a in acts if a.get('type') in SPORT_TRANSLATIONS]
     RAW_DATA_CACHE[key] = (time.time(), acts)
     return acts
 
@@ -912,6 +898,40 @@ def departement_geo(dep):
     resp.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400'
     return resp
 
+_INACC_CACHE = {}
+
+@app.route('/api/commune/<code>/inaccessibles')
+def commune_inaccessibles(code):
+    """Blocs d'une commune sans aucun chemin à moins de 20 m (centres des blocs). Donnée publique
+    calculée depuis OpenStreetMap, sans donnée Strava : mise en cache longue par le CDN."""
+    grid = request.args.get('grid', type=int)
+    profil = request.args.get('profil', 'tous')
+    if grid not in ALLOWED_GRID_SIZES or profil not in ('pied', 'velo', 'tous') or not re.fullmatch(r'[0-9AB]{5}', code or ''):
+        return jsonify({"error": "Paramètres invalides"}), 400
+    key = (code, grid, profil)
+    if key not in _INACC_CACHE:
+        dlat = grid / 111320
+        cells = []
+        if acces.inaccessibles(dep_of(code), grid) and DB_URL:
+            try:
+                with _engine().connect() as conn:
+                    g = conn.execute(text("SELECT ST_AsGeoJSON(geometry) FROM communes WHERE code_insee = :c LIMIT 1"),
+                                     {"c": code}).scalar()
+                if g:
+                    geom = shp_transform(lambda x, y, z=None: (y, x), shp_shape(json.loads(g))).buffer(0)
+                    keys = acces.filtre_inaccessibles(acces.keys_of_cells(commune_cells(geom, dlat), dlat),
+                                                      dep_of(code), grid, profil)
+                    cells = [[a, b] for a, b in acces.cells_of_keys(keys, dlat)]
+            except Exception as e:
+                print(f"Erreur blocs inaccessibles {code}: {e}")
+                return jsonify({"error": "Indisponible"}), 500
+        if len(_INACC_CACHE) > 2000: _INACC_CACHE.clear()
+        _INACC_CACHE[key] = {"code": code, "grid": grid, "profil": profil, "cells": cells,
+                             "source": "© contributeurs OpenStreetMap"}
+    resp = make_response(jsonify(_INACC_CACHE[key]))
+    resp.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400'
+    return resp
+
 # ============================================================
 # 10. API ACTIVITÉS / CARTE / COMMUNES
 # ============================================================
@@ -972,6 +992,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
     grid_store = {}
     grid_store_db = defaultdict(set)
     filtered_cell_acts = defaultdict(set)   # blocs des activités filtrées -> activités
+    filtered_sports = set()
     seg_lat, seg_lon, seg_len, seg_act = [], [], [], []   # milieux des segments des traces filtrées
     
     current_year, current_week, _ = datetime.now().isocalendar()
@@ -1009,6 +1030,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                 if act_ym < grid_store[b]['first']: grid_store[b]['first'] = act_ym
                 if act_ym > grid_store[b]['last']: grid_store[b]['last'] = act_ym
             
+            filtered_sports.add(sport)
             data["stats"]["total_distance"] += act['distance'] / 1000
             data["stats"]["activity_count"] += 1
             for b in blocks:
@@ -1025,6 +1047,8 @@ def _activities_data(sel_year, sel_sport, grid_meters):
             grid_store_db[b].add(idx)
 
     data["grid_cells"] = [[k[0], k[1], v['cnt'], v['first'], v['last']] for k, v in grid_store.items()]
+    profils = {acces.profil_of(sp) for sp in filtered_sports}
+    data["acces_profil"] = profils.pop() if len(profils) == 1 else 'tous'
     data["stats"]["cells_conquered"] = len(grid_store)
     data["available_years"] = sorted(list(data["available_years"]), reverse=True)
     data["available_sports"] = dict(sorted(data["available_sports"].items(), key=lambda x: x[1]))
@@ -1073,6 +1097,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
             print(f"⚠️ Erreur Batch DB: {e}")
 
         visited = set(filtered_cell_acts.keys())
+        profil = data["acces_profil"]   # à pied si toutes les sorties affichées le sont, vélo idem, sinon les deux
         if seg_lat:
             S_lat, S_lon = np.concatenate(seg_lat), np.concatenate(seg_lon)
             S_len, S_act = np.concatenate(seg_len), np.concatenate(seg_act)
@@ -1086,7 +1111,13 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                 if not seen: continue
                 acts = set()
                 for c in seen: acts |= filtered_cell_acts[c]
-                pct = round(min(100.0, len(seen) / max(1, len(all_cells)) * 100), 2)
+                # Blocs sans aucun chemin à moins de 20 m : non comptés, sauf s'ils ont été visités
+                hors = acces.filtre_inaccessibles(acces.keys_of_cells(all_cells, grid_size_deg),
+                                                  city['dep'], grid_meters, profil)
+                if len(hors):
+                    hors = np.setdiff1d(hors, acces.keys_of_cells(seen, grid_size_deg))
+                total = max(len(seen), len(all_cells) - len(hors))
+                pct = round(min(100.0, len(seen) / max(1, total) * 100), 2)
                 # Distance parcourue DANS la commune : segments dont le milieu est à l'intérieur
                 km = 0.0
                 if seg_lat:
@@ -1099,7 +1130,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                 final_cities_list.append({
                     "name": city_name, "code": city['code'], "dep": city['dep'],
                     "outline": city['outline'],
-                    "stats": {"blocks": len(seen), "total_blocks": len(all_cells), "percent": pct, "activities": len(acts),
+                    "stats": {"blocks": len(seen), "total_blocks": total, "inaccessible": int(len(hors)), "percent": pct, "activities": len(acts),
                               "km": round(km, 1), "first": days[0] if days else None, "last": days[-1] if days else None},
                 })
             except Exception as e:

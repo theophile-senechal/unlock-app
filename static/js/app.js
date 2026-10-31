@@ -6,12 +6,12 @@
 
   /* ---------------- Sports ---------------- */
   U.SPORTS = {
-    Run: ['Course à pied', '🏃'], TrailRun: ['Trail', '⛰️'], VirtualRun: ['Course virtuelle', '🏃'],
+    // Sports suivis : à pied ou à vélo (ski, natation et sports virtuels ne débloquent rien)
+    Run: ['Course à pied', '🏃'], TrailRun: ['Trail', '⛰️'],
     Ride: ['Vélo', '🚴'], GravelRide: ['Gravel', '🚵'], 'E-BikeRide': ['Vélo électrique', '⚡'],
-    VirtualRide: ['Vélo virtuel', '🚴'], Velomobile: ['Vélomobile', '🚲'],
+    Velomobile: ['Vélomobile', '🚲'],
     Hike: ['Randonnée', '🥾'], Walk: ['Marche', '🚶'],
-    AlpineSki: ['Ski alpin', '⛷️'], BackcountrySki: ['Ski de rando', '🎿'], NordicSki: ['Ski de fond', '🎿'],
-    Snowshoe: ['Raquettes', '❄️'], Swim: ['Natation', '🏊']
+    Snowshoe: ['Raquettes', '❄️']
   };
   U.sportLabel = (code) => (U.SPORTS[code] ? `${U.SPORTS[code][1]}  ${U.SPORTS[code][0]}` : code);
 

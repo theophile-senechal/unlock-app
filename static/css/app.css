@@ -441,6 +441,31 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .legend__scale { height: 8px; border-radius: 99px; background: linear-gradient(90deg, rgba(109,7,26,.2), rgba(109,7,26,1)); }
 .legend__labels { display: flex; justify-content: space-between; margin-top: 6px; font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
 
+/* Blocs sans chemin (non comptés) : même hachure que sur la carte */
+.hatch {
+  display: inline-block; flex: none; width: 14px; height: 14px; border-radius: 3px; vertical-align: -2px;
+  background: repeating-linear-gradient(135deg, #B9B3BF 0 1.2px, #EEECF0 1.2px 5.5px);
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.06);
+}
+.legend__off { display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.4; }
+.legend__off .hatch { margin-top: 1px; }
+.legend__off small { color: var(--muted); }
+.city__off { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 4px; font-size: var(--fs-xs); color: var(--muted); }
+.city__off .hatch { width: 12px; height: 12px; vertical-align: 0; }
+
+.calc-note {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: start;
+  margin-top: 14px; padding: 12px 12px 12px 14px; border-radius: var(--r-md);
+  background: var(--brand-50); color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.45;
+}
+.calc-note p { margin: 0; }
+.calc-note b { color: var(--brand-deep); }
+.calc-note__x {
+  width: 28px; height: 28px; margin: -4px -4px 0 0; border: 0; border-radius: 99px; background: transparent;
+  color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer;
+}
+.calc-note__x:hover { background: rgba(0,0,0,.05); color: var(--ink); }
+
 .empty { padding: 18px 14px; border-radius: var(--r-md); border: 1px dashed var(--line-2); color: var(--ink-2); font-size: var(--fs-sm); text-align: center; }
 .empty .emoji { display: block; font-size: 1.6rem; margin-bottom: 6px; }
 
