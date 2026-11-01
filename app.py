@@ -46,7 +46,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.01c'
+ASSET_VERSION = '2026.11.01d'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
