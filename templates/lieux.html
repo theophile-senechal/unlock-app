@@ -74,7 +74,7 @@
   /* Carte + liste */
   .lx-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 1024px) { .lx-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
-  .lx-map { position: relative; height: 340px; overflow: hidden; padding: 0; }
+  .lx-map { position: relative; height: 380px; overflow: hidden; padding: 0; }
   @media (min-width: 768px) { .lx-map { height: 440px; } }
   @media (min-width: 1024px) { .lx-map, .lx-list { height: 580px; } }
   .lx-map #map { position: absolute; inset: 0; background: #ECEBEE; }
@@ -111,13 +111,27 @@
   .lx-foot { font-size: var(--fs-xs); color: var(--muted); margin-top: 14px; }
   .lx-soon { padding: 18px; margin-bottom: 14px; font-size: var(--fs-sm); color: var(--ink-2); }
 
-  /* Fenêtre d'un lieu sur la carte */
-  .lx-pop { min-width: 190px; max-width: 240px; }
-  .lx-pop__cat { font-size: var(--fs-xs); color: var(--muted); font-weight: 650; }
-  .lx-pop__name { font-weight: 750; font-size: var(--fs-md); color: var(--ink); margin: 2px 0 4px; line-height: 1.3; }
-  .lx-pop__st { font-size: var(--fs-sm); font-weight: 650; margin-top: 4px; }
-  .lx-pop__st.is-on { color: var(--brand); } .lx-pop__st.is-off { color: var(--ink-2); font-weight: 550; }
-  .lx-pop a { display: inline-block; margin-top: 6px; font-size: var(--fs-sm); font-weight: 650; color: var(--brand); }
+  /* Fiche d'un lieu : ancrée en bas de la carte, au-dessus de la mention © OpenStreetMap.
+     Contrairement à une bulle, elle ne cache jamais le lieu choisi (la carte se décale au-dessus d'elle). */
+  .lx-card { position: absolute; z-index: 950; left: 10px; right: 10px; bottom: 26px; max-width: 420px; margin: 0 auto;
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) 28px; gap: 4px 12px; align-items: start;
+    padding: 12px 10px 12px 12px; border-radius: var(--r-md); background: var(--surface); box-shadow: 0 8px 28px -6px rgba(24,22,27,.35), 0 1px 3px rgba(24,22,27,.12);
+    transform: translateY(8px); opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; }
+  .lx-card.is-open { opacity: 1; transform: none; pointer-events: auto; }
+  .lx-card__ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: var(--brand-100); }
+  .lx-card.is-off .lx-card__ico { background: var(--canvas); filter: grayscale(1); }
+  .lx-card__txt { min-width: 0; }
+  .lx-card__name { font-weight: 750; font-size: var(--fs-md); color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
+  .lx-card__meta { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
+  .lx-card__mh { color: #7A5418; font-weight: 650; margin-top: 1px; }
+  .lx-card__foot { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px;
+    margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--line); }
+  .lx-card__st { font-size: var(--fs-sm); font-weight: 650; }
+  .lx-card__st.is-on { color: var(--brand); } .lx-card__st.is-off { color: var(--ink-2); font-weight: 550; }
+  .lx-card__link { font-size: var(--fs-sm); font-weight: 650; color: var(--brand); white-space: nowrap; }
+  .lx-card__close { width: 28px; height: 28px; border: 0; border-radius: 50%; background: var(--canvas); color: var(--ink-2); font-size: 18px; line-height: 1;
+    display: grid; place-items: center; cursor: pointer; }
+  .lx-card__close:hover { background: var(--line); }
 </style>
 {% endblock %}
 
@@ -164,6 +178,7 @@
         <div class="lx-grid">
           <section class="surface lx-map" aria-label="Carte des lieux">
             <div id="map"></div>
+            <div class="lx-card" id="lx-card" role="dialog" aria-label="Fiche du lieu" aria-hidden="true"></div>
             <div class="lx-legend" aria-hidden="true"><span><i class="lx-dot-on"></i>Débloqué</span><span><i class="lx-dot-off"></i>À découvrir</span></div>
           </section>
 
@@ -214,11 +229,16 @@
   const plural = (n, s, p) => (n > 1 ? p : s);
 
   /* ---------- Carte ---------- */
-  const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([46.6, 1.9], 6);
+  // Un seul calque de dessin pour tout (lieux, contour, anneau) : avec deux calques superposés,
+  // celui du dessus captait les touchers et les points n'étaient plus cliquables
+  const renderer = L.canvas({ padding: .3, tolerance: 8 });
+  const map = L.map('map', { zoomControl: false, preferCanvas: true, renderer }).setView([46.6, 1.9], 6);
   L.control.zoom({ position: 'topright' }).addTo(map);
   Unlock.baseLayer(map);
   const layerOutline = L.layerGroup().addTo(map), layerOff = L.layerGroup().addTo(map), layerOn = L.layerGroup().addTo(map);
-  const renderer = L.canvas({ padding: .3, tolerance: 6 });
+  // Lieu choisi : anneau autour du point, fiche en bas de la carte
+  const halo = L.circleMarker([0, 0], { renderer, radius: 13, color: BRAND, weight: 3, fill: false, interactive: false });
+  map.on('click', () => closeCard());
 
   async function load(params) {
     if (S.first) Unlock.loader.show(['Recherche de vos lieux…', 'Comparaison avec vos sorties…']); else Unlock.busy.on('Chargement des lieux', '', { veil: true });
@@ -336,24 +356,50 @@
     return off.map((l) => [dist(l), l]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
   }
 
-  function popupHtml(l) {
+  const card = $('lx-card');
+  function cardHtml(l) {
     const c = S.data.categories[l[CAT]] || { emoji: '📍', label: '' }, w = wikiUrl(l[WIKI]);
-    return `<div class="lx-pop"><div class="lx-pop__cat">${c.emoji} ${esc(c.label)}${l[MH] ? ' · Monument historique' : ''}</div>
-      <div class="lx-pop__name">${esc(l[NOM])}</div>
-      <div class="lx-meta">${esc(S.data.dep.communes[l[INSEE]] || '')}</div>
-      <div class="lx-pop__st ${l[DATE] ? 'is-on' : 'is-off'}">${l[DATE] ? `🔓 Débloqué le ${esc(dateTxt(l[DATE]))}` : `🔒 À découvrir : passez à moins de ${S.data.rayon_m} m`}</div>
-      ${w ? `<a href="${w}" target="_blank" rel="noopener">${l[WIKI].startsWith('fr:') ? 'En savoir plus sur Wikipédia' : 'Fiche Wikidata'} ↗</a>` : ''}</div>`;
+    return `<span class="lx-card__ico" aria-hidden="true">${c.emoji}</span>
+      <div class="lx-card__txt"><div class="lx-card__name">${esc(l[NOM])}</div>
+        <div class="lx-card__meta">${esc(c.label)} · ${esc(S.data.dep.communes[l[INSEE]] || '')}</div>${l[MH] ? '<div class="lx-card__meta lx-card__mh">Monument historique</div>' : ''}</div>
+      <button type="button" class="lx-card__close" id="lx-card-close" aria-label="Fermer la fiche">×</button>
+      <div class="lx-card__foot"><span class="lx-card__st ${l[DATE] ? 'is-on' : 'is-off'}">${l[DATE] ? `🔓 Débloqué le ${esc(dateTxt(l[DATE]))}` : `🔒 À découvrir : passez à moins de ${S.data.rayon_m} m`}</span>
+        ${w ? `<a class="lx-card__link" href="${w}" target="_blank" rel="noopener">${l[WIKI].startsWith('fr:') ? 'Wikipédia' : 'Wikidata'} ↗</a>` : ''}</div>`;
   }
+  // Ouvre la fiche d'un lieu ; la carte se décale pour que le lieu reste visible au-dessus de la fiche
+  function select(l, zoomIn) {
+    S.sel = l[ID];
+    card.className = 'lx-card is-open ' + (l[DATE] ? 'is-on' : 'is-off');
+    card.innerHTML = cardHtml(l); card.setAttribute('aria-hidden', 'false');
+    halo.setLatLng([l[LAT], l[LON]]).addTo(map);
+    const z = zoomIn ? Math.max(map.getZoom(), 15) : map.getZoom();
+    const size = map.getSize(), reserve = card.offsetHeight + 34;          // hauteur de la fiche + marge
+    const pt = map.project([l[LAT], l[LON]], z);
+    const visible = pt.subtract(map.project(map.getCenter(), z)).add(size.divideBy(2));
+    // Zone libre : sous la légende (haut) et au-dessus de la fiche (bas)
+    const libre = visible.y > 56 && visible.y < size.y - reserve && visible.x > 20 && visible.x < size.x - 20;
+    if (zoomIn || !libre) {
+      const cible = map.unproject(pt.add([0, reserve / 2 - 14]), z);     // lieu centré dans la zone libre
+      zoomIn ? map.flyTo(cible, z, { duration: .6 }) : map.panTo(cible, { duration: .35 });
+    }
+  }
+  function closeCard() {
+    if (!S.sel) return;
+    S.sel = null; card.className = 'lx-card'; card.setAttribute('aria-hidden', 'true'); halo.remove();
+  }
+  card.addEventListener('click', (e) => { if (e.target.closest('#lx-card-close')) closeCard(); });
+  L.DomEvent.disableClickPropagation(card); L.DomEvent.disableScrollPropagation(card);
 
   // Tous les lieux du département restent sur la carte ; la commune choisie est entourée
   function drawMarkers(fit) {
+    closeCard();
     layerOn.clearLayers(); layerOff.clearLayers(); S.markers = {};
     const all = S.data.dep.lieux, xs = S.cat === 'all' ? all : all.filter((l) => l[CAT] === S.cat);
     for (const l of xs) {
       const m = l[DATE]
-        ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1 })
-        : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1 });
-      m.bindPopup(() => popupHtml(l), { maxWidth: 260 });
+        ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1, bubblingMouseEvents: false })
+        : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1, bubblingMouseEvents: false });
+      m.on('click', (e) => { L.DomEvent.stop(e); select(l, false); });
       (l[DATE] ? layerOn : layerOff).addLayer(m);
       S.markers[l[ID]] = m;
     }
@@ -374,7 +420,7 @@
       const r = await fetch(`/api/commune/${encodeURIComponent(code)}/contour`, { credentials: 'same-origin' });
       if (!r.ok || S.com !== code) return;
       const g = await r.json();
-      (g.shape || []).forEach((poly) => L.polygon(poly, { color: BRAND, weight: 2, dashArray: '6 6', fill: true, fillColor: BRAND, fillOpacity: .04, interactive: false }).addTo(layerOutline));
+      (g.shape || []).forEach((poly) => L.polygon(poly, { renderer, color: BRAND, weight: 2, dashArray: '6 6', fill: true, fillColor: BRAND, fillOpacity: .04, interactive: false }).addTo(layerOutline));
     } catch (e) { /* contour facultatif */ }
   }
 
@@ -432,8 +478,8 @@
     const b = e.target.closest('.lx-item'); if (!b) return;
     const m = S.markers[b.dataset.id]; if (!m) return;
     if (window.matchMedia('(max-width: 1023px)').matches) document.querySelector('.lx-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), { duration: .6 });
-    setTimeout(() => m.openPopup(), 650);
+    const l = S.data.dep.lieux.find((x) => x[ID] === b.dataset.id);
+    if (l) select(l, true);
   });
 
   load(S.dep ? { dep: S.dep } : null);
