@@ -395,7 +395,14 @@ p { margin: 0; }
   transition: transform .28s cubic-bezier(.2,.8,.2,1); will-change: transform;
 }
 .panel.is-dragging { transition: none; }
-@media (max-width: 767px) { .panel.is-collapsed .panel__scroll { touch-action: none; overflow: hidden; } }
+@media (max-width: 767px) {
+  .panel.is-collapsed .panel__scroll { touch-action: none; overflow: hidden; }
+  /* Le panneau passe au-dessus de la mention © OpenStreetMap (calque Leaflet à 1000) quand on le tire */
+  .panel { z-index: 1001; }
+  /* Prolongement blanc sous le panneau : quand on le tire vers le haut, la carte n'apparaît jamais
+     entre le panneau et la barre du bas (coupé par .mapview, qui masque ce qui dépasse) */
+  .panel::after { content: ""; position: absolute; left: 0; right: 0; top: 100%; height: 160px; background: var(--surface); pointer-events: none; }
+}
 /* Pages à écran fixe (carte) : la page elle-même ne doit jamais bouger ni rebondir */
 html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .panel__toggle {
