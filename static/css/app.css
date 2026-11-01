@@ -828,3 +828,14 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 ::-webkit-scrollbar-thumb { background-color: var(--line-2); border-radius: 99px; border: 3px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+/* Stats : progression dans une commune */
+.cprog__pick { min-width: 0; width: 220px; max-width: 100%; }
+.cprog__pick .select { width: 100%; text-overflow: ellipsis; }
+.cprog__kpi { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: -4px 0 12px; min-height: 30px; }
+.cprog__kpi b { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--brand); }
+.cprog__kpi span:not(.delta) { color: var(--muted); font-size: var(--fs-sm); }
+.cprog__state { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 16px;
+  color: var(--muted); font-size: var(--fs-sm); background: rgba(255,255,255,.7); border-radius: 12px; }
+.cprog__state.is-empty { background: transparent; }
+@media (max-width: 560px) { .cprog__pick { width: 100%; } }

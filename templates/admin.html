@@ -53,6 +53,41 @@
   .events tr:last-child td { border-bottom: 0; }
   .events td:last-child { text-align: right; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .note { font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
+
+  /* Personnes connectées ces 7 derniers jours */
+  .people { margin-bottom: 0; }
+  .people__tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 10px; }
+  .people__tools .input { max-width: 280px; }
+  .ptable { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); table-layout: fixed; }
+  .ptable th { text-align: left; font-size: var(--fs-xs); font-weight: 650; color: var(--muted); padding: 8px 6px; border-bottom: 1px solid var(--line); }
+  .ptable td { padding: 10px 6px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ptable tr:last-child td { border-bottom: 0; }
+  .ptable .p-last { font-weight: 650; color: var(--ink); }
+  .ptable .p-date { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .ptable .p-date small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+  .ptable .p-id { width: 150px; }
+  .ptable .p-id a { color: var(--ink-2); font-variant-numeric: tabular-nums; text-decoration: none; border-bottom: 1px dashed var(--line); }
+  .ptable .p-id a:hover { color: var(--brand); }
+  .ptable .p-copy { margin-left: 6px; border: 0; background: none; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 6px; color: var(--muted); }
+  .ptable .p-copy:hover { background: var(--canvas); }
+  .ptable td.p-nm, .ptable td.p-fn { white-space: normal; overflow-wrap: anywhere; }
+  .ptable .p-mob { display: none; }
+  .ptable th.p-dt { width: 210px; }
+  .ptable .p-unknown { color: var(--muted); font-style: italic; font-weight: 400; }
+  .people__more { margin-top: 10px; }
+  @media (max-width: 640px) {
+    .ptable thead { display: none; }
+    .ptable, .ptable tbody { display: block; }
+    .ptable tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding: 10px 2px; border-bottom: 1px solid var(--line); }
+    .ptable tr:last-child { border-bottom: 0; }
+    .ptable td { border: 0; padding: 0; }
+    .ptable .p-fn { display: none; }
+    .ptable .p-mob { display: inline; }
+    .ptable .p-name { grid-column: 1; grid-row: 1; }
+    .ptable .p-id { grid-column: 1; grid-row: 2; width: auto; font-size: var(--fs-xs); }
+    .ptable .p-date { grid-column: 2; grid-row: 1 / span 2; text-align: right; align-self: center; }
+    .people__tools .input { max-width: none; }
+  }
 </style>
 {% endblock %}
 
@@ -64,7 +99,7 @@
       <div class="page__head">
         <div>
           <h1 class="page__title">Tableau de bord</h1>
-          <p class="page__lead">Unlock en un coup d'œil. Uniquement des chiffres anonymes, aucune donnée Strava.</p>
+          <p class="page__lead">Unlock en un coup d'œil. Chiffres anonymes, plus la liste des personnes venues ces 7 derniers jours.</p>
         </div>
         <div class="updated"><span id="updated">Chargement…</span>
           <button type="button" class="iconbtn" id="refresh" aria-label="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
@@ -94,6 +129,26 @@
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🆕</span>Nouveaux sur 7 jours</span><span class="kpi__val" id="k-new">–</span><span class="kpi__sub" id="k-new-sub"></span><span class="kpi__help">Premières connexions</span></div>
           <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🔁</span>Taux de retour</span><span class="kpi__val" id="k-ret">–</span><span class="kpi__sub" id="k-ret-sub"></span><span class="kpi__help">Utilisateurs revenus un autre jour que leur inscription</span></div>
         </div>
+
+        <!-- Personnes connectées ces 7 derniers jours -->
+        <section class="surface chart people" aria-labelledby="g-people">
+          <div class="chart__head">
+            <div>
+              <h2 class="chart__title" id="g-people"><span class="emoji" aria-hidden="true">👥</span>Connectés ces 7 derniers jours</h2>
+              <p class="chart__note" id="p-note" style="margin-top:4px"></p>
+            </div>
+          </div>
+          <div class="people__tools" id="p-tools" hidden>
+            <label class="sr-only" for="p-search">Chercher une personne</label>
+            <input class="input" id="p-search" type="search" placeholder="Nom, prénom ou ID Strava" autocomplete="off">
+          </div>
+          <table class="ptable">
+            <thead><tr><th class="p-nm">Nom</th><th class="p-fn">Prénom</th><th class="p-dt">Dernière connexion</th><th class="p-id">ID Strava</th></tr></thead>
+            <tbody id="people"></tbody>
+          </table>
+          <div class="people__more" id="p-more-wrap" hidden><button type="button" class="btn btn--ghost btn--sm" id="p-more"></button></div>
+          <p class="note">Visible par vous seul. Nom et prénom sont relus sur Strava à chaque visite, puis effacés 7 jours après (règles Strava). Ils n'apparaissent nulle part ailleurs dans l'app.</p>
+        </section>
 
         <!-- Utilisateurs uniques depuis le lancement -->
         <section class="surface chart uniq" aria-labelledby="g0">
@@ -292,12 +347,50 @@
       : { ok: null, label: 'Dons Ko-fi', help: 'Désactivés : ajoutez KOFI_URL dans Vercel pour afficher « Soutenir Unlock ».' });
     $('health').innerHTML = H.map((h) => `<li><span class="emoji" aria-hidden="true">${h.ok === null ? '⏳' : h.ok ? '✅' : '⚠️'}</span><span><b>${h.label}</b>${h.html || (h.help ? `<small>${h.help}</small>` : '')}</span></li>`).join('');
 
+    P.rows = s.people === undefined ? [] : s.people; renderPeople();
+
     /* Événements */
     const LBL = { signup: ['🆕', 'Nouvel utilisateur'], logout: ['🚪', 'Déconnexion'], delete: ['🗑️', 'Données supprimées par l\'utilisateur'], revoke_inactive: ['🧹', 'Révocation automatique (inactif)'] };
     const ev = s.recent || [];
     $('events').innerHTML = ev.length ? ev.map((e) => `<tr><td><span class="emoji">${LBL[e.kind][0]}</span> ${LBL[e.kind][1]}</td><td>${ago(e.created_at)}</td></tr>`).join('')
       : '<tr><td>Aucun événement pour l\'instant.</td><td></td></tr>';
   }
+
+  /* Personnes connectées ces 7 derniers jours */
+  const P = { rows: [], q: '', open: false };
+  const pnorm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function renderPeople() {
+    const esc = Unlock.esc;
+    if (P.rows === null) {
+      $('p-note').textContent = 'Lancez la migration 2026-11-01_noms_admin.sql dans Supabase pour afficher la liste.';
+      $('people').innerHTML = ''; $('p-tools').hidden = true; $('p-more-wrap').hidden = true; return;
+    }
+    const n = P.rows.length;
+    $('p-note').textContent = n ? `${fmt(n)} personne${n > 1 ? 's' : ''}, la plus récente en premier` : '';
+    $('p-tools').hidden = n <= 8;
+    const q = pnorm(P.q);
+    const all = P.rows.filter((r) => !q || pnorm(`${r.last_name} ${r.first_name} ${r.athlete_id}`).includes(q));
+    const list = P.open || q ? all : all.slice(0, 15);
+    const unk = '<span class="p-unknown">inconnu</span>';
+    const when = (t) => { const x = d(t); return `${x.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' })} à ${x.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}<small>${ago(t)}</small>`; };
+    $('people').innerHTML = list.map((r) => {
+      const id = esc(r.athlete_id);
+      return `<tr>
+        <td class="p-name p-nm"><span class="p-last">${r.last_name ? esc(r.last_name) : unk}</span><span class="p-mob"> ${r.first_name ? esc(r.first_name) : ''}</span></td>
+        <td class="p-fn">${r.first_name ? esc(r.first_name) : unk}</td>
+        <td class="p-date">${when(r.last_login_date)}</td>
+        <td class="p-id"><a href="https://www.strava.com/athletes/${id}" target="_blank" rel="noopener" title="Voir le profil Strava">${id}</a><button type="button" class="p-copy" data-id="${id}" aria-label="Copier l'ID ${id}">📋</button></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="4">${n ? 'Personne ne correspond à cette recherche.' : 'Personne ces 7 derniers jours.'}</td></tr>`;
+    $('p-more-wrap').hidden = !!q || all.length <= 15;
+    $('p-more').textContent = P.open ? 'Afficher moins' : `Voir les ${fmt(all.length)} personnes`;
+  }
+  $('p-search').addEventListener('input', (e) => { P.q = e.target.value.trim(); renderPeople(); });
+  $('p-more').addEventListener('click', () => { P.open = !P.open; renderPeople(); });
+  $('people').addEventListener('click', async (e) => {
+    const b = e.target.closest('.p-copy'); if (!b) return;
+    try { await navigator.clipboard.writeText(b.dataset.id); Unlock.toast('📋 ID Strava copié'); } catch (err) { Unlock.toast('Copie impossible : ' + b.dataset.id); }
+  });
 
   $('refresh').addEventListener('click', load);
   setInterval(() => { if (!document.hidden) load(); }, 60000);

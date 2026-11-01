@@ -46,7 +46,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.10.25'
+ASSET_VERSION = '2026.11.01c'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -118,7 +118,7 @@ def inject_globals():
         'session_user': 'access_token' in session,
         'csrf_token': session['csrf'],
         'site_owner': SITE_OWNER,
-        'legal_updated': '29 octobre 2026',
+        'legal_updated': '1er novembre 2026',
         'inactive_days': INACTIVE_DAYS,
         'is_admin': is_admin(),
         'carto_key': os.getenv('CARTO_API_KEY', ''),
@@ -368,6 +368,32 @@ def _record_rate_limit(resp):
     if time.time() - _RATE['ts'] > 60:
         _RATE['ts'] = time.time()
         kv_set('strava_rate_limit', data)
+
+NAME_DAYS = 7   # nom et prénom gardés 7 jours au plus après leur lecture (Strava API Policy §6.2)
+
+def _save_name(athlete_id, info):
+    """Nom et prénom Strava, visibles uniquement dans /admin (§5.13 : le développeur seul)."""
+    if not (DB_URL and athlete_id and info): return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("""UPDATE strava_users SET first_name = :f, last_name = :l, name_at = NOW()
+                                 WHERE athlete_id = :a"""),
+                         {"f": (info.get('firstname') or '').strip()[:80] or None,
+                          "l": (info.get('lastname') or '').strip()[:80] or None, "a": athlete_id})
+    except Exception as e:
+        print(f"Nom de l'athlète (migration 2026-11-01_noms_admin.sql faite ?) : {e}")
+
+def _refresh_name(token):
+    """Relit le nom au plus une fois par jour et par session : il reste à jour et n'a jamais plus de 7 jours."""
+    aid = session.get('athlete_id')
+    if not (DB_URL and aid) or time.time() - (session.get('name_at') or 0) < 86400: return
+    session['name_at'] = time.time()
+    try:
+        r = requests.get("https://www.strava.com/api/v3/athlete", headers={'Authorization': f'Bearer {token}'}, timeout=8)
+        _record_rate_limit(r)
+        if r.status_code == 200: _save_name(aid, r.json())
+    except Exception as e:
+        print(f"Lecture du nom : {e}")
 
 def _touch_visit(old_last_login):
     """Compte une visite unique par utilisateur et par jour."""
@@ -637,6 +663,8 @@ def callback():
                 _touch_visit(prev[0] if prev else None)
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
+            _save_name(athlete_id, athlete_info)
+            session['name_at'] = time.time()
             try:
                 with _engine().begin() as conn:
                     conn.execute(text("UPDATE strava_users SET refresh_token = :r WHERE athlete_id = :a"),
@@ -981,6 +1009,7 @@ def get_activities_route():
         except Exception as e:
             print(f"Erreur màj silencieuse: {e}")
 
+    _refresh_name(token)
     sel_year = request.args.get('year', 'all')
     sel_sport = request.args.get('sport_type', 'all')
     return jsonify(_activities_data(sel_year, sel_sport, _grid_size()))
@@ -992,6 +1021,87 @@ def get_communes_route():
     data = _activities_data(request.args.get('year', 'all'), request.args.get('sport_type', 'all'), _grid_size())
     rows = [{"name": c["name"], "code": c.get("code"), "dep": c.get("dep"), **c["stats"]} for c in data.get("top_municipalities", [])]
     return jsonify({"communes": rows, "departements": data.get("departements", []), "db": bool(DB_URL)})
+
+_COMMUNE_GEOM = {}   # code INSEE -> géométrie (lat, lon). Donnée publique, gardée en mémoire
+
+def _commune_geom(code):
+    if code not in _COMMUNE_GEOM:
+        with _engine().connect() as conn:
+            row = conn.execute(text("SELECT nom_commune, ST_AsGeoJSON(geometry) AS g FROM communes WHERE code_insee = :c LIMIT 1"),
+                               {"c": code}).fetchone()
+        if not row or not row.g: return None, None
+        if len(_COMMUNE_GEOM) > 500: _COMMUNE_GEOM.clear()
+        _COMMUNE_GEOM[code] = (row.nom_commune, shp_transform(lambda x, y, z=None: (y, x), shp_shape(json.loads(row.g))).buffer(0))
+    return _COMMUNE_GEOM[code]
+
+@app.route('/api/commune_history')
+def commune_history():
+    """% exploré d'UNE commune, mois après mois (graphique de la page Stats). Même calcul que la carte :
+    blocs de la commune traversés / blocs accessibles, avec les mêmes filtres."""
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    code = request.args.get('code', '')
+    if not re.fullmatch(r'[0-9AB]{5}', code): return jsonify({"error": "Commune invalide"}), 400
+    if not DB_URL: return jsonify({"error": "Base indisponible"}), 503
+    grid_meters = _grid_size()
+    sel_year, sel_sport = request.args.get('year', 'all'), request.args.get('sport_type', 'all')
+    activities = get_strava_activities_cached()
+    cache_key = f"ch_{code}_{grid_meters}_{sel_year}_{sel_sport}_{_data_version(activities)}"
+    cache = _result_cache(_user_key())
+    if cache_key in cache: return jsonify(cache[cache_key])
+    try:
+        name, geom = _commune_geom(code)
+    except Exception as e:
+        print(f"Erreur contour commune {code}: {e}")
+        return jsonify({"error": "Indisponible"}), 500
+    if geom is None: return jsonify({"error": "Commune inconnue"}), 404
+
+    dlat = grid_meters / 111320
+    acts = [a for a in activities
+            if (sel_year == 'all' or a['start_date_local'][:4] == sel_year) and (sel_sport == 'all' or a['type'] == sel_sport)]
+    # Profil d'accès identique à la carte : celui de toutes les sorties affichées
+    profils = {acces.profil_of(a['type']) for a in acts}
+    profil = profils.pop() if len(profils) == 1 else 'tous'
+    all_cells = commune_cells(geom, dlat)
+    hors = set(acces.filtre_inaccessibles(acces.keys_of_cells(all_cells, dlat), dep_of(code), grid_meters, profil).tolist()) if all_cells else set()
+    a0, b0, a1, b1 = geom.bounds
+    m = 2 * dlat   # marge : un bloc touché peut déborder un peu de l'emprise
+    par_mois = defaultdict(set)
+    for a in sorted(acts, key=lambda a: a['start_date_local']):
+        pts = polyline.decode(a['polyline'])
+        if len(pts) < 2: continue
+        arr = np.asarray(pts)
+        if arr[:, 0].max() < a0 - m or arr[:, 0].min() > a1 + m or arr[:, 1].max() < b0 - m * 2 or arr[:, 1].min() > b1 + m * 2:
+            continue
+        dedans = get_cells_from_polyline(pts, dlat) & all_cells
+        if dedans: par_mois[a['start_date_local'][:7]] |= dedans
+    if not par_mois:
+        res = {"code": code, "name": name, "labels": [], "percent": [], "blocks": [], "new": [], "total_blocks": 0}
+        cache[cache_key] = res
+        return jsonify(res)
+
+    # Mois continus, de la 1re visite jusqu'à aujourd'hui (ou fin de l'année choisie)
+    now = datetime.now()
+    fin = f"{now:%Y-%m}" if sel_year == 'all' or int(sel_year) >= now.year else f"{sel_year}-12"
+    mois, k = [], min(par_mois)
+    while k <= fin:
+        mois.append(k)
+        y, mo = int(k[:4]), int(k[5:]) + 1
+        k = f"{y + (mo > 12)}-{(mo - 1) % 12 + 1:02d}"
+    vus, n_hors_vus = set(), 0
+    pct, blocs, nouveaux, totaux = [], [], [], []
+    for k in mois:
+        neufs = par_mois.get(k, set()) - vus
+        if neufs:
+            cles = acces.keys_of_cells(neufs, dlat).tolist()
+            n_hors_vus += sum(1 for c in cles if c in hors)
+            vus |= neufs
+        total = max(len(vus), len(all_cells) - (len(hors) - n_hors_vus))
+        pct.append(round(min(100.0, len(vus) / max(1, total) * 100), 2))
+        blocs.append(len(vus)); nouveaux.append(len(neufs)); totaux.append(total)
+    res = {"code": code, "name": name, "labels": mois, "percent": pct, "blocks": blocs, "new": nouveaux,
+           "totals": totaux, "total_blocks": totaux[-1]}
+    cache[cache_key] = res
+    return jsonify(res)
 
 def _activities_data(sel_year, sel_sport, grid_meters):
     activities = get_strava_activities_cached()
@@ -1231,6 +1341,12 @@ def cleanup_users():
                     SELECT 1 FROM strava_users u WHERE u.athlete_id = a.athlete_id
                     AND u.full_sync_at > NOW() - make_interval(hours => :h))
             """), {"h": DB_CACHE_MAX_AGE_HOURS}).rowcount
+        try:   # Noms lus il y a plus de 7 jours : effacés (relus à la prochaine visite)
+            with _engine().begin() as conn:
+                conn.execute(text("""UPDATE strava_users SET first_name = NULL, last_name = NULL, name_at = NULL
+                                     WHERE name_at < NOW() - make_interval(days => :d)"""), {"d": NAME_DAYS})
+        except Exception as e:
+            print(f"Purge des noms : {e}")
         try:
             with _engine().begin() as conn:
                 conn.execute(text("DELETE FROM api_cache WHERE created_at < NOW() - make_interval(hours => :h)"),
@@ -1476,6 +1592,18 @@ def admin_stats():
         out["snapshots"] = series("""SELECT day, connected, active_7, active_31 FROM app_daily_stats
                                      WHERE day > CURRENT_DATE - 90 AND connected IS NOT NULL ORDER BY day""")
         out["unique"] = _unique_users(conn, series)
+        try:
+            out["people"] = [dict(r) for r in conn.execute(text("""
+                SELECT athlete_id, first_name, last_name, last_login_date FROM strava_users
+                WHERE last_login_date > NOW() - make_interval(days => :d)
+                ORDER BY last_login_date DESC LIMIT 500"""), {"d": NAME_DAYS}).mappings().all()]
+            for r in out["people"]:   # dates enregistrées en UTC sans fuseau : on le précise pour le navigateur
+                t = r["last_login_date"]
+                if t is not None: r["last_login_date"] = t.isoformat() + ('Z' if t.tzinfo is None else '')
+        except Exception as e:
+            print(f"Admin, liste des personnes : {e}"); conn.rollback()
+            out["people"] = None   # colonnes absentes : migration 2026-11-01_noms_admin.sql à lancer
+        out["people_days"] = NAME_DAYS
         out["recent"] = series("""SELECT kind, created_at FROM app_events
                                   WHERE kind IN ('signup', 'logout', 'delete', 'revoke_inactive')
                                   ORDER BY created_at DESC LIMIT 10""")
