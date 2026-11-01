@@ -59,11 +59,59 @@ def main(src, out):
             e = index['departements'].setdefault(dep, {})
             e[str(size)] = {'blocs': int(len(tous)), 'pied': int(len(res['pied'])), 'velo': int(len(res['velo']))}
             e['communes'] = int(next(d['communes'][dep] for d in parts if d['principal'] == dep))
+    ecrire_lieux(parts, deps, os.path.join(os.path.dirname(os.path.abspath(out)), 'lieux'))
     index.update({'maj': datetime.date.today().isoformat(), 'marge_m': acces.MARGE_M,
                   'fichiers': len(paths), 'source': '© contributeurs OpenStreetMap (ODbL)'})
     json.dump(index, open(index_path, 'w'), ensure_ascii=False, indent=1, sort_keys=True)
     total = sum(os.path.getsize(p) for p in glob.glob(os.path.join(out, '*.bin')))
     print(f'{len(paths)} fichiers, {len(deps)} départements mis à jour, {total / 1e6:.1f} Mo au total')
+
+
+def ecrire_lieux(parts, deps, out):
+    """data/lieux/<dep>.json : lieux à collectionner du département et nom de ses communes.
+    Un lieu proche d'une limite peut être vu dans plusieurs fichiers : on le garde une fois (identifiant OSM)."""
+    os.makedirs(out, exist_ok=True)
+    maj = datetime.date.today().isoformat()
+    resume = {}
+    for dep in deps:
+        lieux, noms = {}, {}
+        for d in parts:
+            for code, nom in d.get('noms', {}).items():
+                if acces_dep(code) == dep: noms[code] = nom
+            for l in d.get('lieux', []):
+                if acces_dep(l['insee']) == dep: lieux.setdefault(l['id'], l)
+        rows = sorted(([l['id'], l['lat'], l['lon'], l['r'], l['cat'], int(l['mh']), l['nom'], l['insee'], l['wiki']]
+                       for l in lieux.values()), key=lambda r: (r[7], r[6]))
+        with open(os.path.join(out, f'{dep}.json'), 'w', encoding='utf-8') as fh:
+            json.dump({'v': 1, 'dep': dep, 'source': '© contributeurs OpenStreetMap (ODbL)',
+                       'colonnes': ['id', 'lat', 'lon', 'rayon_m', 'categorie', 'monument_historique', 'nom', 'insee', 'wiki'],
+                       'communes': dict(sorted(noms.items())), 'lieux': rows}, fh, ensure_ascii=False, separators=(',', ':'))
+        resume[dep] = len(rows)
+    # Toutes les communes de France (recherche dans l'app) : code, nom, emprise, nombre de lieux.
+    # Les départements non recalculés ce mois-ci gardent leur liste précédente.
+    cpath = os.path.join(out, 'communes.json')
+    try: toutes = json.load(open(cpath, encoding='utf-8'))
+    except Exception: toutes = {}
+    for dep in deps:
+        noms, emp, nb = {}, {}, {}
+        for d in parts:
+            for code, nom in d.get('noms', {}).items():
+                if acces_dep(code) == dep: noms[code] = nom; emp[code] = d.get('emprises', {}).get(code)
+            for l in d.get('lieux', []):
+                if acces_dep(l['insee']) == dep: nb.setdefault(l['insee'], set()).add(l['id'])
+        toutes[dep] = [[c, noms[c], *(emp[c] or (None,) * 4), len(nb.get(c, ()))] for c in sorted(noms) if emp.get(c)]
+    with open(cpath, 'w', encoding='utf-8') as fh:
+        json.dump(dict(sorted(toutes.items())), fh, ensure_ascii=False, separators=(',', ':'))
+    idx = os.path.join(out, 'index.json')
+    try: old = json.load(open(idx))
+    except Exception: old = {'departements': {}}
+    old['departements'].update(resume); old['maj'] = maj
+    json.dump(old, open(idx, 'w'), ensure_ascii=False, indent=1, sort_keys=True)
+    print(f'Lieux : {sum(resume.values())} dans {len(resume)} départements')
+
+
+def acces_dep(code):
+    return code[:3] if code.startswith('97') else code[:2]
 
 
 if __name__ == '__main__':

@@ -16,9 +16,12 @@ templates/
   legal/                CGU, confidentialité, mentions légales
   deleted.html          Confirmation écrite de suppression des données
   offline.html, error.html
+  lieux.html            Lieux à collectionner
   leaderboard.html      Classement (DÉSACTIVÉ, voir plus bas)
 acces.py               Grille des blocs, marge GPS de 20 m, blocs sans chemin
+lieux.py               Lieux historiques et culturels : déblocage à moins de 60 m (page /lieux)
 data/acces/            Blocs sans chemin par département (calcul mensuel, voir tools/acces)
+data/lieux/            Lieux à collectionner par département (calcul mensuel, voir tools/acces)
 tools/acces/           Calcul OpenStreetMap + .github/workflows/blocs-inaccessibles.yml
 static/
   css/app.css           Design system
@@ -76,6 +79,7 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Lieux à collectionner** (page `/lieux`, onglet « Lieux ») : châteaux, églises et abbayes, mégalithes, forts et remparts, musées, monuments, et côté nature points de vue et cascades nommés, parcs et jardins à visiter (botaniques, arboretums, protégés ou décrits sur Wikipédia), sommets décrits sur Wikipédia. Recherche de commune sur toute la France (`/api/lieux/communes`, index `data/lieux/communes.json`) : la carte se centre sur la commune avec son contour. Compteur à trois niveaux : commune, département, France. Un lieu est débloqué quand une sortie passe à moins de 60 m (ou de l'emprise d'un grand site). Compteur par département, filtres par catégorie, carte, liste « Débloqués » (date de 1re visite) / « À découvrir » (les plus proches d'abord), lien Wikipédia. Lieux extraits d'OpenStreetMap par la tâche mensuelle (`tools/acces/lieux_osm.py`, `data/lieux`, rien dans Supabase) ; calcul à la demande pour l'utilisateur seul, rien d'enregistré. Lieux retenus : nommés et protégés (monument historique), décrits sur Wikipédia, ou d'un type marquant.
 - **Écran de lancement de l'app installée** : fond blanc cassé (#F4F3F5, comme le fond de l'app) avec le logo au centre. Android : `background_color` du manifeste et icônes « any » aux coins arrondis sur fond transparent. iPhone / iPad : 44 images `static/splash` (portrait et paysage, de l'iPhone SE à l'iPad Pro 13"), générées depuis `static/img/logo.svg`. Prise en compte après réinstallation de l'app sur l'écran d'accueil.
 - **Admin : personnes connectées ces 7 derniers jours** : nom, prénom, dernière connexion et ID Strava (lien vers le profil, bouton copier, recherche). Visible seulement dans `/admin`. Nom relu sur Strava à la connexion puis au plus une fois par jour, effacé par le nettoyage quotidien 7 jours après sa dernière lecture (Strava API Policy §6.2). Migration `2026-11-01_noms_admin.sql`. Page Confidentialité mise à jour.
 - **Stats : progression dans une commune** : courbe du % exploré mois après mois, commune choisie dans l'encart (les plus parcourues en premier, choix mémorisé). Mêmes filtres et même calcul que la carte (blocs sans chemin exclus), gain sur 12 mois affiché. Route `/api/commune_history`.

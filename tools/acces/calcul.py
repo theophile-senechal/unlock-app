@@ -7,6 +7,7 @@ Produit <dossier_sortie>/<nom du fichier>.pkl, pour chaque taille (100, 250 m) :
     voie à pied / à vélo d'après ce fichier ;
   - les blocs accessibles hors de ces communes (bordure), pour les départements voisins.
 La fusion combine tous les fichiers : un bloc n'est inaccessible que si aucun ne trouve de voie.
+Il contient aussi les lieux historiques et culturels à collectionner (voir lieux_osm.py) et le nom des communes.
 """
 import os, sys, time, tempfile, urllib.request, shutil, pickle
 from collections import Counter
@@ -16,6 +17,8 @@ import shapely, shapely.wkb
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 import acces  # noqa: E402  (même grille et même marge que l'app)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import lieux_osm  # noqa: E402  (lieux historiques et culturels à collectionner)
 
 SIZES = (100, 250)
 ROADS = {'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link',
@@ -73,10 +76,26 @@ def dep_of(code):
 
 
 def lire(path):
-    pied, velo, communes, fermees = [], [], {}, []
+    pied, velo, communes, fermees, noms, lieux = [], [], {}, [], {}, []
     wkb = osmium.geom.WKBFactory()
     for o in osmium.FileProcessor(path).with_locations().with_areas():
-        if o.is_way():
+        if o.is_node():
+            if 'name' in o.tags:
+                c = lieux_osm.classer(o.tags)
+                if c: lieux.append(_lieu('n%d' % o.id, o.tags, c, o.location.lat, o.location.lon, 0))
+        elif o.is_way():
+            # Lieu dessiné comme une ligne ouverte (cascade le long d'un ruisseau…) : point au milieu de la ligne.
+            # Les lignes fermées sont traitées comme des surfaces plus bas.
+            if 'name' in o.tags and not o.is_closed():
+                c = lieux_osm.classer(o.tags)
+                if c:
+                    try:
+                        pts = [(n.lat, n.lon) for n in o.nodes]
+                        la, lo = pts[len(pts) // 2]
+                        r = int(max(abs(pts[0][0] - pts[-1][0]), abs(pts[0][1] - pts[-1][1]) * np.cos(np.radians(la))) * acces.M_PER_DEG / 2)
+                        lieux.append(_lieu('w%d' % o.id, o.tags, c, la, lo, min(250, r)))
+                    except osmium.InvalidLocationError:
+                        pass
             f, b = profils(o.tags)
             if not (f or b): continue
             try:
@@ -91,9 +110,45 @@ def lire(path):
                 try: fermees.append(shapely.wkb.loads(wkb.create_multipolygon(o), hex=True))
                 except Exception: pass
             elif t.get('boundary') == 'administrative' and t.get('admin_level') == '8' and t.get('ref:INSEE'):
-                try: communes[t.get('ref:INSEE')] = shapely.wkb.loads(wkb.create_multipolygon(o), hex=True)
+                try:
+                    communes[t.get('ref:INSEE')] = shapely.wkb.loads(wkb.create_multipolygon(o), hex=True)
+                    noms[t.get('ref:INSEE')] = t.get('name') or t.get('ref:INSEE')
                 except Exception: pass
-    return pied, velo, communes, fermees
+            if 'name' in t and not t.get('boundary'):
+                c = lieux_osm.classer(t)
+                if c:
+                    try: g = shapely.wkb.loads(wkb.create_multipolygon(o), hex=True)
+                    except Exception: continue
+                    p = g.representative_point(); x0, y0, x1, y1 = g.bounds
+                    # Rayon du lieu (grand château, site mégalithique…) : on le débloque en passant à côté de son emprise
+                    r = min(250, int(max((x1 - x0) * np.cos(np.radians(p.y)), y1 - y0) * acces.M_PER_DEG / 2))
+                    oid = ('w%d' if o.from_way() else 'r%d') % o.orig_id()
+                    lieux.append(_lieu(oid, t, c, p.y, p.x, r))
+    return pied, velo, communes, fermees, noms, lieux
+
+
+def _lieu(oid, t, c, lat, lon, r):
+    return {'id': oid, 'lat': round(lat, 5), 'lon': round(lon, 5), 'r': int(r), 'cat': c[0], 'mh': bool(c[1]),
+            'nom': t['name'].strip()[:120], 'wiki': lieux_osm.wiki_of(t)}
+
+
+def lieux_par_commune(lieux, communes):
+    """Rattache chaque lieu à sa commune (code INSEE) et retire les doublons (même nom à moins de 250 m :
+    un nœud posé sur le bâtiment déjà décrit, par exemple). On garde la version la plus complète."""
+    from shapely import STRtree
+    codes = list(communes); arbre = STRtree([communes[c] for c in codes])
+    score = lambda l: (l['mh'], bool(l['wiki']), l['r'] > 0)
+    garde = []
+    for l in sorted(lieux, key=score, reverse=True):
+        idx = arbre.query(shapely.Point(l['lon'], l['lat']), predicate='intersects')
+        if not len(idx): continue
+        l['insee'] = codes[int(idx[0])]
+        cle = lieux_osm.re.sub(r'\W+', '', l['nom'].lower())
+        if any(g['_cle'] == cle and abs(g['lat'] - l['lat']) < .0023 and abs(g['lon'] - l['lon']) < .0034 for g in garde):
+            continue
+        l['_cle'] = cle; garde.append(l)
+    for l in garde: del l['_cle']
+    return garde
 
 
 def cles_communes(geoms, dlat):
@@ -125,11 +180,12 @@ def main(src, outdir):
     else:
         path = src
     try:
-        pied, velo, communes, fermees = lire(path)
+        pied, velo, communes, fermees, noms, lieux = lire(path)
     finally:
         if tmp: os.unlink(tmp.name)
     if not communes:
         print(f'{src} : aucune commune, ignoré'); return
+    lieux = lieux_par_commune(lieux, communes)
     fermees = shapely.union_all([g.buffer(0) for g in fermees]) if fermees else None
     if fermees is not None: shapely.prepare(fermees)
     # Les voies sont en (lat, lon) ; les géométries OSM en (lon, lat)
@@ -160,8 +216,13 @@ def main(src, outdir):
     os.makedirs(outdir, exist_ok=True)
     nom_fichier = os.path.basename(src).replace('-latest.osm.pbf', '').replace('.osm.pbf', '') or principal
     with open(os.path.join(outdir, f'{nom_fichier}.pkl'), 'wb') as fh:
-        pickle.dump({'source': src, 'principal': principal, 'communes': {d: len(g) for d, g in par_dep.items()}, 'cles': res}, fh)
-    print(f'{nom_fichier} : département principal {principal}, communes {dict((d, len(g)) for d, g in par_dep.items())}, {time.time() - t0:.0f} s')
+        pickle.dump({'source': src, 'principal': principal, 'communes': {d: len(g) for d, g in par_dep.items()}, 'cles': res,
+                     'noms': noms, 'lieux': lieux,
+                     # Emprise de chaque commune (sud, ouest, nord, est) pour centrer la carte après une recherche
+                     'emprises': {c: tuple(round(v, 4) for v in (g.bounds[1], g.bounds[0], g.bounds[3], g.bounds[2]))
+                                  for c, g in communes.items()}}, fh)
+    print(f'{nom_fichier} : département principal {principal}, communes {dict((d, len(g)) for d, g in par_dep.items())}, '
+          f'{len(lieux)} lieux, {time.time() - t0:.0f} s')
 
 
 if __name__ == '__main__':

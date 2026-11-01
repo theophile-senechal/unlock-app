@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import math
 import numpy as np
 import acces   # grille des blocs, marge GPS, blocs inaccessibles (données OpenStreetMap)
+import lieux   # lieux historiques et culturels à collectionner (données OpenStreetMap)
 import shapely
 from shapely.geometry import Point, Polygon, shape as shp_shape
 from shapely.ops import transform as shp_transform
@@ -46,7 +47,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.01d'
+ASSET_VERSION = '2026.11.01g'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -72,6 +73,7 @@ def _grid_size(default=250):
 
 NAV_ITEMS = [
     ('map', '/', '🗺️', 'Carte'),
+    ('lieux', '/lieux', '🏰', 'Lieux'),
     ('timelapse', '/timelapse', '⏱️', 'Timelapse'),
     ('story', '/story', '📸', 'Story'),
     ('stats', '/stats', '📊', 'Stats'),
@@ -685,6 +687,11 @@ def story_page():
     if _require_login(): return redirect(url_for('login_page'))
     return render_template('story.html', active='story')
 
+@app.route('/lieux')
+def lieux_page():
+    if _require_login(): return redirect(url_for('login_page'))
+    return render_template('lieux.html', active='lieux', categories=lieux.CATEGORIES)
+
 @app.route('/timelapse')
 def timelapse_page():
     if _require_login(): return redirect(url_for('login_page'))
@@ -1102,6 +1109,87 @@ def commune_history():
            "totals": totaux, "total_blocks": totaux[-1]}
     cache[cache_key] = res
     return jsonify(res)
+
+def _lieux_base():
+    """Sorties décodées de l'utilisateur et départements où il a des communes explorées (cache 10 min)."""
+    activities = get_strava_activities_cached()
+    cache = _result_cache(_user_key())
+    key = f"lieux_{_data_version(activities)}"
+    if key not in cache:
+        deps = [d['code'] for d in _activities_data('all', 'all', 250).get('departements', [])]
+        traces = []
+        for a in sorted(activities, key=lambda a: a['start_date_local']):
+            pts = polyline.decode(a['polyline'])
+            if pts: traces.append((a['start_date_local'][:10], pts))
+        cache[key] = {"deps": deps, "traces": traces, "pris": {}}
+    return cache[key]
+
+def _lieux_pris(base, dep):
+    """{indice du lieu: date de 1re visite} pour un département (calculé une fois, puis gardé 10 min)."""
+    if dep not in base['pris']:
+        base['pris'][dep] = lieux.collecter(base['traces'], [dep]).get(dep, {}) if lieux.departement(dep) else {}
+    return base['pris'][dep]
+
+@app.route('/api/lieux')
+def api_lieux():
+    """Lieux d'un département (n'importe lequel en France), avec ceux que l'utilisateur a débloqués.
+    Toutes ses sorties comptent (sans filtre d'année ni de sport : c'est une collection).
+    ?commune=<code INSEE> : centre la vue sur cette commune (son département est chargé)."""
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    base = _lieux_base()
+    resume = []
+    for dep in base['deps']:
+        d = lieux.departement(dep)
+        if d: resume.append({"code": dep, "name": DEPARTEMENTS.get(dep, dep), "total": len(d['lieux']), "collected": len(_lieux_pris(base, dep))})
+    resume.sort(key=lambda r: (r['collected'], r['total']), reverse=True)
+
+    com = lieux.commune(request.args.get('commune', ''))
+    dep = com[2] if com else request.args.get('dep')
+    absent = None
+    if dep not in DEPARTEMENTS or not lieux.departement(dep):
+        if dep in DEPARTEMENTS: absent = {"code": dep, "name": DEPARTEMENTS[dep]}   # pas encore calculé
+        dep, com = (resume[0]['code'] if resume else None), None
+    out = {"departements": resume,
+           "sans_donnees": [{"code": c, "name": DEPARTEMENTS.get(c, c)} for c in base['deps'] if not lieux.departement(c)],
+           "categories": {k: {"label": v[0], "emoji": v[1]} for k, v in lieux.CATEGORIES.items()},
+           "ordre": list(lieux.CATEGORIES),    # ordre d'affichage (les clés d'un objet JSON sont triées)
+           "rayon_m": lieux.RAYON_M, "source": "© contributeurs OpenStreetMap (ODbL)", "dep": None, "commune": None}
+    out["absent"] = absent
+    # Tous les départements déjà calculés, pour le menu (y compris ceux sans sortie)
+    dispo = lieux.disponibles()
+    out["tous"] = [{"code": c, "name": DEPARTEMENTS[c], "total": dispo[c]} for c in DEPARTEMENTS if c in dispo]
+    vus = set(base['deps']) | ({dep} if dep else set())
+    out["france"] = {"total": lieux.total_france(), "collected": sum(len(_lieux_pris(base, x)) for x in vus)}
+    if dep:
+        d, pris = lieux.departement(dep), _lieux_pris(base, dep)
+        out["dep"] = {"code": dep, "name": DEPARTEMENTS.get(dep, dep), "communes": d['communes'],
+                      "lieux": [[r[0], r[1], r[2], r[4], r[5], r[6], r[7], r[8], pris.get(i)] for i, r in enumerate(d['lieux'])]}
+        if com: out["commune"] = {"code": com[0], "name": com[1], "bbox": com[3]}
+    return jsonify(out)
+
+@app.route('/api/lieux/communes')
+def api_lieux_communes():
+    """Recherche de commune sur toute la France (donnée publique OpenStreetMap, sans donnée Strava)."""
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    res = [{"code": c, "name": n, "dep": d, "dep_name": DEPARTEMENTS.get(d, d), "lieux": nb}
+           for c, n, d, _, nb, _n in lieux.chercher(request.args.get('q', ''))]
+    return jsonify({"communes": res})
+
+@app.route('/api/commune/<code>/contour')
+def commune_contour(code):
+    """Contour simplifié d'une commune (donnée publique) : mis en cache longue durée par le CDN."""
+    if not re.fullmatch(r'[0-9AB]{5}', code or ''): return jsonify({"error": "Paramètres invalides"}), 400
+    if not DB_URL: return jsonify({"code": code, "shape": []})
+    try:
+        with _engine().connect() as conn:
+            g = conn.execute(text("""SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(geometry, 0.0002), 5)
+                                     FROM communes WHERE code_insee = :c LIMIT 1"""), {"c": code}).scalar()
+    except Exception as e:
+        print(f"Contour {code}: {e}")
+        return jsonify({"error": "Indisponible"}), 500
+    resp = make_response(jsonify({"code": code, "shape": _rings_latlon(g) if g else []}))
+    resp.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400'
+    return resp
 
 def _activities_data(sel_year, sel_sport, grid_meters):
     activities = get_strava_activities_cached()

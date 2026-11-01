@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Lieux · Unlock{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<style>
+  /* En-tête : recherche de commune + département */
+  .lx-pick { display: grid; gap: 10px; width: 100%; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .lx-pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } }
+  @media (min-width: 1024px) { .lx-pick { width: auto; grid-template-columns: 300px 230px; } }
+  .lx-pick .field { min-width: 0; }
+  .lx-pick .input, .lx-pick .select { font-size: 16px; }
+  @media (min-width: 768px) { .lx-pick .input, .lx-pick .select { font-size: var(--fs-md); } }
+  .lx-combo { position: relative; }
+  /* Croix d'effacement du navigateur (bleue sous Chrome) : remplacée par « × Tout le département » */
+  .lx-pick input[type="search"]::-webkit-search-cancel-button, .lx-tools input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; display: none; }
+  .lx-sugg { position: absolute; z-index: 1200; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); box-shadow: var(--shadow-float); max-height: 320px; overflow-y: auto; }
+  .lx-sugg li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 10px; cursor: pointer; }
+  .lx-sugg li[aria-selected="true"], .lx-sugg li:hover { background: var(--canvas); }
+  .lx-sugg b { font-weight: 650; color: var(--ink); overflow-wrap: anywhere; }
+  .lx-sugg small { display: block; color: var(--muted); font-size: var(--fs-xs); }
+  .lx-sugg em { font-style: normal; font-size: var(--fs-xs); font-weight: 650; color: var(--brand); white-space: nowrap; }
+  .lx-sugg .lx-sugg__none { display: block; color: var(--muted); font-size: var(--fs-sm); cursor: default; }
+  .lx-sugg .lx-sugg__none:hover { background: none; }
+
+  /* Compteur */
+  .lx-hero { padding: 18px; margin-bottom: 14px; }
+  @media (min-width: 768px) { .lx-hero { padding: 22px 24px; } }
+  .lx-scope { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; font-size: var(--fs-md); font-weight: 700; color: var(--ink); margin-bottom: 8px; }
+  .lx-kind { display: inline-block; padding: 2px 8px; border-radius: 6px; background: var(--brand); color: #fff; font-size: .6875rem; font-weight: 700;
+    letter-spacing: .04em; text-transform: uppercase; vertical-align: 1px; }
+  .lx-scope__clear { display: inline-flex; align-items: center; gap: 4px; border: 0; background: var(--canvas); color: var(--ink-2); font: inherit; font-size: var(--fs-xs);
+    font-weight: 650; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
+  .lx-scope__clear:hover { background: var(--line); }
+  .lx-count { display: flex; align-items: baseline; flex-wrap: wrap; gap: 2px 10px; }
+  .lx-count b { font-family: var(--font-display); font-weight: 800; font-size: clamp(2rem, 9vw, 2.6rem); letter-spacing: -.04em; line-height: 1; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .lx-count span { color: var(--ink-2); font-weight: 600; }
+  .lx-hero .bar { margin-top: 12px; }
+  .lx-sub { color: var(--muted); font-size: var(--fs-sm); margin-top: 8px; overflow-wrap: anywhere; }
+
+  /* Trois niveaux : commune, département, France */
+  .lx-levels { display: grid; gap: 8px; margin-top: 14px; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); }
+  .lx-level { padding: 10px 12px; border-radius: var(--r-md); background: var(--canvas); min-width: 0; border: 2px solid transparent; text-align: left; font: inherit; color: inherit; }
+  button.lx-level { cursor: pointer; }
+  @media (hover: hover) { button.lx-level:hover { border-color: var(--line-2); } }
+  .lx-level.is-current { background: var(--brand-100); border-color: var(--brand); }
+  .lx-level i { display: block; font-style: normal; font-size: .625rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  .lx-level.is-current i { color: var(--brand); }
+  .lx-level span { display: block; font-size: var(--fs-xs); color: var(--ink-2); font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+  /* Téléphone : une ligne par niveau (nom à gauche, chiffres à droite), plus lisible que 3 cartes serrées */
+  @media (max-width: 479px) {
+    .lx-levels { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    .lx-level { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: center; padding: 8px 12px; }
+    .lx-level i, .lx-level span { grid-column: 1; }
+    .lx-level b { grid-column: 2; grid-row: 1 / span 2; }
+  }
+  .lx-level b { display: block; font-size: var(--fs-md); font-weight: 750; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lx-level b small { font-weight: 600; color: var(--muted); font-size: var(--fs-xs); }
+
+  /* Catégories */
+  .lx-chips-title { font-size: var(--fs-xs); font-weight: 650; color: var(--muted); margin-top: 16px; }
+  .lx-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .lx-list-title { font-size: var(--fs-md); font-weight: 750; color: var(--ink); margin: 0 2px 10px; overflow-wrap: anywhere; }
+  .lx-list-title small { font-weight: 600; color: var(--muted); font-size: var(--fs-xs); }
+  .lx-hist { color: #7A5418; font-weight: 650; white-space: nowrap; }
+  .lx-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2);
+    background: var(--surface); color: var(--ink-2); font: inherit; font-size: var(--fs-sm); font-weight: 650; cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: nowrap; }
+  .lx-chip small { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .lx-chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+  .lx-chip[aria-pressed="true"] small { color: rgba(255,255,255,.8); }
+  @media (max-width: 420px) { .lx-chips { gap: 6px; } .lx-chip { padding: 0 10px; min-height: 32px; gap: 5px; } }
+
+  /* Carte + liste */
+  .lx-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 1024px) { .lx-grid { grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); } }
+  .lx-map { position: relative; height: 340px; overflow: hidden; padding: 0; }
+  @media (min-width: 768px) { .lx-map { height: 440px; } }
+  @media (min-width: 1024px) { .lx-map, .lx-list { height: 580px; } }
+  .lx-map #map { position: absolute; inset: 0; background: #ECEBEE; }
+  .lx-legend { position: absolute; z-index: 900; left: 10px; top: 10px; display: flex; flex-wrap: wrap; gap: 4px 12px; padding: 6px 10px; border-radius: 14px;
+    background: rgba(255,255,255,.94); box-shadow: var(--shadow-float); font-size: var(--fs-xs); font-weight: 650; color: var(--ink-2); max-width: calc(100% - 70px); }
+  .lx-legend span { white-space: nowrap; }
+  .lx-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
+  .lx-dot-on { background: #6D071A; border: 2px solid #fff; box-shadow: 0 0 0 1px #6D071A; }
+  .lx-dot-off { background: #fff; border: 2px solid #9A95A0; }
+
+  .lx-list { display: flex; flex-direction: column; min-height: 0; padding: 14px 14px 10px; }
+  .lx-tools { display: grid; gap: 10px; margin-bottom: 8px; }
+  .lx-tools .seg { display: flex; }
+  .lx-tools .seg__btn { flex: 1; justify-content: center; white-space: nowrap; }
+  .lx-tools .input { font-size: 16px; }
+  @media (min-width: 768px) { .lx-tools .input { font-size: var(--fs-md); } }
+  @media (max-width: 359px) { .lx-tools .seg__btn { padding: 0 6px; font-size: .6875rem; } }
+  .lx-note { font-size: var(--fs-xs); color: var(--muted); margin: 0 2px 6px; min-height: 1.2em; }
+  .lx-items { list-style: none; margin: 0; padding: 0; min-height: 0; flex: 1; }
+  @media (min-width: 1024px) { .lx-items { overflow-y: auto; } }
+  .lx-item { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; width: 100%; padding: 10px 6px;
+    border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 10px; }
+  .lx-item:hover { background: var(--canvas); }
+  .lx-items li:last-child .lx-item { border-bottom: 0; }
+  .lx-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; background: var(--canvas); }
+  .lx-item.is-on .lx-ico { background: var(--brand-100); }
+  .lx-item.is-off .lx-ico { filter: grayscale(1); opacity: .6; }
+  .lx-txt { min-width: 0; }
+  .lx-name { font-weight: 650; color: var(--ink); overflow-wrap: anywhere; line-height: 1.3; }
+  .lx-meta { display: block; color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; overflow-wrap: anywhere; line-height: 1.35; }
+  .lx-when { font-size: var(--fs-xs); color: var(--brand); font-weight: 650; text-align: right; white-space: nowrap; }
+  .lx-more { margin: 8px auto 2px; display: block; }
+  .lx-empty { padding: 28px 12px; text-align: center; color: var(--muted); font-size: var(--fs-sm); }
+  .lx-foot { font-size: var(--fs-xs); color: var(--muted); margin-top: 14px; }
+  .lx-soon { padding: 18px; margin-bottom: 14px; font-size: var(--fs-sm); color: var(--ink-2); }
+
+  /* Fenêtre d'un lieu sur la carte */
+  .lx-pop { min-width: 190px; max-width: 240px; }
+  .lx-pop__cat { font-size: var(--fs-xs); color: var(--muted); font-weight: 650; }
+  .lx-pop__name { font-weight: 750; font-size: var(--fs-md); color: var(--ink); margin: 2px 0 4px; line-height: 1.3; }
+  .lx-pop__st { font-size: var(--fs-sm); font-weight: 650; margin-top: 4px; }
+  .lx-pop__st.is-on { color: var(--brand); } .lx-pop__st.is-off { color: var(--ink-2); font-weight: 550; }
+  .lx-pop a { display: inline-block; margin-top: 6px; font-size: var(--fs-sm); font-weight: 650; color: var(--brand); }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="scrollmain">
+    <div class="page">
+      <div class="page__head">
+        <div>
+          <h1 class="page__title">Vos lieux</h1>
+          <p class="page__lead">Châteaux, églises, mégalithes, points de vue, cascades, jardins… Passez à moins de 60 m d'un lieu pendant une sortie pour le débloquer.</p>
+        </div>
+        <div class="lx-pick">
+          <div class="field">
+            <label class="field__label" for="com-input">Commune</label>
+            <div class="search lx-combo">
+              <span class="emoji" aria-hidden="true">🔍</span>
+              <input class="input" id="com-input" type="search" placeholder="Chercher une commune" autocomplete="off"
+                     role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="com-sugg">
+              <ul class="lx-sugg" id="com-sugg" role="listbox" hidden></ul>
+            </div>
+          </div>
+          <div class="field" id="dep-field" hidden>
+            <label class="field__label" for="dep-select">Département</label>
+            <select class="select" id="dep-select"></select>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface lx-soon" id="soon" hidden></div>
+
+      <div id="content" hidden>
+        <section class="surface lx-hero" aria-label="Lieux débloqués">
+          <div class="lx-scope" id="scope"></div>
+          <div class="lx-count"><b id="k-got">0</b><span id="k-total"></span></div>
+          <div class="bar"><span class="bar__fill" id="k-bar" style="display:block"></span></div>
+          <p class="lx-sub" id="k-sub"></p>
+          <div class="lx-levels" id="levels"></div>
+          <p class="lx-chips-title" id="chips-title"></p>
+          <div class="lx-chips" id="chips" role="group" aria-label="Catégories"></div>
+        </section>
+
+        <div class="lx-grid">
+          <section class="surface lx-map" aria-label="Carte des lieux">
+            <div id="map"></div>
+            <div class="lx-legend" aria-hidden="true"><span><i class="lx-dot-on"></i>Débloqué</span><span><i class="lx-dot-off"></i>À découvrir</span></div>
+          </section>
+
+          <section class="surface lx-list" aria-label="Liste des lieux">
+            <h2 class="lx-list-title" id="list-title"></h2>
+            <div class="lx-tools">
+              <div class="seg seg--sm" role="group" aria-label="Lieux affichés">
+                <button type="button" class="seg__btn" data-tab="on" aria-pressed="true">Débloqués <span id="n-on"></span></button>
+                <button type="button" class="seg__btn" data-tab="off" aria-pressed="false">À découvrir <span id="n-off"></span></button>
+              </div>
+              <div class="search">
+                <span class="emoji" aria-hidden="true">🔍</span>
+                <label class="sr-only" for="lx-search">Chercher un lieu</label>
+                <input class="input" id="lx-search" type="search" placeholder="Chercher un lieu" autocomplete="off">
+              </div>
+            </div>
+            <p class="lx-note" id="lx-note"></p>
+            <ul class="lx-items" id="items"></ul>
+          </section>
+        </div>
+        <p class="lx-foot">« Monument historique » : lieu protégé par l'État pour son intérêt historique ou artistique. Patrimoine protégé au titre des monuments historiques, décrit sur Wikipédia ou remarquable par nature ; points de vue et cascades qui portent un nom ; jardins botaniques et parcs à visiter ; sommets décrits sur Wikipédia. Données © contributeurs OpenStreetMap (ODbL), mises à jour chaque mois. Le calcul se fait à partir de vos seules sorties.</p>
+      </div>
+    </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
+{{ ui.loader("Recherche de vos lieux…") }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const esc = Unlock.esc, fmt = Unlock.fmt;
+  const BRAND = '#6D071A';
+  const COURT = { chateau: 'Châteaux', religieux: 'Églises', megalithe: 'Mégalithes', fortif: 'Forts', musee: 'Musées', monument: 'Monuments',
+                  vue: 'Points de vue', cascade: 'Cascades', jardin: 'Jardins', sommet: 'Sommets' };
+  // Colonnes d'un lieu : [id, lat, lon, catégorie, monument historique, nom, insee, wiki, date de 1re visite]
+  const ID = 0, LAT = 1, LON = 2, CAT = 3, MH = 4, NOM = 5, INSEE = 6, WIKI = 7, DATE = 8;
+  const S = { data: null, dep: null, com: null, cat: 'all', tab: 'on', q: '', limit: 40, markers: {}, first: true, outline: null };
+  try { S.dep = localStorage.getItem('unlock.lieuxDep'); } catch (e) {}
+
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[-'’]/g, ' ');
+  const dateTxt = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const monthTxt = (iso) => new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' }).replace('.', '');
+  const wikiUrl = (w) => !w ? null : w.startsWith('fr:') ? 'https://fr.wikipedia.org/wiki/' + encodeURIComponent(w.slice(3).replace(/ /g, '_')) : 'https://www.wikidata.org/wiki/' + w;
+  const plural = (n, s, p) => (n > 1 ? p : s);
+
+  /* ---------- Carte ---------- */
+  const map = L.map('map', { zoomControl: false, preferCanvas: true }).setView([46.6, 1.9], 6);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+  Unlock.baseLayer(map);
+  const layerOutline = L.layerGroup().addTo(map), layerOff = L.layerGroup().addTo(map), layerOn = L.layerGroup().addTo(map);
+  const renderer = L.canvas({ padding: .3, tolerance: 6 });
+
+  async function load(params) {
+    if (S.first) Unlock.loader.show(['Recherche de vos lieux…', 'Comparaison avec vos sorties…']); else Unlock.busy.on('Chargement des lieux', '', { veil: true });
+    try {
+      const qs = new URLSearchParams(params || {}).toString();
+      const d = await Unlock.getJSON('/api/lieux' + (qs ? '?' + qs : ''));
+      S.data = d; render();
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger les lieux. Réessayez dans un instant.'); }
+    finally { if (S.first) { Unlock.loader.hide(); S.first = false; } Unlock.busy.off(); }
+  }
+
+  function render() {
+    const d = S.data;
+    // Département : les vôtres d'abord (avec vos lieux débloqués), puis tous les autres déjà calculés
+    const mine = new Set(d.departements.map((r) => r.code));
+    const opt = (r, txt) => `<option value="${esc(r.code)}">${esc(r.name)} (${esc(r.code)})${txt}</option>`;
+    const autres = (d.tous || []).filter((r) => !mine.has(r.code));
+    $('dep-select').innerHTML = (d.departements.length ? `<optgroup label="Vos départements">${d.departements.map((r) => opt(r, ` · ${fmt(r.collected)}/${fmt(r.total)}`)).join('')}</optgroup>` : '')
+      + (autres.length ? `<optgroup label="Autres départements">${autres.map((r) => opt(r, '')).join('')}</optgroup>` : '');
+    $('dep-field').hidden = (d.departements.length + autres.length) < 2;
+    if (d.absent) Unlock.toast(`Les lieux de ${d.absent.name} ne sont pas encore calculés. Ils arriveront avec la mise à jour mensuelle.`);
+
+    const soon = [];
+    if (!d.dep) {
+      $('content').hidden = true;
+      soon.push(d.sans_donnees.length
+        ? `<b>Les lieux arrivent bientôt.</b> Ils sont calculés chaque mois à partir d'OpenStreetMap. En attendant, ils ne sont pas encore disponibles pour : ${d.sans_donnees.map((r) => esc(r.name)).join(', ')}.`
+        : 'Aucune sortie dans une commune française pour le moment. Cherchez une commune ci-dessus pour découvrir ses lieux.');
+    } else if (d.sans_donnees.length) {
+      soon.push(`Pas encore de lieux pour : ${d.sans_donnees.map((r) => esc(r.name)).join(', ')}. Ils arriveront avec la prochaine mise à jour mensuelle.`);
+    }
+    $('soon').hidden = !soon.length; $('soon').innerHTML = soon.join('');
+    if (!d.dep) return;
+
+    $('content').hidden = false;
+    S.dep = d.dep.code; $('dep-select').value = S.dep;
+    S.com = d.commune ? d.commune.code : null;
+    $('com-input').value = d.commune ? d.commune.name : '';
+    S.limit = 40; S.cat = 'all'; S.q = ''; $('lx-search').value = '';
+    const scope = scoped();
+    S.tab = scope.some((l) => l[DATE]) ? 'on' : 'off';
+    map.invalidateSize();          // la carte était cachée pendant le chargement : on lui redonne sa vraie taille
+    drawOutline();
+    drawMarkers(true);
+    renderAll();
+  }
+
+  // Lieux de la zone regardée : la commune choisie, sinon tout le département
+  function scoped() { const all = S.data.dep.lieux; return S.com ? all.filter((l) => l[INSEE] === S.com) : all; }
+  function filtered() { const xs = scoped(); return S.cat === 'all' ? xs : xs.filter((l) => l[CAT] === S.cat); }
+  const stats = (xs) => [xs.filter((l) => l[DATE]).length, xs.length];
+
+  function renderAll() {
+    const d = S.data, cats = d.categories, xs = scoped(), [got, tot] = stats(xs);
+    const comName = S.com ? (d.commune && d.commune.code === S.com ? d.commune.name : d.dep.communes[S.com]) : null;
+    const depName = `${d.dep.name} (${d.dep.code})`;
+    $('scope').innerHTML = S.com
+      ? `<span class="lx-kind">Commune</span><span>${esc(comName)}</span><button type="button" class="lx-scope__clear" id="scope-clear">× Voir tout le département</button>`
+      : `<span class="lx-kind">Département</span><span>${esc(depName)}</span>`;
+    $('k-got').textContent = fmt(got);
+    $('k-total').textContent = `/ ${fmt(tot)} ${plural(tot, 'lieu débloqué', 'lieux débloqués')}`;
+    $('k-bar').style.width = (tot ? got / tot * 100 : 0) + '%';
+    const last = xs.filter((l) => l[DATE]).sort((a, b) => (a[DATE] < b[DATE] ? 1 : -1))[0];
+    $('k-sub').textContent = !tot ? 'Aucun lieu répertorié ici pour l\'instant.' : got ? `Dernier : ${last[NOM]}, ${monthTxt(last[DATE])}` : 'Aucun lieu débloqué ici pour l\'instant.';
+
+    // Trois niveaux : commune (si choisie), département, France
+    const [dg, dt] = stats(d.dep.lieux);
+    // Les trois échelles, chacune avec son propre total. Cliquer sur « Département » quitte la commune.
+    const lv = [];
+    if (S.com) lv.push(['Commune', comName, got, tot, true, null]);
+    lv.push(['Département', depName, dg, dt, !S.com, S.com ? 'dep' : null]);
+    lv.push(['France', 'Tous les départements', d.france.collected, d.france.total, false, null]);
+    $('levels').innerHTML = lv.map(([k, n, g, t, cur, act]) => `<${act ? `button type="button" data-level="${act}" title="Voir tout le département"` : 'div'} class="lx-level${cur ? ' is-current' : ''}"${cur ? ' aria-current="true"' : ''}>`
+      + `<i>${k}${cur ? ' · affiché' : ''}</i><span title="${esc(n)}">${esc(n)}</span><b>${fmt(g)} <small>/ ${fmt(t)}</small></b></${act ? 'button' : 'div'}>`).join('');
+    $('chips-title').textContent = `Par catégorie · ${S.com ? comName : depName}`;
+
+    // Catégories de la zone : débloqués / total
+    const count = (c) => stats(c === 'all' ? xs : xs.filter((l) => l[CAT] === c));
+    const chip = (c, label) => { const [g, t] = count(c); return `<button type="button" class="lx-chip" data-cat="${c}" aria-pressed="${S.cat === c}">${label} <small>${fmt(g)}/${fmt(t)}</small></button>`; };
+    $('chips').innerHTML = chip('all', 'Tous') + (d.ordre || Object.keys(cats)).map((c) => [c, cats[c]]).filter(([c, v]) => v && count(c)[1])
+      .map(([c, v]) => chip(c, `<span aria-hidden="true">${v.emoji}</span><span title="${esc(v.label)}">${esc(COURT[c] || v.label)}</span>`)).join('');
+    renderList();
+  }
+
+  function renderList() {
+    const d = S.data, cats = d.categories, communes = d.dep.communes;
+    const xs = filtered();
+    const on = xs.filter((l) => l[DATE]), off = xs.filter((l) => !l[DATE]);
+    $('n-on').textContent = `(${fmt(on.length)})`; $('n-off').textContent = `(${fmt(off.length)})`;
+    document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab)));
+    let list = S.tab === 'on' ? [...on].sort((a, b) => (a[DATE] < b[DATE] ? 1 : a[DATE] > b[DATE] ? -1 : 0)) : sortNear(off);
+    const q = norm(S.q);
+    if (q) list = list.filter((l) => norm(l[NOM] + ' ' + (communes[l[INSEE]] || '')).includes(q));
+    $('lx-note').textContent = S.tab === 'on' ? (on.length ? 'Les plus récents en premier' : '')
+      : (off.length ? (S.data.dep.lieux.some((l) => l[DATE]) ? 'Les plus proches de vos lieux débloqués en premier' : 'Classés par commune') : '');
+    const xsAll = scoped();
+    $('list-title').innerHTML = `Lieux · ${esc(S.com ? (S.data.commune && S.data.commune.code === S.com ? S.data.commune.name : communes[S.com]) : `${d.dep.name} (${d.dep.code})`)} <small>${fmt(xsAll.length)}</small>`;
+    const shown = list.slice(0, S.limit);
+    $('items').innerHTML = shown.map((l) => {
+      const c = cats[l[CAT]] || { emoji: '📍', label: '' };
+      return `<li><button type="button" class="lx-item ${l[DATE] ? 'is-on' : 'is-off'}" data-id="${esc(l[ID])}">
+        <span class="lx-ico" aria-hidden="true">${c.emoji}</span>
+        <span class="lx-txt"><span class="lx-name">${esc(l[NOM])}</span><span class="lx-meta">${S.com ? '' : esc(communes[l[INSEE]] || '') + ' · '}${esc(c.label)}${l[MH] ? ' · <span class="lx-hist">Monument historique</span>' : ''}</span></span>
+        <span class="lx-when">${l[DATE] ? esc(monthTxt(l[DATE])) : ''}</span></button></li>`;
+    }).join('') + (list.length > shown.length ? `<li><button type="button" class="btn btn--ghost btn--sm lx-more" id="lx-more">Voir ${fmt(Math.min(40, list.length - shown.length))} de plus (${fmt(list.length - shown.length)} restants)</button></li>` : '')
+      || `<li class="lx-empty">${q ? `Aucun lieu ne correspond à « ${esc(S.q)} ».` : S.tab === 'on' ? 'Aucun lieu débloqué ici. Passez à moins de 60 m d\'un lieu « à découvrir » pendant une sortie.' : (xs.length ? 'Bravo, tous les lieux sont débloqués ici 🎉' : 'Aucun lieu répertorié ici.')}</li>`;
+  }
+
+  // « À découvrir » : les plus proches d'un lieu déjà débloqué du département (sinon par commune)
+  function sortNear(off) {
+    const on = S.data.dep.lieux.filter((l) => l[DATE]), communes = S.data.dep.communes;
+    if (!on.length) return [...off].sort((a, b) => ((communes[a[INSEE]] || '') + a[NOM]).localeCompare((communes[b[INSEE]] || '') + b[NOM], 'fr'));
+    const cos = Math.cos(on[0][LAT] * Math.PI / 180);
+    const dist = (l) => { let m = Infinity; for (const o of on) { const dy = l[LAT] - o[LAT], dx = (l[LON] - o[LON]) * cos; const v = dy * dy + dx * dx; if (v < m) m = v; } return m; };
+    return off.map((l) => [dist(l), l]).sort((a, b) => a[0] - b[0]).map((x) => x[1]);
+  }
+
+  function popupHtml(l) {
+    const c = S.data.categories[l[CAT]] || { emoji: '📍', label: '' }, w = wikiUrl(l[WIKI]);
+    return `<div class="lx-pop"><div class="lx-pop__cat">${c.emoji} ${esc(c.label)}${l[MH] ? ' · Monument historique' : ''}</div>
+      <div class="lx-pop__name">${esc(l[NOM])}</div>
+      <div class="lx-meta">${esc(S.data.dep.communes[l[INSEE]] || '')}</div>
+      <div class="lx-pop__st ${l[DATE] ? 'is-on' : 'is-off'}">${l[DATE] ? `🔓 Débloqué le ${esc(dateTxt(l[DATE]))}` : `🔒 À découvrir : passez à moins de ${S.data.rayon_m} m`}</div>
+      ${w ? `<a href="${w}" target="_blank" rel="noopener">${l[WIKI].startsWith('fr:') ? 'En savoir plus sur Wikipédia' : 'Fiche Wikidata'} ↗</a>` : ''}</div>`;
+  }
+
+  // Tous les lieux du département restent sur la carte ; la commune choisie est entourée
+  function drawMarkers(fit) {
+    layerOn.clearLayers(); layerOff.clearLayers(); S.markers = {};
+    const all = S.data.dep.lieux, xs = S.cat === 'all' ? all : all.filter((l) => l[CAT] === S.cat);
+    for (const l of xs) {
+      const m = l[DATE]
+        ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1 })
+        : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1 });
+      m.bindPopup(() => popupHtml(l), { maxWidth: 260 });
+      (l[DATE] ? layerOn : layerOff).addLayer(m);
+      S.markers[l[ID]] = m;
+    }
+    if (!fit) return;
+    if (S.com && S.data.commune && S.data.commune.code === S.com) {
+      const [s, w, n, e] = S.data.commune.bbox;
+      map.fitBounds([[s, w], [n, e]], { padding: [24, 24], maxZoom: 15 });
+      return;
+    }
+    const pool = scoped(), on = pool.filter((l) => l[DATE]), pts = (on.length >= 2 ? on : pool).map((l) => [l[LAT], l[LON]]);
+    if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(on.length >= 2 ? .25 : .05), { maxZoom: 14 });
+  }
+
+  async function drawOutline() {
+    layerOutline.clearLayers();
+    const code = S.com; if (!code) return;
+    try {
+      const r = await fetch(`/api/commune/${encodeURIComponent(code)}/contour`, { credentials: 'same-origin' });
+      if (!r.ok || S.com !== code) return;
+      const g = await r.json();
+      (g.shape || []).forEach((poly) => L.polygon(poly, { color: BRAND, weight: 2, dashArray: '6 6', fill: true, fillColor: BRAND, fillOpacity: .04, interactive: false }).addTo(layerOutline));
+    } catch (e) { /* contour facultatif */ }
+  }
+
+  /* ---------- Recherche de commune (toute la France) ---------- */
+  const inp = $('com-input'), sugg = $('com-sugg');
+  let sTimer = 0, sReq = 0, sItems = [], sIdx = -1;
+  function closeSugg() { sugg.hidden = true; inp.setAttribute('aria-expanded', 'false'); sIdx = -1; }
+  function showSugg(items, q) {
+    sItems = items; sIdx = -1;
+    sugg.innerHTML = items.length ? items.map((c, i) => `<li role="option" id="sg-${i}" data-i="${i}" aria-selected="false"><span><b>${esc(c.name)}</b><small>${esc(c.dep_name)} (${esc(c.dep)})</small></span><em>${fmt(c.lieux)} ${plural(c.lieux, 'lieu', 'lieux')}</em></li>`).join('')
+      : `<li class="lx-sugg__none">${q.length < 2 ? 'Tapez au moins 2 lettres' : 'Aucune commune trouvée. Les lieux de ce département ne sont peut-être pas encore calculés.'}</li>`;
+    sugg.hidden = false; inp.setAttribute('aria-expanded', 'true');
+  }
+  function pick(c) {
+    closeSugg(); inp.value = c.name; inp.blur();
+    try { localStorage.setItem('unlock.lieuxDep', c.dep); } catch (e) {}
+    load({ commune: c.code });
+  }
+  inp.addEventListener('input', () => {
+    const q = inp.value.trim(); clearTimeout(sTimer);
+    if (q.length < 2) { closeSugg(); return; }
+    sTimer = setTimeout(async () => {
+      const req = ++sReq;
+      try { const r = await Unlock.getJSON('/api/lieux/communes?q=' + encodeURIComponent(q)); if (req === sReq) showSugg(r.communes, q); } catch (e) {}
+    }, 180);
+  });
+  inp.addEventListener('keydown', (e) => {
+    if (sugg.hidden || !sItems.length) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      sIdx = (sIdx + (e.key === 'ArrowDown' ? 1 : -1) + sItems.length) % sItems.length;
+      sugg.querySelectorAll('li[data-i]').forEach((li) => li.setAttribute('aria-selected', String(+li.dataset.i === sIdx)));
+      inp.setAttribute('aria-activedescendant', 'sg-' + sIdx);
+    } else if (e.key === 'Enter') { e.preventDefault(); pick(sItems[Math.max(0, sIdx)]); }
+    else if (e.key === 'Escape') closeSugg();
+  });
+  sugg.addEventListener('mousedown', (e) => { const li = e.target.closest('li[data-i]'); if (li) { e.preventDefault(); pick(sItems[+li.dataset.i]); } });
+  document.addEventListener('click', (e) => { if (!e.target.closest('.lx-combo')) closeSugg(); });
+  inp.addEventListener('search', () => { if (!inp.value && S.com) { S.com = null; renderAfterScope(); } });
+
+  function renderAfterScope() { S.cat = 'all'; S.limit = 40; layerOutline.clearLayers(); drawMarkers(true); renderAll(); }
+
+  /* ---------- Événements ---------- */
+  $('dep-select').addEventListener('change', (e) => { try { localStorage.setItem('unlock.lieuxDep', e.target.value); } catch (err) {} load({ dep: e.target.value }); });
+  $('scope').addEventListener('click', (e) => { if (e.target.closest('#scope-clear')) { S.com = null; inp.value = ''; renderAfterScope(); } });
+  $('levels').addEventListener('click', (e) => { if (e.target.closest('[data-level="dep"]')) { S.com = null; inp.value = ''; renderAfterScope(); } });
+  $('chips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cat]'); if (!b) return;
+    S.cat = b.dataset.cat; S.limit = 40; drawMarkers(false); renderAll();
+  });
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { S.tab = b.dataset.tab; S.limit = 40; renderList(); }));
+  $('lx-search').addEventListener('input', (e) => { S.q = e.target.value.trim(); S.limit = 40; renderList(); });
+  $('items').addEventListener('click', (e) => {
+    if (e.target.closest('#lx-more')) { S.limit += 40; renderList(); return; }
+    const b = e.target.closest('.lx-item'); if (!b) return;
+    const m = S.markers[b.dataset.id]; if (!m) return;
+    if (window.matchMedia('(max-width: 1023px)').matches) document.querySelector('.lx-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    map.flyTo(m.getLatLng(), Math.max(map.getZoom(), 15), { duration: .6 });
+    setTimeout(() => m.openPopup(), 650);
+  });
+
+  load(S.dep ? { dep: S.dep } : null);
+})();
+</script>
+{% endblock %}

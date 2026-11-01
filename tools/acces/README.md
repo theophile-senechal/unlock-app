@@ -20,6 +20,17 @@ onglet **Actions** > **Blocs inaccessibles** > **Run workflow**. Environ 30 minu
 3. `fusion.py` : corrige les bords entre départements, écrit `data/acces/<dep>_<taille>.bin` et `index.json`.
 
 Le résultat (environ 10 Mo pour la France) est ajouté au dépôt seulement s'il a changé ; Vercel redéploie seul.
+
+## Lieux à collectionner
+
+La même tâche extrait les lieux historiques et culturels (`lieux_osm.py`) et `fusion.py` écrit
+`data/lieux/<dep>.json` (environ 100 Ko par département). Un lieu entre dans la collection s'il a un nom et
+qu'il est protégé (monument historique), décrit sur Wikipédia en français, ou d'un type marquant
+(château, manoir, musée, fort, abbaye, mégalithe nommé). Nature : points de vue et cascades qui ont un vrai nom,
+parcs et jardins à visiter (botaniques, arboretums, protégés ou sur Wikipédia), sommets sur Wikipédia.
+Doublons retirés (même nom à moins de 250 m). `communes.json` : toutes les communes de France (nom, emprise,
+nombre de lieux) pour la recherche dans l'app.
+L'app le débloque quand une sortie passe à moins de 60 m (ou de l'emprise d'un grand site, 250 m au plus).
 Rien n'est stocké dans Supabase.
 
 ## Calcul d'un seul département (sur un ordinateur)
