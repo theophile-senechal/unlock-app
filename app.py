@@ -32,6 +32,11 @@ app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
     SESSION_COOKIE_SECURE=os.getenv('VERCEL') is not None or os.getenv('SESSION_COOKIE_SECURE') == '1',
+    # Connexion gardée 30 jours après la dernière visite (le délai est prolongé à chaque visite).
+    # Sans cela, le cookie disparaît à la fermeture du navigateur et il faut repasser par Strava.
+    # 30 jours < 31 jours : un compte inactif est révoqué après la fin de sa session (INACTIVE_DAYS).
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    SESSION_REFRESH_EACH_REQUEST=True,
 )
 
 # ------------------------------------------------------------
@@ -47,7 +52,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.01i'
+ASSET_VERSION = '2026.11.02b'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -78,6 +83,26 @@ NAV_ITEMS = [
     ('story', '/story', '📸', 'Story'),
     ('stats', '/stats', '📊', 'Stats'),
 ]
+
+# Version des CGU et de la politique de confidentialité : la changer redemande l'accord de chacun
+CGU_VERSION = '2026-11-02'
+_LEGAL_PATHS = ('/cgu', '/confidentialite', '/mentions-legales', '/conditions/accepter', '/logout', '/delete-account')
+
+def _save_cgu(athlete_id):
+    """Garde la preuve de l'accord (version et date) avec le compte. Sans la migration, l'accord reste dans la session."""
+    if not (DB_URL and athlete_id): return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("UPDATE strava_users SET cgu_version = :v, cgu_accepted_at = NOW() WHERE athlete_id = :a"),
+                         {"v": CGU_VERSION, "a": athlete_id})
+    except Exception as e:
+        print(f"Accord CGU (migration 2026-11-02_cgu.sql faite ?) : {e}")
+
+@app.before_request
+def keep_session():
+    """Sessions ouvertes avant cette mise à jour : elles deviennent durables à la visite suivante."""
+    if 'access_token' in session and not session.permanent:
+        session.permanent = True
 
 @app.before_request
 def backfill_athlete_id():
@@ -120,12 +145,15 @@ def inject_globals():
         'session_user': 'access_token' in session,
         'csrf_token': session['csrf'],
         'site_owner': SITE_OWNER,
-        'legal_updated': '1er novembre 2026',
+        'legal_updated': '2 novembre 2026',
         'inactive_days': INACTIVE_DAYS,
         'is_admin': is_admin(),
         'carto_key': os.getenv('CARTO_API_KEY', ''),
         'my_athlete_id': session.get('athlete_id'),
         'sync_state': sync_state(),
+        # Utilisateur connecté qui n'a pas encore accepté cette version des CGU : fenêtre d'accord (sauf pages légales)
+        'cgu_needed': 'access_token' in session and session.get('cgu') != CGU_VERSION and request.path not in _LEGAL_PATHS,
+        'cgu_version': CGU_VERSION,
     }
 
 def sync_state():
@@ -573,6 +601,10 @@ def login_page():
 
 @app.route('/auth')
 def auth():
+    # Accord explicite des CGU et de la politique de confidentialité avant toute connexion
+    if request.args.get('cgu') != '1':
+        return redirect(url_for('login_page', error='cgu'))
+    session['cgu'] = CGU_VERSION
     state = secrets.token_urlsafe(16)
     session['oauth_state'] = state
     params = {
@@ -580,6 +612,17 @@ def auth():
         'approval_prompt': 'auto', 'scope': 'activity:read_all', 'state': state,
     }
     return redirect("https://www.strava.com/oauth/authorize?" + urlencode(params))
+
+@app.route('/conditions/accepter', methods=['POST'])
+def accepter_cgu():
+    """Accord des CGU par un utilisateur déjà connecté (inscrit avant la case à cocher, ou CGU modifiées)."""
+    if 'access_token' not in session: return redirect(url_for('login_page'))
+    if not session.get('csrf') or request.form.get('csrf') != session.get('csrf') or request.form.get('cgu') != '1':
+        abort(400)
+    session['cgu'] = CGU_VERSION
+    _save_cgu(session.get('athlete_id'))
+    nxt = request.form.get('next') or '/'
+    return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//') else '/')
 
 @app.route('/logout')
 def logout():
@@ -636,6 +679,7 @@ def callback():
         # Le nom n'est conservé que si le classement est actif (minimisation des données).
         athlete_name = f"{athlete_info.get('firstname', '')} {athlete_info.get('lastname', '')}".strip() if ENABLE_LEADERBOARD else ''
 
+        session.permanent = True          # reste connecté 30 jours, même après fermeture du navigateur
         session['access_token'] = token
         session['athlete_id'] = athlete_id
         session['refresh_token'] = data.get('refresh_token')
@@ -666,6 +710,7 @@ def callback():
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
             _save_name(athlete_id, athlete_info)
+            if session.get('cgu') == CGU_VERSION: _save_cgu(athlete_id)
             session['name_at'] = time.time()
             try:
                 with _engine().begin() as conn:
