@@ -40,6 +40,16 @@
   .how small { color: var(--muted); font-size: var(--fs-sm); }
 
   .cta { display: grid; gap: 10px; }
+  .agree { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 14px; border-radius: var(--r-md);
+    background: var(--canvas); border: 1px solid var(--line); font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.45; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .agree:has(input:checked) { border-color: var(--brand); background: var(--brand-100); }
+  .agree input { width: 20px; height: 20px; margin: 0; accent-color: var(--brand); cursor: pointer; }
+  .agree a { color: var(--brand); font-weight: 650; }
+  .agree.is-missing { border-color: var(--danger); animation: shake .35s; }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .agree__hint { font-size: var(--fs-xs); color: var(--danger); font-weight: 600; min-height: 0; margin: -4px 2px 0; }
+  .agree__hint:empty { display: none; }
+  #login-btn[aria-disabled="true"] { opacity: .45; }
   .active-users { display: inline-flex; align-items: center; gap: 10px; align-self: flex-start; padding: 8px 14px; border-radius: 999px; background: var(--canvas); font-size: var(--fs-sm); color: var(--ink-2); }
   .active-users b { color: var(--ink); font-weight: 750; }
   .active-users__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ok) 18%, transparent); flex-shrink: 0; }
@@ -118,6 +128,7 @@
     <p class="notice notice--err" role="alert"><span class="emoji">⚠️</span>
       {% if error == 'denied' %}Connexion annulée. Autorisez l'accès à vos activités pour afficher votre carte.
       {% elif error == 'expired' %}Votre session Strava a expiré. <span class="nobr">Reconnectez-vous</span> pour continuer.
+      {% elif error == 'cgu' %}Cochez la case pour accepter les CGU et la politique de confidentialité avant de vous connecter.
       {% elif error == 'scope' %}Unlock a besoin de lire vos activités. Cochez « Voir vos activités » lors de la connexion.
       {% else %}La connexion à Strava n'a pas abouti. Réessayez dans quelques instants.{% endif %}
     </p>
@@ -135,10 +146,15 @@
     <p class="active-users active-users--content"><span class="active-users__dot" aria-hidden="true"></span><span><b class="num">{{ '{:,}'.format(active_users).replace(',', ' ') }}</b> explorateur{{ 's' if active_users > 1 }} actif{{ 's' if active_users > 1 }} ces {{ active_days }} derniers jours</span></p>
     {% endif %}
 
-    <div class="cta">
-      <a class="btn btn--primary btn--block" href="/auth" style="min-height:52px; font-size:1rem">Se connecter avec Strava</a>
+    <form class="cta" method="get" action="/auth" id="login-form">
+      <label class="agree">
+        <input type="checkbox" name="cgu" value="1" id="agree">
+        <span>J'ai lu et j'accepte les <a href="/cgu" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>.</span>
+      </label>
+      <button type="submit" class="btn btn--primary btn--block" id="login-btn" style="min-height:52px; font-size:1rem" aria-describedby="agree-hint">Se connecter avec Strava</button>
+      <p class="agree__hint" id="agree-hint" aria-live="polite"></p>
       <button type="button" class="btn btn--outline btn--block" data-install hidden><span class="emoji" aria-hidden="true">📲</span> Installer l'app sur ce téléphone</button>
-    </div>
+    </form>
 
     <div class="consent">
       <p>En vous connectant, vous autorisez Unlock à lire vos activités Strava, privées comprises. Elles ne sont visibles que par vous, effacées sous 48 h, et vous pouvez tout supprimer à tout moment.</p>
@@ -147,7 +163,7 @@
         <p>Unlock lit les tracés GPS, dates, distances et types de sport de vos activités, uniquement pour dessiner votre carte.
         Sans connexion pendant {{ inactive_days }} jours, l'accès est retiré et vos données effacées automatiquement.
         Vous pouvez aussi retirer l'accès et tout effacer depuis le menu (« Supprimer mes données ») ou depuis vos réglages Strava.
-        Détails dans la <a href="/confidentialite">politique de confidentialité</a> ; la connexion vaut acceptation des <a href="/cgu">CGU</a>.</p>
+        Détails dans la <a href="/confidentialite">politique de confidentialité</a>.</p>
       </details>
     </div>
 
@@ -161,6 +177,19 @@
 
 {% block scripts %}
 <script>
+// Bouton Strava inactif tant que la case n'est pas cochée (le serveur vérifie aussi)
+(function () {
+  const box = document.getElementById('agree'), btn = document.getElementById('login-btn'), hint = document.getElementById('agree-hint'), lab = box.closest('.agree');
+  const sync = () => { btn.setAttribute('aria-disabled', String(!box.checked)); if (box.checked) { hint.textContent = ''; lab.classList.remove('is-missing'); } };
+  box.addEventListener('change', sync); sync();
+  document.getElementById('login-form').addEventListener('submit', (e) => {
+    if (box.checked) return;
+    e.preventDefault();
+    hint.textContent = 'Cochez la case pour accepter les conditions avant de continuer.';
+    lab.classList.remove('is-missing'); void lab.offsetWidth; lab.classList.add('is-missing');
+  });
+  box.addEventListener('invalid', (e) => e.preventDefault());   // message maison plutôt que la bulle du navigateur
+})();
 (function () {
   const el = document.getElementById('login-grid');
   const box = el.getBoundingClientRect();

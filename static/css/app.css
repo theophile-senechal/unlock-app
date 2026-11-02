@@ -846,3 +846,10 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
   color: var(--muted); font-size: var(--fs-sm); background: rgba(255,255,255,.7); border-radius: 12px; }
 .cprog__state.is-empty { background: transparent; }
 @media (max-width: 560px) { .cprog__pick { width: 100%; } }
+
+/* Case d'accord des CGU (fenêtre pour les comptes existants) */
+.agree-box { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; padding: 12px 14px; border-radius: var(--r-md);
+  background: var(--canvas); border: 1px solid var(--line); font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.45; cursor: pointer; }
+.agree-box:has(input:checked) { border-color: var(--brand); background: var(--brand-100); }
+.agree-box input { width: 20px; height: 20px; margin: 0; accent-color: var(--brand); cursor: pointer; }
+.agree-box a { color: var(--brand); font-weight: 650; }

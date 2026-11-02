@@ -132,6 +132,28 @@
 </div>
 {% endif %}
 
+{% if cgu_needed %}
+<div class="sheet" id="sheet-cgu" aria-hidden="true" data-locked="1">
+  <div class="sheet__backdrop"></div>
+  <div class="sheet__panel" role="alertdialog" aria-modal="true" aria-labelledby="cgu-title" aria-describedby="cgu-desc">
+    <div class="sheet__head"><h2 class="sheet__title" id="cgu-title"><span class="emoji" aria-hidden="true">📄</span> Conditions d'utilisation</h2></div>
+    <div class="sheet__body">
+      <p id="cgu-desc" style="color:var(--ink-2)">Pour continuer à utiliser Unlock, merci de lire et d'accepter les conditions d'utilisation et la politique de confidentialité. Rien ne change pour vos données : elles restent visibles par vous seul.</p>
+      <form method="post" action="/conditions/accepter" style="display:grid; gap:12px; margin-top:14px">
+        <input type="hidden" name="csrf" value="{{ csrf_token }}">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <label class="agree-box">
+          <input type="checkbox" name="cgu" value="1" required>
+          <span>J'ai lu et j'accepte les <a href="/cgu" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>.</span>
+        </label>
+        <button type="submit" class="btn btn--primary btn--block" autofocus>Accepter et continuer</button>
+        <a class="btn btn--ghost btn--block" href="/logout">Refuser et me déconnecter</a>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 {% if donations_enabled %}
 <div class="sheet" id="sheet-support" aria-hidden="true">
   <div class="sheet__backdrop" data-sheet-close></div>
@@ -191,6 +213,7 @@
 
 <script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key, 'sync': sync_state} | tojson }};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
+{% if cgu_needed %}<script>document.addEventListener('DOMContentLoaded', () => Unlock.openSheet('sheet-cgu'));</script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

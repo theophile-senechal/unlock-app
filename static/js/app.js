@@ -148,7 +148,7 @@
   window.addEventListener('resize', () => document.querySelectorAll('.sheet.is-open .sheet__panel').forEach(moreHint));
   U.closeSheet = function (id) {
     const s = id ? document.getElementById(id) : document.querySelector('.sheet.is-open');
-    if (!s) return;
+    if (!s || s.dataset.locked) return;          // fenêtre obligatoire (accord des CGU)
     s.classList.remove('is-open'); s.setAttribute('aria-hidden', 'true');
     if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   };
