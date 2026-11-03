@@ -67,8 +67,8 @@
   .lx-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2);
     background: var(--surface); color: var(--ink-2); font: inherit; font-size: var(--fs-sm); font-weight: 650; cursor: pointer; -webkit-tap-highlight-color: transparent; white-space: nowrap; }
   .lx-chip small { color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .lx-chip[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
-  .lx-chip[aria-pressed="true"] small { color: rgba(255,255,255,.8); }
+  .lx-chip[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .lx-chip[aria-pressed="true"] small { color: rgba(255,255,255,.72); }
   @media (max-width: 420px) { .lx-chips { gap: 6px; } .lx-chip { padding: 0 10px; min-height: 32px; gap: 5px; } }
 
   /* Carte + liste */
@@ -87,11 +87,10 @@
 
   .lx-list { display: flex; flex-direction: column; min-height: 0; padding: 14px 14px 10px; }
   .lx-tools { display: grid; gap: 10px; margin-bottom: 8px; }
-  .lx-tools .seg { display: flex; }
-  .lx-tools .seg__btn { flex: 1; justify-content: center; white-space: nowrap; }
+
   .lx-tools .input { font-size: 16px; }
   @media (min-width: 768px) { .lx-tools .input { font-size: var(--fs-md); } }
-  @media (max-width: 359px) { .lx-tools .seg__btn { padding: 0 6px; font-size: .6875rem; } }
+
   .lx-note { font-size: var(--fs-xs); color: var(--muted); margin: 0 2px 6px; min-height: 1.2em; }
   .lx-items { list-style: none; margin: 0; padding: 0; min-height: 0; flex: 1; }
   @media (min-width: 1024px) { .lx-items { overflow-y: auto; } }
@@ -99,9 +98,9 @@
     border: 0; border-bottom: 1px solid var(--line); background: none; text-align: left; font: inherit; color: inherit; cursor: pointer; border-radius: 10px; }
   .lx-item:hover { background: var(--canvas); }
   .lx-items li:last-child .lx-item { border-bottom: 0; }
-  .lx-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; background: var(--canvas); }
-  .lx-item.is-on .lx-ico { background: var(--brand-100); }
-  .lx-item.is-off .lx-ico { filter: grayscale(1); opacity: .6; }
+  .lx-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--canvas); color: #9A95A0; }
+  .lx-ico .i { width: 19px; height: 19px; }
+  .lx-item.is-on .lx-ico { background: var(--brand-100); color: var(--brand); }
   .lx-txt { min-width: 0; }
   .lx-name { font-weight: 650; color: var(--ink); overflow-wrap: anywhere; line-height: 1.3; }
   .lx-meta { display: block; color: var(--muted); font-size: var(--fs-xs); margin-top: 2px; overflow-wrap: anywhere; line-height: 1.35; }
@@ -118,8 +117,11 @@
     padding: 12px 10px 12px 12px; border-radius: var(--r-md); background: var(--surface); box-shadow: 0 8px 28px -6px rgba(24,22,27,.35), 0 1px 3px rgba(24,22,27,.12);
     transform: translateY(8px); opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; }
   .lx-card.is-open { opacity: 1; transform: none; pointer-events: auto; }
-  .lx-card__ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; font-size: 20px; background: var(--brand-100); }
-  .lx-card.is-off .lx-card__ico { background: var(--canvas); filter: grayscale(1); }
+  .lx-card__ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-100); color: var(--brand); }
+  .lx-card__ico .i { width: 22px; height: 22px; }
+  .lx-card.is-off .lx-card__ico { background: var(--canvas); color: #9A95A0; }
+  .lx-card__st { display: inline-flex; align-items: center; gap: 6px; } .lx-card__st .i { width: 16px; height: 16px; }
+  .lx-card__link { display: inline-flex; align-items: center; gap: 4px; } .lx-card__link .i { width: 14px; height: 14px; }
   .lx-card__txt { min-width: 0; }
   .lx-card__name { font-weight: 750; font-size: var(--fs-md); color: var(--ink); line-height: 1.25; overflow-wrap: anywhere; }
   .lx-card__meta { font-size: var(--fs-xs); color: var(--muted); margin-top: 2px; line-height: 1.4; overflow-wrap: anywhere; }
@@ -149,7 +151,7 @@
           <div class="field">
             <label class="field__label" for="com-input">Commune</label>
             <div class="search lx-combo">
-              <span class="emoji" aria-hidden="true">🔍</span>
+              {{ icon('search', 'i search__i') }}
               <input class="input" id="com-input" type="search" placeholder="Chercher une commune" autocomplete="off"
                      role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="com-sugg">
               <ul class="lx-sugg" id="com-sugg" role="listbox" hidden></ul>
@@ -185,12 +187,12 @@
           <section class="surface lx-list" aria-label="Liste des lieux">
             <h2 class="lx-list-title" id="list-title"></h2>
             <div class="lx-tools">
-              <div class="seg seg--sm" role="group" aria-label="Lieux affichés">
-                <button type="button" class="seg__btn" data-tab="on" aria-pressed="true">Débloqués <span id="n-on"></span></button>
-                <button type="button" class="seg__btn" data-tab="off" aria-pressed="false">À découvrir <span id="n-off"></span></button>
+              <div class="tabs" role="group" aria-label="Lieux affichés">
+                <button type="button" class="tabs__btn" data-tab="on" aria-pressed="true">Débloqués <span class="tabs__n" id="n-on"></span></button>
+                <button type="button" class="tabs__btn" data-tab="off" aria-pressed="false">À découvrir <span class="tabs__n" id="n-off"></span></button>
               </div>
               <div class="search">
-                <span class="emoji" aria-hidden="true">🔍</span>
+                {{ icon('search', 'i search__i') }}
                 <label class="sr-only" for="lx-search">Chercher un lieu</label>
                 <input class="input" id="lx-search" type="search" placeholder="Chercher un lieu" autocomplete="off">
               </div>
@@ -246,7 +248,7 @@
       const qs = new URLSearchParams(params || {}).toString();
       const d = await Unlock.getJSON('/api/lieux' + (qs ? '?' + qs : ''));
       S.data = d; render();
-    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger les lieux. Réessayez dans un instant.'); }
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('Impossible de charger les lieux. Réessayez dans un instant.'); }
     finally { if (S.first) { Unlock.loader.hide(); S.first = false; } Unlock.busy.off(); }
   }
 
@@ -319,7 +321,7 @@
     const count = (c) => stats(c === 'all' ? xs : xs.filter((l) => l[CAT] === c));
     const chip = (c, label) => { const [g, t] = count(c); return `<button type="button" class="lx-chip" data-cat="${c}" aria-pressed="${S.cat === c}">${label} <small>${fmt(g)}/${fmt(t)}</small></button>`; };
     $('chips').innerHTML = chip('all', 'Tous') + (d.ordre || Object.keys(cats)).map((c) => [c, cats[c]]).filter(([c, v]) => v && count(c)[1])
-      .map(([c, v]) => chip(c, `<span aria-hidden="true">${v.emoji}</span><span title="${esc(v.label)}">${esc(COURT[c] || v.label)}</span>`)).join('');
+      .map(([c, v]) => chip(c, `<span title="${esc(v.label)}">${esc(v.short || COURT[c] || v.label)}</span>`)).join('');
     renderList();
   }
 
@@ -327,7 +329,7 @@
     const d = S.data, cats = d.categories, communes = d.dep.communes;
     const xs = filtered();
     const on = xs.filter((l) => l[DATE]), off = xs.filter((l) => !l[DATE]);
-    $('n-on').textContent = `(${fmt(on.length)})`; $('n-off').textContent = `(${fmt(off.length)})`;
+    $('n-on').textContent = fmt(on.length); $('n-off').textContent = fmt(off.length);
     document.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === S.tab)));
     let list = S.tab === 'on' ? [...on].sort((a, b) => (a[DATE] < b[DATE] ? 1 : a[DATE] > b[DATE] ? -1 : 0)) : sortNear(off);
     const q = norm(S.q);
@@ -338,13 +340,13 @@
     $('list-title').innerHTML = `Lieux · ${esc(S.com ? (S.data.commune && S.data.commune.code === S.com ? S.data.commune.name : communes[S.com]) : `${d.dep.name} (${d.dep.code})`)} <small>${fmt(xsAll.length)}</small>`;
     const shown = list.slice(0, S.limit);
     $('items').innerHTML = shown.map((l) => {
-      const c = cats[l[CAT]] || { emoji: '📍', label: '' };
+      const c = cats[l[CAT]] || { icon: 'pin', label: '' };
       return `<li><button type="button" class="lx-item ${l[DATE] ? 'is-on' : 'is-off'}" data-id="${esc(l[ID])}">
-        <span class="lx-ico" aria-hidden="true">${c.emoji}</span>
-        <span class="lx-txt"><span class="lx-name">${esc(l[NOM])}</span><span class="lx-meta">${S.com ? '' : esc(communes[l[INSEE]] || '') + ' · '}${esc(c.label)}${l[MH] ? ' · <span class="lx-hist">Monument historique</span>' : ''}</span></span>
+        <span class="lx-ico" aria-hidden="true">${Unlock.icon(c.icon)}</span>
+        <span class="lx-txt"><span class="lx-name">${esc(l[NOM]).replace(/[^\s-]+(?:-[^\s-]+)+/g, (w) => w.length <= 24 ? `<span class="nobr">${w}</span>` : w)}</span><span class="lx-meta">${S.com ? '' : esc(communes[l[INSEE]] || '') + ' · '}${esc(c.label)}${l[MH] ? ' · <span class="lx-hist">Monument historique</span>' : ''}</span></span>
         <span class="lx-when">${l[DATE] ? esc(monthTxt(l[DATE])) : ''}</span></button></li>`;
     }).join('') + (list.length > shown.length ? `<li><button type="button" class="btn btn--ghost btn--sm lx-more" id="lx-more">Voir ${fmt(Math.min(40, list.length - shown.length))} de plus (${fmt(list.length - shown.length)} restants)</button></li>` : '')
-      || `<li class="lx-empty">${q ? `Aucun lieu ne correspond à « ${esc(S.q)} ».` : S.tab === 'on' ? 'Aucun lieu débloqué ici. Passez à moins de 60 m d\'un lieu « à découvrir » pendant une sortie.' : (xs.length ? 'Bravo, tous les lieux sont débloqués ici 🎉' : 'Aucun lieu répertorié ici.')}</li>`;
+      || `<li class="lx-empty">${q ? `Aucun lieu ne correspond à « ${esc(S.q)} ».` : S.tab === 'on' ? 'Aucun lieu débloqué ici. Passez à moins de 60 m d\'un lieu « à découvrir » pendant une sortie.' : (xs.length ? 'Bravo, tous les lieux sont débloqués ici.' : 'Aucun lieu répertorié ici.')}</li>`;
   }
 
   // « À découvrir » : les plus proches d'un lieu déjà débloqué du département (sinon par commune)
@@ -358,13 +360,13 @@
 
   const card = $('lx-card');
   function cardHtml(l) {
-    const c = S.data.categories[l[CAT]] || { emoji: '📍', label: '' }, w = wikiUrl(l[WIKI]);
-    return `<span class="lx-card__ico" aria-hidden="true">${c.emoji}</span>
+    const c = S.data.categories[l[CAT]] || { icon: 'pin', label: '' }, w = wikiUrl(l[WIKI]);
+    return `<span class="lx-card__ico" aria-hidden="true">${Unlock.icon(c.icon)}</span>
       <div class="lx-card__txt"><div class="lx-card__name">${esc(l[NOM])}</div>
         <div class="lx-card__meta">${esc(c.label)} · ${esc(S.data.dep.communes[l[INSEE]] || '')}</div>${l[MH] ? '<div class="lx-card__meta lx-card__mh">Monument historique</div>' : ''}</div>
       <button type="button" class="lx-card__close" id="lx-card-close" aria-label="Fermer la fiche">×</button>
-      <div class="lx-card__foot"><span class="lx-card__st ${l[DATE] ? 'is-on' : 'is-off'}">${l[DATE] ? `🔓 Débloqué le ${esc(dateTxt(l[DATE]))}` : `🔒 À découvrir : passez à moins de ${S.data.rayon_m} m`}</span>
-        ${w ? `<a class="lx-card__link" href="${w}" target="_blank" rel="noopener">${l[WIKI].startsWith('fr:') ? 'Wikipédia' : 'Wikidata'} ↗</a>` : ''}</div>`;
+      <div class="lx-card__foot"><span class="lx-card__st ${l[DATE] ? 'is-on' : 'is-off'}">${l[DATE] ? `${Unlock.icon('unlock')}Débloqué le ${esc(dateTxt(l[DATE]))}` : `${Unlock.icon('lock')}À découvrir, passez à moins de ${S.data.rayon_m} m`}</span>
+        ${w ? `<a class="lx-card__link" href="${w}" target="_blank" rel="noopener">${l[WIKI].startsWith('fr:') ? 'Wikipédia' : 'Wikidata'}${Unlock.icon('external')}</a>` : ''}</div>`;
   }
   // Ouvre la fiche d'un lieu ; la carte se décale pour que le lieu reste visible au-dessus de la fiche
   function select(l, zoomIn) {

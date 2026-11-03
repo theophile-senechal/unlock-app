@@ -7,13 +7,13 @@
   /* ---------------- Sports ---------------- */
   U.SPORTS = {
     // Sports suivis : à pied ou à vélo (ski, natation et sports virtuels ne débloquent rien)
-    Run: ['Course à pied', '🏃'], TrailRun: ['Trail', '⛰️'],
-    Ride: ['Vélo', '🚴'], GravelRide: ['Gravel', '🚵'], 'E-BikeRide': ['Vélo électrique', '⚡'],
-    Velomobile: ['Vélomobile', '🚲'],
-    Hike: ['Randonnée', '🥾'], Walk: ['Marche', '🚶'],
-    Snowshoe: ['Raquettes', '❄️']
+    Run: 'Course à pied', TrailRun: 'Trail', Ride: 'Vélo', GravelRide: 'Gravel', 'E-BikeRide': 'Vélo électrique',
+    Velomobile: 'Vélomobile', Hike: 'Randonnée', Walk: 'Marche', Snowshoe: 'Raquettes'
   };
-  U.sportLabel = (code) => (U.SPORTS[code] ? `${U.SPORTS[code][1]}  ${U.SPORTS[code][0]}` : code);
+  U.sportLabel = (code) => U.SPORTS[code] || code;
+
+  /* Icônes au trait (même jeu que les pages, voir icons.py) */
+  U.icon = (name, cls = 'i') => `<svg class="${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${(window.UNLOCK_ICONS || {})[name] || ''}</svg>`;
 
   U.esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   U.fmt = (n, d = 0) => Number(n || 0).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d }).replace(/\u202f/g, '\u00a0');
@@ -56,18 +56,18 @@
   U.sync = (window.UNLOCK_CONFIG || {}).sync || 'fast';
   const PATIENCE = {
     first: [
-      [15000, 'Encore un peu de patience ⏳ La première connexion lit tout votre historique Strava.'],
-      [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées 🚀'],
-      [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
+      [15000, 'Encore un peu de patience. La première connexion lit tout votre historique Strava.'],
+      [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées.'],
+      [120000, 'Toujours en cours… Merci pour votre patience. Ne fermez pas la page.']
     ],
     refresh: [
-      [15000, 'On relit votre historique Strava après quelques jours d\u2019absence ⏳'],
-      [60000, 'Encore un instant, ensuite tout sera de nouveau rapide 🚀'],
-      [120000, 'Toujours en cours… Merci pour votre patience 🙏 Ne fermez pas la page.']
+      [15000, 'On relit votre historique Strava après quelques jours d\u2019absence.'],
+      [60000, 'Encore un instant, ensuite tout sera de nouveau rapide.'],
+      [120000, 'Toujours en cours… Merci pour votre patience. Ne fermez pas la page.']
     ],
     fast: [
-      [12000, 'Encore quelques secondes ⏳'],
-      [45000, 'Toujours en cours… Merci pour votre patience 🙏']
+      [12000, 'Encore quelques secondes…'],
+      [45000, 'Toujours en cours… Merci pour votre patience.']
     ]
   }[U.sync] || [];
   function setHint(el, text) {
@@ -124,10 +124,12 @@
 
   /* ---------------- Toast ---------------- */
   let toastTimer = null;
-  U.toast = function (text) {
+  /* Message bref en bas de l'écran. `icon` (facultatif) : nom d'une icône du jeu Unlock, affichée devant le texte. */
+  U.toast = function (text, icon) {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
-    t.textContent = text; t.classList.add('is-on');
+    t.innerHTML = (icon && (window.UNLOCK_ICONS || {})[icon] ? U.icon(icon, 'i toast__i') : '') + `<span>${U.esc(text)}</span>`;
+    t.classList.add('is-on');
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('is-on'), 3200);
   };
 
@@ -167,7 +169,7 @@
     const b = e.target.closest('[data-copy]'); if (!b) return;
     try {
       await navigator.clipboard.writeText(b.dataset.copy);
-      U.toast('📋 Identifiant copié');
+      U.toast('Identifiant copié');
       b.classList.add('is-done'); setTimeout(() => b.classList.remove('is-done'), 1500);
     } catch (err) {
       const t = document.getElementById('my-athlete-id');
@@ -188,7 +190,7 @@
   }
 
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; refreshInstallButtons(); });
-  window.addEventListener('appinstalled', () => { deferredPrompt = null; refreshInstallButtons(); U.toast('🎉 Unlock est installée sur votre appareil'); });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; refreshInstallButtons(); U.toast('Unlock est installée sur votre appareil'); });
 
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-install]'); if (!btn) return;

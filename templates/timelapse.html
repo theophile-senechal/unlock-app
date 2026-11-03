@@ -49,7 +49,7 @@
 
     <div class="maptools tl-tools">
       <div class="search tl-search">
-        <span class="emoji" aria-hidden="true">🔍</span>
+        {{ icon('search', 'i search__i') }}
         <label class="sr-only" for="city-input">Filtrer sur une commune</label>
         <input class="input" id="city-input" list="city-list" placeholder="Toutes les communes" autocomplete="off">
         <button type="button" class="search__clear" id="city-clear" aria-label="Voir toutes les communes" hidden>×</button>
@@ -58,20 +58,20 @@
       <div class="maptools__spacer"></div>
       <div class="tl-desk" id="tl-desk"></div>
       <button type="button" class="iconbtn tl-mobile" data-sheet-open="sheet-tl" aria-label="Réglages de l'animation">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        {{ icon('sliders') }}
       </button>
     </div>
 
     <div id="tl-settings" style="display:contents">
       <div class="seg" role="group" aria-label="Vitesse">
-        <button type="button" class="seg__btn" data-speed="650" aria-pressed="false"><span class="emoji" aria-hidden="true">🐢</span>Lente</button>
+        <button type="button" class="seg__btn" data-speed="650" aria-pressed="false">Lente</button>
         <button type="button" class="seg__btn" data-speed="300" aria-pressed="true">Normale</button>
-        <button type="button" class="seg__btn" data-speed="110" aria-pressed="false"><span class="emoji" aria-hidden="true">🐇</span>Rapide</button>
+        <button type="button" class="seg__btn" data-speed="110" aria-pressed="false">Rapide</button>
       </div>
       <label class="sr-only" for="grid-select">Taille des blocs</label>
       <select class="select select--pill" id="grid-select">
-        <option value="100">🧩  Blocs de 100 m</option>
-        <option value="250" selected>🧩  Blocs de 250 m</option>
+        <option value="100">Blocs de 100 m</option>
+        <option value="250" selected>Blocs de 250 m</option>
       </select>
     </div>
 
@@ -152,7 +152,7 @@
         const best = [...(data.top_municipalities || [])].sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks)[0];
         if (best && best.outline) {
           setCity(best);
-          Unlock.toast(`📍 ${best.name}, votre commune la plus explorée. Touchez × pour voir toutes vos communes.`);
+          Unlock.toast(`${best.name}, votre commune la plus explorée. Touchez × pour voir toutes vos communes.`, 'pin');
         }
       } else if (outline && cityName) {
         // nouvelle taille de blocs : on garde la même commune
@@ -160,7 +160,7 @@
         if (same && same.outline) setCity(same); else setCity(null);
       }
       build();
-    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger votre historique.'); }
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('Impossible de charger votre historique.'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
   }
 

@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% import '_ui.html' as ui with context %}
-{# ⚠️ Page désactivée par défaut (ENABLE_LEADERBOARD=false) : elle affiche les données d'autres
+{# Page désactivée par défaut (ENABLE_LEADERBOARD=false) : elle affiche les données d'autres
    utilisateurs, ce que la Strava API Policy de juin 2026 interdit (§2.3). #}
 {% block title %}Classement · Unlock{% endblock %}
 {% block head %}
@@ -40,11 +40,11 @@
           <div class="field"><label class="field__label" for="sport-select">Sport</label><select class="select" id="sport-select"><option value="all">Tous</option></select></div>
         </div>
       </div>
-      <div class="search" style="max-width:420px; margin-bottom:14px"><span class="emoji" aria-hidden="true">🔍</span><input class="input" id="city-search" list="city-suggestions" placeholder="Chercher une commune" autocomplete="off"><datalist id="city-suggestions"></datalist></div>
+      <div class="search" style="max-width:420px; margin-bottom:14px">{{ icon('search', 'i search__i') }}<input class="input" id="city-search" list="city-suggestions" placeholder="Chercher une commune" autocomplete="off"><datalist id="city-suggestions"></datalist></div>
       <div class="lb">
         <div style="display:grid; gap:14px">
-          <section class="surface lb-card"><h2><span class="emoji">👥</span>Le plus d'athlètes</h2><ol class="rank" id="top-users"></ol></section>
-          <section class="surface lb-card"><h2><span class="emoji">🔥</span>Les plus actives</h2><ol class="rank" id="top-acts"></ol></section>
+          <section class="surface lb-card"><h2>Le plus d'athlètes</h2><ol class="rank" id="top-users"></ol></section>
+          <section class="surface lb-card"><h2>Les plus actives</h2><ol class="rank" id="top-acts"></ol></section>
         </div>
         <div style="display:grid; gap:14px; min-width:0">
           <div class="hero" id="hero" hidden>
@@ -58,7 +58,7 @@
               <th class="r" data-k="activities"><button type="button">Sorties</button></th></tr></thead>
               <tbody id="lb-body"></tbody></table>
           </div>
-          <div class="empty" id="empty"><span class="emoji">🗺️</span>Choisissez une commune pour voir son classement.</div>
+          <div class="empty" id="empty">{{ icon('map', 'i empty__i') }}Choisissez une commune pour voir son classement.</div>
         </div>
       </div>
     </div>
@@ -88,7 +88,7 @@
       top('top-acts', [...cities].sort((a, b) => b.activities - a.activities).slice(0, 10), 'activities', 'sorties');
       const sel = $('city-search').value;
       if (cities.some((c) => c.name === sel)) loadCity(sel); else if (cities.length) loadCity(cities[0].name);
-    } catch (e) { Unlock.toast('⚠️ Classement indisponible.'); }
+    } catch (e) { Unlock.toast('Classement indisponible.', 'alert'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
   }
 
@@ -96,7 +96,7 @@
     const ol = $(id); ol.innerHTML = list.length ? '' : '<li class="empty">Aucune donnée</li>';
     list.forEach((c, i) => {
       const li = document.createElement('li');
-      li.innerHTML = `<button type="button" class="rank__item"><span class="rank__pos">${['🥇','🥈','🥉'][i] || i + 1}</span><span class="rank__name">${Unlock.esc(c.name)}</span><span class="rank__val">${Unlock.fmt(c[key])}<small>${suffix}</small></span></button>`;
+      li.innerHTML = `<button type="button" class="rank__item"><span class="rank__pos">${i + 1}</span><span class="rank__name">${Unlock.esc(c.name)}</span><span class="rank__val">${Unlock.fmt(c[key])}<small>${suffix}</small></span></button>`;
       li.firstChild.addEventListener('click', () => loadCity(c.name));
       ol.appendChild(li);
     });
@@ -114,12 +114,12 @@
       $('city-sub').textContent = d.period_display ? `Semaine du ${d.period_display}` : 'Depuis le début';
       $('k-ex').textContent = Unlock.fmt(d.global_stats.total_explorers); $('k-act').textContent = Unlock.fmt(d.global_stats.total_activities);
       render();
-    } catch (e) { Unlock.toast('⚠️ Classement indisponible.'); } finally { Unlock.busy.off(); }
+    } catch (e) { Unlock.toast('Classement indisponible.', 'alert'); } finally { Unlock.busy.off(); }
   }
 
   function render() {
     const rows = [...board].sort((a, b) => b[sortKey] - a[sortKey] || b.blocks - a.blocks);
-    $('lb-body').innerHTML = rows.map((r, i) => `<tr><td>${['🥇','🥈','🥉'][i] || i + 1}</td><td>${Unlock.esc(r.name)}</td><td class="r">${Unlock.fmt(r.percent, 1)}\u00a0%</td><td class="r">${Unlock.fmt(r.blocks)}</td><td class="r">${Unlock.fmt(r.activities)}</td></tr>`).join('');
+    $('lb-body').innerHTML = rows.map((r, i) => `<tr><td>${i + 1}</td><td>${Unlock.esc(r.name)}</td><td class="r">${Unlock.fmt(r.percent, 1)}\u00a0%</td><td class="r">${Unlock.fmt(r.blocks)}</td><td class="r">${Unlock.fmt(r.activities)}</td></tr>`).join('');
     document.querySelectorAll('th[data-k]').forEach((th) => th.toggleAttribute('aria-sort', th.dataset.k === sortKey) || (th.dataset.k === sortKey && th.setAttribute('aria-sort', 'descending')));
   }
   document.querySelectorAll('th[data-k] button').forEach((b) => b.addEventListener('click', () => { sortKey = b.parentElement.dataset.k; render(); }));

@@ -25,25 +25,25 @@
       <p class="period-note" id="period-note"></p>
       <div class="kpis">
         <div class="surface kpi">
-          <span class="kpi__label"><span class="emoji" aria-hidden="true">🧩</span>Territoire exploré</span>
+          <span class="kpi__label">Territoire exploré</span>
           <span class="kpi__val" id="k1">–</span>
           <span class="kpi__sub" id="k1-sub"></span>
           <span class="kpi__help" id="k1-help">Blocs différents traversés</span>
         </div>
         <div class="surface kpi">
-          <span class="kpi__label"><span class="emoji" aria-hidden="true">🆕</span><span id="k2-label">Nouveaux blocs ce <span class="nobr">mois-ci</span></span></span>
+          <span class="kpi__label"><span id="k2-label">Nouveaux blocs ce <span class="nobr">mois-ci</span></span></span>
           <span class="kpi__val" id="k2">–</span>
           <span class="kpi__sub" id="k2-sub"></span>
           <span class="kpi__help" id="k2-help">Blocs jamais traversés auparavant</span>
         </div>
         <div class="surface kpi">
-          <span class="kpi__label"><span class="emoji" aria-hidden="true">🧭</span><span id="k3-label">Taux de découverte</span></span>
+          <span class="kpi__label"><span id="k3-label">Taux de découverte</span></span>
           <span class="kpi__val" id="k3">–</span>
           <span class="kpi__sub" id="k3-sub"></span>
           <span class="kpi__help">Part de blocs inédits parmi tous vos passages du mois</span>
         </div>
         <div class="surface kpi">
-          <span class="kpi__label"><span class="emoji" aria-hidden="true">🏆</span>Mois record</span>
+          <span class="kpi__label">Mois record</span>
           <span class="kpi__val kpi__val--text" id="k4">–</span>
           <span class="kpi__sub" id="k4-sub"></span>
           <span class="kpi__help">Mois avec le plus de nouveaux blocs</span>
@@ -52,7 +52,7 @@
 
       <section class="surface chart" aria-labelledby="c1">
         <div class="chart__head">
-          <h2 class="chart__title" id="c1"><span class="emoji" aria-hidden="true">🗺️</span>Votre territoire</h2>
+          <h2 class="chart__title" id="c1">Votre territoire</h2>
           <span class="chart__note">Nombre total de blocs différents, mois après mois</span>
         </div>
         <div class="chart__box"><canvas id="conquest" aria-label="Courbe cumulée des blocs explorés" role="img"></canvas></div>
@@ -61,7 +61,7 @@
       <section class="surface chart" aria-labelledby="c2">
         <div class="chart__head">
           <div>
-            <h2 class="chart__title" id="c2"><span class="emoji" aria-hidden="true">🔁</span>Découverte ou routine ?</h2>
+            <h2 class="chart__title" id="c2">Découverte ou routine ?</h2>
             <p class="chart__note" style="margin-top:4px">Chaque mois, vos passages dans des blocs inédits et dans des blocs déjà connus</p>
           </div>
           <div class="seg seg--sm" role="group" aria-label="Unité">
@@ -75,13 +75,13 @@
 
       <section class="communes" id="communes" aria-labelledby="t-title">
         <div class="habits__head">
-          <h2 class="habits__title" id="t-title"><span class="emoji" aria-hidden="true">🏘️</span>Mes communes</h2>
+          <h2 class="habits__title" id="t-title">Mes communes</h2>
           <p class="chart__note" id="t-note"></p>
         </div>
         <div class="surface ctable">
           <div class="ctable__tools" id="t-tools" hidden>
             <div class="search ctable__search" id="t-search-wrap">
-              <span class="emoji" aria-hidden="true">🔍</span>
+              {{ icon('search', 'i search__i') }}
               <label class="sr-only" for="t-search">Chercher une commune</label>
               <input class="input" id="t-search" type="search" placeholder="Chercher une commune" autocomplete="off">
             </div>
@@ -131,7 +131,7 @@
       <section class="surface chart cprog" id="cprog" aria-labelledby="p-title" hidden>
         <div class="chart__head">
           <div>
-            <h2 class="chart__title" id="p-title"><span class="emoji" aria-hidden="true">📈</span>Progression dans une commune</h2>
+            <h2 class="chart__title" id="p-title">Progression dans une commune</h2>
             <p class="chart__note" id="p-note" style="margin-top:4px">% exploré, mois après mois</p>
           </div>
           <div class="field cprog__pick">
@@ -148,13 +148,13 @@
 
       <section class="habits" id="habits" aria-labelledby="h-title">
         <div class="habits__head">
-          <h2 class="habits__title" id="h-title"><span class="emoji" aria-hidden="true">⏰</span>Vos habitudes</h2>
+          <h2 class="habits__title" id="h-title">Vos habitudes</h2>
           <p class="chart__note" id="h-note"></p>
         </div>
         <div class="kpis kpis--3">
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📆</span>Sorties par semaine</span><span class="kpi__val" id="h-week">–</span><span class="kpi__sub" id="h-week-sub"></span><span class="kpi__help">Semaines complètes, hors semaine en cours</span></div>
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🕒</span>Créneau favori</span><span class="kpi__val kpi__val--text" id="h-slot">–</span><span class="kpi__sub" id="h-slot-sub"></span><span class="kpi__help">Heure de départ la plus fréquente</span></div>
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📅</span>Jour favori</span><span class="kpi__val kpi__val--text" id="h-day">–</span><span class="kpi__sub" id="h-day-sub"></span><span class="kpi__help">Jour où vous sortez le plus</span></div>
+          <div class="surface kpi"><span class="kpi__label">Sorties par semaine</span><span class="kpi__val" id="h-week">–</span><span class="kpi__sub" id="h-week-sub"></span><span class="kpi__help">Semaines complètes, hors semaine en cours</span></div>
+          <div class="surface kpi"><span class="kpi__label">Créneau favori</span><span class="kpi__val kpi__val--text" id="h-slot">–</span><span class="kpi__sub" id="h-slot-sub"></span><span class="kpi__help">Heure de départ la plus fréquente</span></div>
+          <div class="surface kpi"><span class="kpi__label">Jour favori</span><span class="kpi__val kpi__val--text" id="h-day">–</span><span class="kpi__sub" id="h-day-sub"></span><span class="kpi__help">Jour où vous sortez le plus</span></div>
         </div>
         <div class="habits__charts">
           <section class="surface chart" aria-labelledby="g-slot">
@@ -168,7 +168,7 @@
         </div>
       </section>
 
-      <div class="empty" id="empty" hidden><span class="emoji">🏁</span>Aucune activité GPS pour ces filtres. Essayez une autre année ou un autre sport.</div>
+      <div class="empty" id="empty" hidden>{{ icon('stats', 'i empty__i') }}Aucune activité GPS pour ces filtres. Essayez une autre année ou un autre sport.</div>
     </div>
   </main>
   {{ ui.bottomnav(active) }}
@@ -197,7 +197,7 @@
       fill('year-select', d.available_years, (v) => v);
       fill('sport-select', d.available_sports, Unlock.sportLabel);
       draw(d);
-    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de calculer vos stats. Réessayez dans un instant.'); }
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('Impossible de calculer vos stats. Réessayez dans un instant.'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
   }
 
@@ -220,12 +220,11 @@
     let diff, txt;
     if (unit === 'pts') { diff = cur - prev; txt = `${diff >= 0 ? '+' : '−'}${Unlock.fmt(Math.abs(diff), 0)}\u00a0pts`; }
     else {
-      if (prev === 0) return cur > 0 ? `<span class="delta delta--up">▲ nouveau</span> <span class="delta__ref">vs 0 en ${prevLabel}</span>` : `<span class="delta">= stable</span> <span class="delta__ref">vs 0 en ${prevLabel}</span>`;
+      if (prev === 0) return cur > 0 ? `<span class="delta delta--up">nouveau</span> <span class="delta__ref">vs 0 en ${prevLabel}</span>` : `<span class="delta delta--flat">stable</span> <span class="delta__ref">vs 0 en ${prevLabel}</span>`;
       diff = (cur - prev) / prev * 100; txt = `${diff >= 0 ? '+' : '−'}${Unlock.fmt(Math.abs(diff), 0)}\u00a0%`;
     }
-    const cls = Math.abs(diff) < 0.5 ? '' : diff > 0 ? ' delta--up' : ' delta--down';
-    const arrow = Math.abs(diff) < 0.5 ? '=' : diff > 0 ? '▲' : '▼';
-    return `<span class="delta${cls}">${arrow} ${txt}</span> <span class="delta__ref">vs ${prevLabel}</span>`;
+    const cls = Math.abs(diff) < 0.5 ? ' delta--flat' : diff > 0 ? ' delta--up' : ' delta--down';
+    return `<span class="delta${cls}">${Math.abs(diff) < 0.5 ? 'stable' : txt}</span> <span class="delta__ref">vs ${prevLabel}</span>`;
   }
 
   let lastData = null, unit = 'pct';
@@ -252,13 +251,13 @@
     const ref = months[L], refName = monthName(ref), prevName = P >= 0 ? monthName(months[P]) : null;
     const refLabel = ref === curKey ? 'ce mois-ci' : `en ${refName}`;
     const nb = (t) => Unlock.esc(t).replace(/(ce mois-ci|en \S+)$/, '<span class="nobr">$1</span>');
-    $('period-note').textContent = `Comparaisons : ${refName} ${ref.slice(0, 4)}${ref === curKey ? ' (mois en cours)' : ''} par rapport à ${prevName ? prevName : 'rien'}.`;
+    $('period-note').textContent = prevName ? `${cap(refName)} ${ref.slice(0, 4)}${ref === curKey ? ' (mois en cours)' : ''} comparé à ${prevName}` : `${cap(refName)} ${ref.slice(0, 4)}, pas de mois précédent`;
 
     // KPI 1: territory
     const prevCum = P >= 0 ? cum[P] : null;
     $('k1').textContent = Unlock.fmt(cum[L]);
     $('k1-sub').innerHTML = P >= 0 && prevCum > 0
-      ? `<span class="delta${nNew[L] ? ' delta--up' : ''}">${nNew[L] ? '▲' : '='} +${Unlock.fmt(nNew[L] / prevCum * 100, 1)}\u00a0%</span> <span class="delta__ref">vs fin ${prevName}</span>`
+      ? `<span class="delta${nNew[L] ? ' delta--up' : ' delta--flat'}">${nNew[L] ? '+' + Unlock.fmt(nNew[L] / prevCum * 100, 1) + '\u00a0%' : 'stable'}</span> <span class="delta__ref">vs fin ${prevName}</span>`
       : delta(cum[L], null);
     $('k1-help').textContent = year === 'all' ? 'Blocs différents traversés depuis le début' : `Blocs différents traversés en ${year}`;
 
@@ -280,7 +279,7 @@
     let best = 0; nNew.forEach((v, i) => { if (v > nNew[best]) best = i; });
     $('k4').textContent = cap(`${monthName(months[best])} ${months[best].slice(0, 4)}`);
     const share = nNew[best] ? nNew[L] / nNew[best] * 100 : 0;
-    $('k4-sub').innerHTML = `<span class="delta">${Unlock.fmt(nNew[best])} nouveaux blocs</span><br><span class="delta__ref">${cap(refLabel)} : ${pct(share)} du record</span>`;
+    $('k4-sub').innerHTML = `<span class="delta">${Unlock.fmt(nNew[best])} nouveaux blocs</span><br><span class="delta__ref">${cap(refLabel)}, ${pct(share)} du record</span>`;
     $('k2-help').textContent = year === 'all' ? 'Blocs jamais traversés auparavant' : `Blocs pas encore traversés en ${year}`;
 
     drawCharts(months, cum, nNew, nOld);
@@ -464,7 +463,7 @@
       const i0 = Math.max(0, n - 13), gain = last - (n > 12 ? d.percent[i0] : 0);
       const since = n > 12 ? 'en 12 mois' : `depuis ${monthName(d.labels[0])} ${d.labels[0].slice(0, 4)}`;
       $('p-kpi').innerHTML = `<b>${pctTxt(last)}</b><span>${Unlock.fmt(d.blocks[n - 1])} / ${Unlock.fmt(d.total_blocks)} blocs</span>`
-        + (gain > 0.05 ? `<span class="delta delta--up">▲ +${Unlock.fmt(gain, gain < 10 ? 1 : 0)} pts ${since}</span>` : '');
+        + (gain > 0.05 ? `<span class="delta delta--up">+${Unlock.fmt(gain, gain < 10 ? 1 : 0)} pts ${since}</span>` : '');
     }
     if (PR.chart) PR.chart.destroy();
     if (!n) { PR.chart = null; return; }
@@ -504,15 +503,14 @@
     const pct = (n) => Unlock.fmt(h.count ? n / h.count * 100 : 0) + '\u00a0%';
     const top = (arr) => arr.reduce((a, b) => (b.count > a.count ? b : a), arr[0]);
     const ss = $('sport-select'), year = $('year-select').value;
-    const sportTxt = ss.value !== 'all' ? ' en ' + ss.selectedOptions[0].text.replace(/^\S+\s+/, '').toLowerCase() : '';
+    const sportTxt = ss.value !== 'all' ? ' en ' + ss.selectedOptions[0].text.toLowerCase() : '';
     $('h-note').textContent = `${Unlock.fmt(h.count)} sortie${h.count > 1 ? 's' : ''}${sportTxt}${year !== 'all' ? ' en ' + year : ''}`;
 
     $('h-week').textContent = Unlock.fmt(h.per_week, h.per_week < 10 ? 1 : 0);
     if (h.per_week_recent !== null && h.per_week_recent !== undefined) {
       const diff = h.per_week ? (h.per_week_recent - h.per_week) / h.per_week * 100 : 0;
       const cls = Math.abs(diff) < 5 ? '' : diff > 0 ? ' delta--up' : ' delta--down';
-      const arrow = Math.abs(diff) < 5 ? '≈' : diff > 0 ? '▲' : '▼';
-      $('h-week-sub').innerHTML = `<span class="delta${cls}">${arrow} ${Unlock.fmt(h.per_week_recent, 1)}</span> <span class="delta__ref">ces 4 dernières semaines</span><br><span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine</span>`;
+      $('h-week-sub').innerHTML = `<span class="delta${cls}">${Unlock.fmt(h.per_week_recent, 1)}</span> <span class="delta__ref">ces 4 dernières semaines</span><br><span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine</span>`;
     } else {
       $('h-week-sub').innerHTML = `<span class="delta__ref">${Unlock.fmt(h.km_per_week)}\u00a0km par semaine</span>`;
     }

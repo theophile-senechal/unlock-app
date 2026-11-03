@@ -185,8 +185,8 @@
         </div>
       </div>
       <div class="studio__actions">
-        <button type="button" class="btn btn--outline" data-sheet-open="sheet-studio"><span class="emoji" aria-hidden="true">🎨</span>Personnaliser</button>
-        <button type="button" class="btn btn--primary" data-download><span class="emoji" aria-hidden="true">📸</span>Télécharger</button>
+        <button type="button" class="btn btn--outline" data-sheet-open="sheet-studio">{{ icon('sliders') }}Personnaliser</button>
+        <button type="button" class="btn btn--primary" data-download>{{ icon('download') }}Télécharger</button>
       </div>
     </div>
   </main>
@@ -213,7 +213,7 @@
     <label class="field__label" for="city-input">Commune</label>
     <div class="combo" id="combo">
       <div class="search">
-        <span class="emoji" aria-hidden="true">🔍</span>
+        {{ icon('search', 'i search__i') }}
         <input class="input" id="city-input" type="text" role="combobox" aria-expanded="false" aria-controls="city-options"
                aria-autocomplete="list" autocomplete="off" spellcheck="false" placeholder="Rechercher une commune">
         <button type="button" class="combo__clear" id="city-clear" aria-label="Effacer la recherche" hidden>×</button>
@@ -231,8 +231,8 @@
   </div>
   <div class="field"><span class="field__label" id="show-l">Afficher sur l'image</span>
     <div class="switches" role="group" aria-labelledby="show-l">
-      <label class="switch"><span id="show-city-l">🏘️ Nom de la commune</span><input type="checkbox" id="show-city" checked><span class="switch__ui" aria-hidden="true"></span></label>
-      <label class="switch"><span id="show-kpi-l">📊 Chiffres (% et blocs)</span><input type="checkbox" id="show-kpi" checked><span class="switch__ui" aria-hidden="true"></span></label>
+      <label class="switch"><span id="show-city-l">Nom de la commune</span><input type="checkbox" id="show-city" checked><span class="switch__ui" aria-hidden="true"></span></label>
+      <label class="switch"><span id="show-kpi-l">Chiffres (% et blocs)</span><input type="checkbox" id="show-kpi" checked><span class="switch__ui" aria-hidden="true"></span></label>
     </div>
     <p class="switch-note">« unlock » reste toujours affiché en bas de l'image.</p>
   </div>
@@ -248,8 +248,8 @@
     <div class="field" id="field-grid"><label class="field__label" for="grid-select" title="Taille des blocs">Blocs</label>
       <select class="select" id="grid-select"><option value="100" selected>100 m</option><option value="250">250 m</option></select></div>
   </div>
-  <p class="set-tip" style="font-size:var(--fs-sm); color:var(--muted)">💡 Déplacez et zoomez la carte dans l'aperçu pour cadrer votre story.</p>
-  <button type="button" class="btn btn--primary btn--block set-dl" data-download style="margin-top:auto"><span class="emoji" aria-hidden="true">📸</span>Télécharger l'image</button>
+  <p class="set-tip" style="font-size:var(--fs-sm); color:var(--muted)">Déplacez et zoomez la carte dans l'aperçu pour cadrer votre story.</p>
+  <button type="button" class="btn btn--primary btn--block set-dl" data-download style="margin-top:auto">{{ icon('download') }}Télécharger l'image</button>
 </div>
 
 <div class="sheet" id="sheet-studio" aria-hidden="true">
@@ -373,7 +373,7 @@
       $('city-input').placeholder = cities.length ? `Rechercher parmi ${cities.length} commune${cities.length > 1 ? 's' : ''}` : 'Aucune commune disponible';
       fillDeps();
       draw(true);
-    } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos communes.'); }
+    } catch (e) { if (e.message !== 'auth') Unlock.toast('Impossible de charger vos communes.'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } stageBusy(false); }
   }
 
@@ -448,8 +448,8 @@
     const dep = k === 'dep';
     $('field-dep').hidden = !dep; $('field-city').hidden = dep; $('field-grid').hidden = dep;
     document.querySelectorAll('.set-tip').forEach((t) => (t.hidden = dep));
-    $('show-city-l').textContent = dep ? '🗺️ Nom du département' : '🏘️ Nom de la commune';
-    $('show-kpi-l').textContent = dep ? '📊 Chiffres (% et communes)' : '📊 Chiffres (% et blocs)';
+    $('show-city-l').textContent = dep ? 'Nom du département' : 'Nom de la commune';
+    $('show-kpi-l').textContent = dep ? 'Chiffres (% et communes)' : 'Chiffres (% et blocs)';
     $('story-card').classList.toggle('is-dep', dep);
     $('story-dep').toggleAttribute('hidden', !dep);
     $('stage-zoom').hidden = dep;   // élément SVG : .hidden n'existe pas, on passe par l'attribut
@@ -471,7 +471,7 @@
     if (!geo) {
       stageBusy(true, 'Chargement du département', name);
       try { geo = depGeo[d.code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(d.code)}/geo`); }
-      catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Contours du département indisponibles pour le moment.'); return; }
+      catch (e) { if (e.message !== 'auth') Unlock.toast('Contours du département indisponibles pour le moment.'); return; }
       finally { stageBusy(false); }
       if (kind !== 'dep' || depCode !== d.code) return;
     }
@@ -513,8 +513,8 @@
       const label = kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
       a.download = `unlock-story-${label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
       a.href = url; a.click();
-      Unlock.toast('📸 Image enregistrée, à vous de poster !');
-    } catch (e) { console.error(e); Unlock.toast("⚠️ L'export a échoué. Réessayez, ou faites une capture d'écran de l'aperçu."); }
+      Unlock.toast('Image enregistrée, à vous de poster !');
+    } catch (e) { console.error(e); Unlock.toast("L'export a échoué. Réessayez, ou faites une capture d'écran de l'aperçu."); }
     finally { card.style.transform = prev; document.body.classList.remove('exporting'); stageBusy(false); }
   }
 
@@ -598,7 +598,7 @@
     const sel = $('sport-select'), cur = sel.value || 'all';
     const sports = Object.keys((data && data.available_sports) || {});
     sel.innerHTML = '<option value="all">Tous les sports</option>' +
-      sports.map((sp) => `<option value="${Unlock.esc(sp)}">${Unlock.esc((Unlock.SPORTS[sp] || [sp])[0])}</option>`).join('');
+      sports.map((sp) => `<option value="${Unlock.esc(sp)}">${Unlock.esc(Unlock.sportLabel(sp))}</option>`).join('');
     sel.value = sports.includes(cur) ? cur : 'all';
   }
   place(); mq.addEventListener('change', place);

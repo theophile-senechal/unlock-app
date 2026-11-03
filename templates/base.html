@@ -79,35 +79,35 @@
     <div class="sheet__grip"></div>
     <div class="sheet__head">
       <h2 class="sheet__title" id="menu-title">Menu</h2>
-      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer">{{ icon('x') }}</button>
     </div>
     <div class="menu-cols">
     <div class="menu-col">
     {% if my_athlete_id %}
     <div class="idcard">
       <div class="idcard__text">
-        <span class="idcard__label"><span class="emoji" aria-hidden="true">🆔</span>Votre identifiant Strava</span>
+        <span class="idcard__label">Identifiant Strava</span>
         <span class="idcard__num num" id="my-athlete-id">{{ my_athlete_id }}</span>
       </div>
       <button type="button" class="btn btn--outline btn--sm idcard__copy" data-copy="{{ my_athlete_id }}" aria-label="Copier l'identifiant Strava">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>Copier
+        {{ icon('copy') }}Copier
       </button>
     </div>
     {% endif %}
 
     <ul class="menu-group">
-      <li><button type="button" class="menu-item" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
-      {% if is_admin %}<li><a class="menu-item" href="/admin"><span class="emoji" aria-hidden="true">🛠️</span><span>Tableau de bord<small>Réservé à l'administrateur</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
-      {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard"><span class="emoji" aria-hidden="true">🏆</span><span>Classement</span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
-      {% if donations_enabled %}<li><a class="menu-item menu-item--support" href="/soutenir/go" target="_blank" rel="noopener" data-sheet-open="sheet-support"><span class="emoji" aria-hidden="true">🤝</span><span>Soutenir Unlock<small>Aider à couvrir les frais de l'app</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endif %}
-      <li><a class="menu-item" href="/confidentialite"><span class="emoji" aria-hidden="true">🔒</span><span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
-      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener"><span class="emoji" aria-hidden="true">👋</span><span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
+      <li><button type="button" class="menu-item" data-install hidden>{{ icon('install') }}<span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
+      {% if is_admin %}<li><a class="menu-item" href="/admin">{{ icon('gauge') }}<span>Tableau de bord<small>Réservé à l'administrateur</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
+      {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard">{{ icon('trophy') }}<span>Classement</span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
+      {% if donations_enabled %}<li><a class="menu-item menu-item--support" href="/soutenir/go" target="_blank" rel="noopener" data-sheet-open="sheet-support">{{ icon('heart') }}<span>Soutenir Unlock<small>Aider à couvrir les frais de l'app</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
+      <li><a class="menu-item" href="/confidentialite">{{ icon('shield') }}<span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
+      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener">{{ icon('msg') }}<span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
     </ul>
     </div>
     <div class="menu-col">
     <ul class="menu-group">
-      <li><a class="menu-item" href="/logout"><span class="emoji" aria-hidden="true">🚪</span><span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></a></li>
-      <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete"><span class="emoji" aria-hidden="true">🗑️</span><span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span><svg class="menu-item__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg></button></li>
+      <li><a class="menu-item" href="/logout">{{ icon('logout') }}<span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
+      <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete">{{ icon('trash') }}<span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
     </ul>
     <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
     </div>
@@ -136,7 +136,7 @@
 <div class="sheet" id="sheet-cgu" aria-hidden="true" data-locked="1">
   <div class="sheet__backdrop"></div>
   <div class="sheet__panel" role="alertdialog" aria-modal="true" aria-labelledby="cgu-title" aria-describedby="cgu-desc">
-    <div class="sheet__head"><h2 class="sheet__title" id="cgu-title"><span class="emoji" aria-hidden="true">📄</span> Conditions d'utilisation</h2></div>
+    <div class="sheet__head"><h2 class="sheet__title" id="cgu-title">Conditions d'utilisation</h2></div>
     <div class="sheet__body">
       <p id="cgu-desc" style="color:var(--ink-2)">Pour continuer à utiliser Unlock, merci de lire et d'accepter les conditions d'utilisation et la politique de confidentialité. Rien ne change pour vos données : elles restent visibles par vous seul.</p>
       <form method="post" action="/conditions/accepter" style="display:grid; gap:12px; margin-top:14px">
@@ -161,23 +161,23 @@
     <div class="sheet__grip"></div>
     <div class="sheet__head">
       <h2 class="sheet__title" id="support-title">Soutenir Unlock</h2>
-      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer">{{ icon('x') }}</button>
     </div>
     <div class="support">
       <div class="support__col">
       <p>Unlock est gratuit et sans publicité. Toutes les fonctionnalités sont ouvertes à tous, que vous fassiez un don ou non.</p>
       <p>Si l'app vous plaît, vos dons servent à couvrir ses frais.</p>
       <ul class="support__costs">
-        <li><span class="emoji" aria-hidden="true">🔑</span><span><b>L'accès à l'API Strava</b>, un abonnement payant sans lequel Unlock ne peut pas lire vos sorties.</span></li>
-        <li><span class="emoji" aria-hidden="true">🌐</span><span><b>Le nom de domaine</b> (l'adresse du site).</span></li>
+        <li>{{ icon('key') }}<span><b>L'accès à l'API Strava</b>, un abonnement payant sans lequel Unlock ne peut pas lire vos sorties.</span></li>
+        <li>{{ icon('globe') }}<span><b>Le nom de domaine</b> (l'adresse du site).</span></li>
       </ul>
       </div>
       <div class="support__col">
-      <p>L'hébergement et la base de données ne coûtent rien pour l'instant. Au-delà de ces frais, votre don peut aussi m'offrir un gel pour ma prochaine <span class="nobr">sortie <span class="emoji" aria-hidden="true">🏃</span></span></p>
+      <p>L'hébergement et la base de données ne coûtent rien pour l'instant. Au-delà de ces frais, votre don peut aussi m'offrir un gel pour ma prochaine sortie.</p>
       <p class="support__muted">Les dons passent par Ko-fi, une plateforme de soutien aux créateurs. Le montant minimum est de 2&nbsp;€. Unlock ne voit jamais vos informations de paiement.</p>
       <div class="support__foot">
       <a class="btn btn--primary btn--block support__cta" href="/soutenir/go" target="_blank" rel="noopener">Faire un don sur Ko-fi
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>
+          {{ icon('external') }}</a>
         <p class="support__thanks">Un don ne débloque aucune fonctionnalité. Merci pour votre soutien !</p>
       </div>
       </div>
@@ -192,14 +192,14 @@
     <div class="sheet__grip"></div>
     <div class="sheet__head">
       <h2 class="sheet__title" id="ios-title">Installer Unlock</h2>
-      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer">{{ icon('x') }}</button>
     </div>
     <ol class="steps">
       <li><span>Ouvrez cette page dans <strong>Safari</strong>.</span></li>
       <li><span>Touchez le bouton Partager <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-label="Partager"><path d="M12 3v12M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/></svg> en bas de l'écran.</span></li>
       <li><span>Choisissez <strong>Sur l'écran d'accueil</strong>, puis <strong>Ajouter</strong>.</span></li>
     </ol>
-    <p style="margin-top:16px; color:var(--muted); font-size:var(--fs-sm)">L'icône Unlock apparaîtra à côté de vos autres apps 🎉</p>
+    <p style="margin-top:16px; color:var(--muted); font-size:var(--fs-sm)">L'icône Unlock apparaîtra à côté de vos autres apps.</p>
   </div>
 </div>
 {% endblock %}
@@ -211,6 +211,7 @@
   </div>
 </div>
 
+<script>window.UNLOCK_ICONS = {{ icons_json | safe }};</script>
 <script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key, 'sync': sync_state} | tojson }};</script>
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
 {% if cgu_needed %}<script>document.addEventListener('DOMContentLoaded', () => Unlock.openSheet('sheet-cgu'));</script>{% endif %}

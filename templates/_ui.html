@@ -21,24 +21,22 @@
     <span class="brand__word">unlock</span>
   </a>
   <nav class="nav" aria-label="Navigation principale">
-    {% for key, href, emoji, label in nav_items %}
-    <a class="nav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}><span class="emoji" aria-hidden="true">{{ emoji }}</span>{{ label }}</a>
+    {% for key, href, ic, label in nav_items %}
+    <a class="nav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}>{{ icon(ic) }}{{ label }}</a>
     {% endfor %}
   </nav>
   <div class="topbar__spacer"></div>
   <div class="topbar__actions">
-    <button type="button" class="btn btn--outline btn--sm" data-install hidden><span class="emoji" aria-hidden="true">📲</span><span>Installer l'app</span></button>
-    <button type="button" class="iconbtn" data-sheet-open="sheet-menu" aria-label="Ouvrir le menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>
-    </button>
+    <button type="button" class="btn btn--outline btn--sm" data-install hidden>{{ icon('install') }}<span>Installer l'app</span></button>
+    <button type="button" class="iconbtn" data-sheet-open="sheet-menu" aria-label="Ouvrir le menu">{{ icon('menu') }}</button>
   </div>
 </header>
 {%- endmacro %}
 
 {% macro bottomnav(active) -%}
 <nav class="bottomnav" aria-label="Navigation">
-  {% for key, href, emoji, label in nav_items %}
-  <a class="bottomnav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}><span class="emoji" aria-hidden="true">{{ emoji }}</span>{{ label }}</a>
+  {% for key, href, ic, label in nav_items %}
+  <a class="bottomnav__link" href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}>{{ icon(ic) }}{{ label }}</a>
   {% endfor %}
 </nav>
 {%- endmacro %}

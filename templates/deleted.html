@@ -2,17 +2,17 @@
 {% block title %}Données supprimées · Unlock{% endblock %}
 {% block card %}
 {% if ok %}
-<div class="status__icon">✅</div>
+<div class="status__icon status__icon--ok">{{ icon('check-circle') }}</div>
 <h1>Vos données sont supprimées</h1>
 <p>Cette page vaut confirmation écrite de la suppression. Vous pouvez la capturer pour la garder.</p>
 <ul class="receipt">
-  <li>🔓 Accès d'Unlock à votre compte Strava : révoqué</li>
-  <li>🗑️ Identifiant, jeton et historique de connexion : effacés</li>
-  <li>🧠 Activités gardées en cache : effacées</li>
-  <li>🕒 Le {{ deleted_at }}</li>
+  <li>{{ icon('check') }}<span>Accès d'Unlock à votre compte Strava révoqué</span></li>
+  <li>{{ icon('check') }}<span>Identifiant, jeton et historique de connexion effacés</span></li>
+  <li>{{ icon('check') }}<span>Activités gardées en cache effacées</span></li>
+  <li>{{ icon('clock') }}<span>Le {{ deleted_at }}</span></li>
 </ul>
 {% else %}
-<div class="status__icon">⚠️</div>
+<div class="status__icon status__icon--warn">{{ icon('alert') }}</div>
 <h1>Suppression incomplète</h1>
 <p>L'accès Strava a été révoqué mais la base de données n'a pas répondu. Envoyez un <a href="{{ linkedin_url }}" target="_blank" rel="noopener">message LinkedIn</a> : la suppression sera terminée manuellement sous 30 jours et vous recevrez une confirmation.</p>
 {% endif %}

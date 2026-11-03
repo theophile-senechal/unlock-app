@@ -12,27 +12,27 @@
 
     <div class="maptools">
       <div class="seg" role="group" aria-label="Type d'affichage">
-        <button type="button" class="seg__btn" data-mode="route" aria-pressed="true"><span class="emoji" aria-hidden="true">〰️</span>Tracés</button>
-        <button type="button" class="seg__btn" data-mode="grid" aria-pressed="false"><span class="emoji" aria-hidden="true">🧩</span>Blocs</button>
-        <button type="button" class="seg__btn" data-mode="communes" aria-pressed="false"><span class="emoji" aria-hidden="true">🏘️</span>Communes</button>
+        <button type="button" class="seg__btn" data-mode="route" aria-pressed="true">Tracés</button>
+        <button type="button" class="seg__btn" data-mode="grid" aria-pressed="false">Blocs</button>
+        <button type="button" class="seg__btn" data-mode="communes" aria-pressed="false">Communes</button>
       </div>
       <div class="maptools__spacer"></div>
       <div class="maptools__filters" id="filters-inline"></div>
       <button type="button" class="iconbtn maptools__filterbtn filter-dot" id="filter-btn" data-sheet-open="sheet-filters" aria-label="Filtres">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+        {{ icon('sliders') }}
       </button>
     </div>
 
     <!-- Filters (moved inline on desktop, into a sheet on smaller screens) -->
     <div id="filters" class="filters-set" style="display:contents">
       <label class="sr-only" for="sport-select">Sport</label>
-      <select class="select select--pill" id="sport-select"><option value="all">🏅  Tous les sports</option></select>
+      <select class="select select--pill" id="sport-select"><option value="all">Tous les sports</option></select>
       <label class="sr-only" for="year-select">Année</label>
-      <select class="select select--pill" id="year-select"><option value="all">📅  Toutes les années</option></select>
+      <select class="select select--pill" id="year-select"><option value="all">Toutes les années</option></select>
       <label class="sr-only" for="grid-select">Taille des blocs</label>
       <select class="select select--pill" id="grid-select" hidden>
-        <option value="100">🧩  Blocs de 100 m</option>
-        <option value="250" selected>🧩  Blocs de 250 m</option>
+        <option value="100">Blocs de 100 m</option>
+        <option value="250" selected>Blocs de 250 m</option>
       </select>
     </div>
 
@@ -47,10 +47,10 @@
         </div>
 
         <div class="stats" id="act-stats">
-          <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">🏃</span>Activités</span><span class="stat__val" id="s-count">–</span></div>
-          <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">📏</span>Distance</span><span class="stat__val"><span id="s-dist">–</span><small>km</small></span></div>
+          <div class="stat"><span class="stat__top">Sorties</span><span class="stat__val" id="s-count">–</span></div>
+          <div class="stat"><span class="stat__top">Distance</span><span class="stat__val"><span id="s-dist">–</span><small>km</small></span></div>
           <div class="stat stat--wide" id="stat-third">
-            <span class="stat__top"><span class="emoji" aria-hidden="true" id="s3-emoji">📐</span><span id="s3-label">Par sortie</span></span>
+            <span class="stat__top"><span id="s3-label">Par sortie</span></span>
             <span class="stat__val"><span id="s3-val">–</span><small id="s3-unit">km</small></span>
             <span class="stat__sub" id="s3-sub"></span>
           </div>
@@ -59,12 +59,12 @@
         <!-- Mode Communes : en-tête du département (visible panneau replié) -->
         <div class="dep-top" id="dep-top" hidden>
           <div class="dep-head">
-            <div class="dep-head__name"><span class="emoji" aria-hidden="true">🏘️</span><span id="dep-name">–</span> <span class="dep-head__code" id="dep-code"></span></div>
+            <div class="dep-head__name"><span id="dep-name">–</span> <span class="dep-head__code" id="dep-code"></span></div>
             <label class="btn btn--outline btn--sm dep-change">Changer<span class="sr-only"> de département</span>
               <select id="dep-select" aria-label="Choisir un département"></select></label>
           </div>
           <div class="dep-kpi">
-            <span class="dep-kpi__lbl"><span class="emoji" aria-hidden="true">🏘️</span>Communes explorées</span>
+            <span class="dep-kpi__lbl">Communes explorées</span>
             <span class="dep-kpi__val"><span id="dk-visited">–</span> <small>/ <span id="dk-total">–</span></small></span>
             <span class="dep-kpi__sub"><span id="dk-pct">–</span> des communes du département</span>
             <div class="bar"><div class="bar__fill" id="dk-fill"></div></div>
@@ -72,8 +72,8 @@
           <div class="stats dep-stats">
             <div class="stat dep-stats__m"><span class="stat__top">Communes</span><span class="stat__val"><span id="ds-visited">–</span><small id="ds-total"></small></span></div>
             <div class="stat dep-stats__m"><span class="stat__top">Département</span><span class="stat__val" id="ds-pct">–</span></div>
-            <div class="stat"><span class="stat__top"><span class="emoji" aria-hidden="true">💯</span>À 100&nbsp;%</span><span class="stat__val" id="ds-100">–</span></div>
-            <div class="stat dep-stats__d"><span class="stat__top"><span class="emoji" aria-hidden="true">🔥</span>Plus de 50&nbsp;%</span><span class="stat__val" id="ds-50">–</span></div>
+            <div class="stat"><span class="stat__top">À 100&nbsp;%</span><span class="stat__val" id="ds-100">–</span></div>
+            <div class="stat dep-stats__d"><span class="stat__top">Plus de 50&nbsp;%</span><span class="stat__val" id="ds-50">–</span></div>
           </div>
         </div>
 
@@ -81,7 +81,7 @@
         <div class="ccard-m" id="commune-card" hidden>
           <div class="ccard-m__nav">
             <button type="button" class="ccard-m__back" id="cc-back">‹ <span id="cc-dep">Département</span></button>
-            <button type="button" class="iconbtn iconbtn--sm" id="cc-close" aria-label="Fermer la fiche"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+            <button type="button" class="iconbtn iconbtn--sm" id="cc-close" aria-label="Fermer la fiche">{{ icon('x') }}</button>
           </div>
           <div class="ccard-m__head">
             <div class="ccard-m__id"><div class="ccard-m__name" id="cc-name"></div><div class="ccard-m__sub" id="cc-sub"></div></div>
@@ -90,22 +90,22 @@
           <div class="bar"><div class="bar__fill" id="cc-fill"></div></div>
           <div class="ccard-m__blocks" id="cc-blocks"></div>
           <div class="stats ccard-m__stats" id="cc-stats"></div>
-          <button type="button" class="btn btn--primary btn--block" id="cc-go" style="margin-top:14px"><span class="emoji" aria-hidden="true">🧩</span>Voir mes blocs ici</button>
+          <button type="button" class="btn btn--primary btn--block" id="cc-go" style="margin-top:14px">{{ icon('grid') }}Voir mes blocs ici</button>
         </div>
 
         <div class="panel__more" id="panel-more">
           <div id="route-hint" class="hint">
-            <span class="emoji" aria-hidden="true">💡</span>
+            {{ icon('info', 'i hint__i') }}
             <span>Passez en <button type="button" data-mode="grid">mode Blocs</button> pour voir quelles communes vous avez explorées, et à quel point.</span>
           </div>
 
           <div id="dep-extra" hidden>
             <section class="section" id="dep-rank-section">
-              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🗺️</span>Vos 5 départements</h2></div>
+              <div class="section__head"><h2 class="section__title">Vos 5 départements</h2></div>
               <ol class="rank" id="dep-rank"></ol>
             </section>
             <section class="section" id="dep-top-section">
-              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🏆</span>Vos 5 communes</h2></div>
+              <div class="section__head"><h2 class="section__title">Vos 5 communes</h2></div>
               <ol class="rank" id="dep-communes"></ol>
             </section>
             <div class="legend legend--dep">
@@ -114,18 +114,18 @@
               <div class="dlegend__lbl"><span>0&nbsp;%</span><span>1&nbsp;%</span><span>100&nbsp;%</span></div>
             </div>
           </div>
-          <div class="empty" id="dep-empty" hidden><span class="emoji">🗺️</span>Aucune commune française traversée pour ces filtres.</div>
+          <div class="empty" id="dep-empty" hidden>{{ icon('map', 'i empty__i') }}Aucune commune française traversée pour ces filtres.</div>
 
           <div id="grid-extra" hidden>
             <div class="calc-note" id="calc-note" hidden>
-              <span class="emoji" aria-hidden="true">✨</span>
+              {{ icon('info', 'i calc-note__i') }}
               <p><b>Nouveau calcul plus juste.</b> Les blocs sans aucun chemin ne comptent plus dans le % de vos communes. Une marge de 20&nbsp;m compense aussi l'imprécision du GPS.</p>
               <button type="button" class="calc-note__x" id="calc-note-x" aria-label="Masquer">×</button>
             </div>
             <section class="section">
-              <div class="section__head"><h2 class="section__title"><span class="emoji" aria-hidden="true">🏘️</span>Communes</h2></div>
+              <div class="section__head"><h2 class="section__title">Communes</h2></div>
               <div class="search">
-                <span class="emoji" aria-hidden="true">🔍</span>
+                {{ icon('search', 'i search__i') }}
                 <label class="sr-only" for="city-search">Chercher une commune</label>
                 <input class="input" id="city-search" list="city-suggestions" placeholder="Chercher une commune" autocomplete="off">
                 <datalist id="city-suggestions"></datalist>
@@ -139,12 +139,12 @@
                 <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="city-bar"><div class="bar__fill" id="city-fill"></div></div>
                 <div class="city__off" id="city-off" hidden><i class="hatch" aria-hidden="true"></i><span id="city-off-txt"></span></div>
               </div>
-              <div class="empty" id="city-empty" hidden><span class="emoji">🗺️</span>Aucune commune trouvée pour ces filtres. Les communes françaises apparaissent dès que vos blocs les traversent.</div>
+              <div class="empty" id="city-empty" hidden>{{ icon('map', 'i empty__i') }}Aucune commune trouvée pour ces filtres. Les communes françaises apparaissent dès que vos blocs les traversent.</div>
             </section>
 
             <section class="section" id="top-section">
               <div class="section__head">
-                <h2 class="section__title"><span class="emoji" aria-hidden="true">🏆</span>Vos 5 communes</h2>
+                <h2 class="section__title">Vos 5 communes</h2>
                 <div class="seg seg--sm" role="group" aria-label="Trier par">
                   <button type="button" class="seg__btn" data-sort="blocks" aria-pressed="true">Blocs</button>
                   <button type="button" class="seg__btn" data-sort="percent" aria-pressed="false">%</button>
@@ -172,7 +172,7 @@
       <div class="bar ctip__bar"><div class="bar__fill" id="ct-fill"></div></div>
       <div class="ctip__blocks" id="ct-blocks"></div>
       <div class="ctip__meta" id="ct-meta"></div>
-      <button type="button" class="ctip__link" id="ct-go"><span class="emoji" aria-hidden="true">🧩</span>Voir mes blocs ici →</button>
+      <button type="button" class="ctip__link" id="ct-go">{{ icon('grid') }}Voir mes blocs ici</button>
       <i class="ctip__arrow" id="ct-arrow"></i>
     </div>
   </main>
@@ -394,7 +394,7 @@
       fitPending = firstLoad;
       renderStats(); render();
     } catch (err) {
-      if (err.message !== 'auth') Unlock.toast('⚠️ Impossible de charger vos activités. Vérifiez votre connexion puis réessayez.');
+      if (err.message !== 'auth') Unlock.toast('Impossible de charger vos activités. Vérifiez votre connexion puis réessayez.');
       console.error(err);
     } finally {
       if (firstLoad) { Unlock.loader.hide(); firstLoad = false; }
@@ -405,7 +405,7 @@
   function fillSelects(sport, year) {
     const ys = $('year-select');
     if (ys.options.length === 1 && data.available_years) {
-      data.available_years.forEach((y) => ys.add(new Option('📅  ' + y, y)));
+      data.available_years.forEach((y) => ys.add(new Option(y, y)));
       ys.value = year;
     }
     const ss = $('sport-select');
@@ -420,7 +420,7 @@
   function filterLabel() {
     const ss = $('sport-select'), ys = $('year-select'), gs = $('grid-select');
     const parts = [];
-    if (ss.value !== 'all') parts.push(ss.selectedOptions[0].text.replace(/^\S+\s+/, ''));
+    if (ss.value !== 'all') parts.push(ss.selectedOptions[0].text);
     if (ys.value !== 'all') parts.push(ys.value);
     if (mode !== 'route') parts.push(`blocs de ${gs.value} m`);
     return parts.length ? parts.join(', ') : 'Toutes vos activités';
@@ -428,7 +428,7 @@
 
   function updateSummary() {
     const ss = $('sport-select'), ys = $('year-select');
-    const sp = ss.value === 'all' ? 'Tous les sports' : ss.selectedOptions[0].text.replace(/^\S+\s+/, '');
+    const sp = ss.value === 'all' ? 'Tous les sports' : ss.selectedOptions[0].text;
     const yr = ys.value === 'all' ? 'toutes les années' : 'en ' + ys.value;
     $('filter-summary').textContent = `${sp}, ${yr}`;
   }
@@ -445,12 +445,12 @@
     if (mode === 'grid') {
       const m = +$('grid-select').value;
       const fields = Math.round((s.cells_conquered * m * m) / 7140);
-      $('s3-emoji').textContent = '🧩'; $('s3-label').textContent = 'Blocs';
+      $('s3-label').textContent = 'Blocs';
       $('s3-val').textContent = Unlock.fmt(s.cells_conquered); $('s3-unit').textContent = '';
-      $('s3-sub').textContent = `≈ ${Unlock.fmt(fields)} terrains de foot ⚽`;
+      $('s3-sub').textContent = `≈ ${Unlock.fmt(fields)} terrains de foot`;
     } else {
       const avg = s.activity_count ? s.total_distance / s.activity_count : 0;
-      $('s3-emoji').textContent = '📐'; $('s3-label').textContent = 'Par sortie';
+      $('s3-label').textContent = 'Par sortie';
       $('s3-val').textContent = Unlock.fmt(avg, 1); $('s3-unit').textContent = 'km';
       $('s3-sub').textContent = 'Distance moyenne';
     }
@@ -482,13 +482,13 @@
     }
     if (focusCity && city && city.outline) {
       map.fitBounds(L.polygon(city.outline).getBounds(), fitPadding());
-      Unlock.toast(`📍 ${city.name} : votre commune la plus explorée (${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)}\u00a0%)`);
+      Unlock.toast(`${city.name} · commune la plus explorée · ${Unlock.fmt(city.stats.percent, city.stats.percent < 10 ? 1 : 0)}\u00a0%`, 'pin');
       focusCity = false; fitPending = false;
     } else if (bounds && bounds.isValid() && (fitPending || !map.getBounds().intersects(bounds))) {
       // Premier chargement, ou plus aucune activité visible à l'écran avec ce filtre : on recadre
       map.fitBounds(bounds, fitPadding()); fitPending = false;
     }
-    if (!(data.coords || []).length) Unlock.toast('🤷 Aucune activité GPS pour ces filtres.');
+    if (!(data.coords || []).length) Unlock.toast('Aucune activité GPS pour ces filtres.');
   }
 
   function renderCities() {
@@ -566,7 +566,7 @@
       const li = document.createElement('li');
       const main = sortKey === 'percent' ? `${Unlock.fmt(c.stats.percent, 1)}\u00a0%` : `${Unlock.fmt(c.stats.blocks)} blocs`;
       const sub = sortKey === 'percent' ? `${Unlock.fmt(c.stats.blocks)} blocs` : `${Unlock.fmt(c.stats.percent, 1)}\u00a0%`;
-      const medal = ['🥇', '🥈', '🥉'][i] || (i + 1);
+      const medal = i + 1;
       li.innerHTML = `<button type="button" class="rank__item" data-city="${Unlock.esc(c.name)}" aria-current="${c.name === selectedCity}">
         <span class="rank__pos">${medal}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}</span>
         <span class="rank__val">${main}<small>${sub}</small></span></button>`;
@@ -660,7 +660,7 @@
       cur = code; unselect(true);
       fillHeader();
       if (!code) { layer.clearLayers(); geo = null; return; }
-      try { geo = await getGeo(code); } catch (e) { if (e.message !== 'auth') Unlock.toast('⚠️ Contours du département indisponibles pour le moment.'); return; }
+      try { geo = await getGeo(code); } catch (e) { if (e.message !== 'auth') Unlock.toast('Contours du département indisponibles pour le moment.'); return; }
       if (cur !== code || mode !== 'communes') return;
       draw(fit);
     }

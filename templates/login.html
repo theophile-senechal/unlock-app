@@ -35,7 +35,8 @@
 
   .how { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
   .how li { display: grid; grid-template-columns: 40px 1fr; gap: 12px; align-items: center; }
-  .how .emoji { width: 40px; height: 40px; border-radius: 12px; background: var(--canvas); display: grid; place-items: center; font-size: 1.2rem; }
+  .how__ic { width: 40px; height: 40px; border-radius: 12px; background: var(--canvas); color: var(--brand); display: grid; place-items: center; }
+  .how__ic .i { width: 21px; height: 21px; }
   .how b { display: block; font-weight: 700; }
   .how small { color: var(--muted); font-size: var(--fs-sm); }
 
@@ -64,6 +65,8 @@
   .notice { padding: 12px 14px; border-radius: var(--r-md); font-size: var(--fs-sm); font-weight: 600; display: flex; gap: 10px; }
   .notice--err { background: #FDECEA; color: var(--danger); }
   .notice--ok { background: #EAF5EE; color: var(--ok); }
+  .notice .i { width: 18px; height: 18px; margin-top: 1px; }
+  .login__chip .i { width: 1.1em; height: 1.1em; }
   .login__foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; font-size: var(--fs-xs); color: var(--muted); padding-top: 6px; border-top: 1px solid var(--line); }
   .login__foot a { color: var(--muted); text-decoration: none; }
   .login__foot a:hover { color: var(--brand); text-decoration: underline; }
@@ -81,7 +84,7 @@
     .login__title { font-size: clamp(2rem, 5.4vh, 2.9rem); }
     .login__lead { font-size: 1rem; }
     .how { gap: clamp(6px, 1.2vh, 12px); }
-    .how .emoji { width: 36px; height: 36px; }
+    .how__ic { width: 36px; height: 36px; }
     .how li { grid-template-columns: 36px 1fr; }
     .login__chip { bottom: 32px; font-size: var(--fs-md); padding: 10px 18px; }
     /* Sur PC, le compteur d'explorateurs se pose sur l'illustration */
@@ -91,7 +94,7 @@
   /* Écrans de PC peu hauts : on resserre pour que tout tienne sans défiler */
   @media (min-width: 900px) and (max-height: 820px), (min-width: 900px) and (max-width: 1100px) {
     .how small { display: none; }
-    .how .emoji { width: 32px; height: 32px; font-size: 1.05rem; }
+    .how__ic { width: 32px; height: 32px; } .how__ic .i { width: 18px; height: 18px; }
     .how li { grid-template-columns: 32px 1fr; }
     .login__lead { font-size: .95rem; }
   }
@@ -113,7 +116,7 @@
     {% if active_users %}
     <p class="active-users active-users--art"><span class="active-users__dot" aria-hidden="true"></span><span><b class="num">{{ '{:,}'.format(active_users).replace(',', ' ') }}</b> explorateur{{ 's' if active_users > 1 }} actif{{ 's' if active_users > 1 }} ces {{ active_days }} derniers jours</span></p>
     {% endif %}
-    <div class="login__chip"><span class="emoji">🔓</span><span>+<span id="chip-n">24</span> blocs débloqués</span></div>
+    <div class="login__chip">{{ icon('unlock') }}<span>+<span id="chip-n">24</span> blocs débloqués</span></div>
   </div>
 
   <div class="login__content">
@@ -125,21 +128,21 @@
     </div>
 
     {% if error %}
-    <p class="notice notice--err" role="alert"><span class="emoji">⚠️</span>
+    <p class="notice notice--err" role="alert">{{ icon('alert') }}<span>
       {% if error == 'denied' %}Connexion annulée. Autorisez l'accès à vos activités pour afficher votre carte.
       {% elif error == 'expired' %}Votre session Strava a expiré. <span class="nobr">Reconnectez-vous</span> pour continuer.
       {% elif error == 'cgu' %}Cochez la case pour accepter les CGU et la politique de confidentialité avant de vous connecter.
       {% elif error == 'scope' %}Unlock a besoin de lire vos activités. Cochez « Voir vos activités » lors de la connexion.
-      {% else %}La connexion à Strava n'a pas abouti. Réessayez dans quelques instants.{% endif %}
+      {% else %}La connexion à Strava n'a pas abouti. Réessayez dans quelques instants.{% endif %}</span>
     </p>
     {% elif bye %}
-    <p class="notice notice--ok" role="status"><span class="emoji">👋</span> Vous êtes déconnecté. L'accès Strava est révoqué et vos données ont été effacées.</p>
+    <p class="notice notice--ok" role="status">{{ icon('check-circle') }}<span>Vous êtes déconnecté. L'accès Strava est révoqué et vos données ont été effacées.</span></p>
     {% endif %}
 
     <ul class="how">
-      <li><span class="emoji" aria-hidden="true">🏃</span><span><b>Connectez votre compte Strava</b><small>Lecture seule, rien n'est publié.</small></span></li>
-      <li><span class="emoji" aria-hidden="true">🧩</span><span><b>Vos traces deviennent des blocs</b><small>Des carrés de 100 m ou 250 m de côté.</small></span></li>
-      <li><span class="emoji" aria-hidden="true">🏘️</span><span><b>Voyez ce qu'il reste à explorer</b><small>Commune par commune, en pourcentage.</small></span></li>
+      <li><span class="how__ic">{{ icon('link') }}</span><span><b>Connectez votre compte Strava</b><small>Lecture seule, rien n'est publié.</small></span></li>
+      <li><span class="how__ic">{{ icon('grid') }}</span><span><b>Vos traces deviennent des blocs</b><small>Des carrés de 100 m ou 250 m de côté.</small></span></li>
+      <li><span class="how__ic">{{ icon('pin') }}</span><span><b>Voyez ce qu'il reste à explorer</b><small>Commune par commune, en pourcentage.</small></span></li>
     </ul>
 
     {% if active_users %}
@@ -153,7 +156,7 @@
       </label>
       <button type="submit" class="btn btn--primary btn--block" id="login-btn" style="min-height:52px; font-size:1rem" aria-describedby="agree-hint">Se connecter avec Strava</button>
       <p class="agree__hint" id="agree-hint" aria-live="polite"></p>
-      <button type="button" class="btn btn--outline btn--block" data-install hidden><span class="emoji" aria-hidden="true">📲</span> Installer l'app sur ce téléphone</button>
+      <button type="button" class="btn btn--outline btn--block" data-install hidden>{{ icon('install') }}Installer l'app sur ce téléphone</button>
     </form>
 
     <div class="consent">

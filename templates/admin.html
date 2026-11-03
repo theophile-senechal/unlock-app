@@ -3,7 +3,7 @@
 {% block title %}Tableau de bord · Unlock{% endblock %}
 {% block head %}
 <style>
-  .dash { display: grid; gap: 14px; }
+  .dash { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   .dash-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 1024px) { .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .updated { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
@@ -22,6 +22,8 @@
   .cap__side { display: grid; gap: 10px; }
   .callout { padding: 14px 16px; border-radius: var(--r-md); background: var(--canvas); font-size: var(--fs-sm); color: var(--ink-2); display: flex; gap: 10px; }
   .callout b { color: var(--ink); }
+  .callout__i { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--muted); }
+  .callout--warn .callout__i { color: #B26A00; } .callout--bad .callout__i { color: var(--danger); }
   .callout--warn { background: #FDF3E6; } .callout--bad { background: #FDECEA; }
 
   .kpis5 { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -43,6 +45,8 @@
   .health { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
   .health li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); }
   .health li:last-child { border-bottom: 0; }
+  .health__i { display: grid; place-items: center; height: 20px; color: var(--muted); } .health__i .i { width: 18px; height: 18px; }
+  .health__i--ok { color: var(--ok); } .health__i--bad { color: var(--danger); }
   .health b { display: block; color: var(--ink); font-weight: 650; }
   .health small { color: var(--muted); }
   .quota { height: 6px; border-radius: 99px; background: var(--canvas); margin-top: 6px; overflow: hidden; }
@@ -51,6 +55,7 @@
   .events { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
   .events td { padding: 10px 4px; border-bottom: 1px solid var(--line); }
   .events tr:last-child td { border-bottom: 0; }
+  .events .ev { display: inline-flex; align-items: center; gap: 8px; } .events .ev .i { width: 16px; height: 16px; color: var(--muted); flex: none; }
   .events td:last-child { text-align: right; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
   .note { font-size: var(--fs-xs); color: var(--muted); margin-top: 8px; }
 
@@ -70,6 +75,7 @@
   .ptable .p-id a:hover { color: var(--brand); }
   .ptable .p-copy { margin-left: 6px; border: 0; background: none; cursor: pointer; font-size: 13px; padding: 2px 4px; border-radius: 6px; color: var(--muted); }
   .ptable .p-copy:hover { background: var(--canvas); }
+  .ptable .p-copy .i { width: 14px; height: 14px; vertical-align: -2px; }
   .ptable td.p-nm, .ptable td.p-fn { white-space: normal; overflow-wrap: anywhere; }
   .ptable .p-mob { display: none; }
   .ptable th.p-dt { width: 210px; }
@@ -110,7 +116,7 @@
         <!-- Capacité -->
         <section class="surface cap" aria-labelledby="cap-t">
           <div>
-            <h2 class="cap__label" id="cap-t"><span class="emoji" aria-hidden="true">🎟️</span>Places Strava occupées</h2>
+            <h2 class="cap__label" id="cap-t">Places Strava occupées</h2>
             <div class="cap__big"><span id="c-used">–</span> <small>/ <span id="c-cap">999</span></small></div>
             <div class="capbar" role="img" id="capbar" aria-label="Répartition des places"><span class="capbar__active" id="b-active"></span><span class="capbar__dormant" id="b-dormant"></span></div>
             <div class="caplegend">
@@ -124,17 +130,17 @@
 
         <!-- KPI -->
         <div class="kpis5">
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">☀️</span>Actifs aujourd'hui</span><span class="kpi__val" id="k-today">–</span><span class="kpi__sub" id="k-today-sub"></span><span class="kpi__help">Utilisateurs venus depuis minuit</span></div>
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">📅</span>Actifs sur 7 jours</span><span class="kpi__val" id="k-week">–</span><span class="kpi__sub" id="k-week-sub"></span><span class="kpi__help">Au moins une visite cette semaine</span></div>
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🆕</span>Nouveaux sur 7 jours</span><span class="kpi__val" id="k-new">–</span><span class="kpi__sub" id="k-new-sub"></span><span class="kpi__help">Premières connexions</span></div>
-          <div class="surface kpi"><span class="kpi__label"><span class="emoji" aria-hidden="true">🔁</span>Taux de retour</span><span class="kpi__val" id="k-ret">–</span><span class="kpi__sub" id="k-ret-sub"></span><span class="kpi__help">Utilisateurs revenus un autre jour que leur inscription</span></div>
+          <div class="surface kpi"><span class="kpi__label">Actifs aujourd'hui</span><span class="kpi__val" id="k-today">–</span><span class="kpi__sub" id="k-today-sub"></span><span class="kpi__help">Utilisateurs venus depuis minuit</span></div>
+          <div class="surface kpi"><span class="kpi__label">Actifs sur 7 jours</span><span class="kpi__val" id="k-week">–</span><span class="kpi__sub" id="k-week-sub"></span><span class="kpi__help">Au moins une visite cette semaine</span></div>
+          <div class="surface kpi"><span class="kpi__label">Nouveaux sur 7 jours</span><span class="kpi__val" id="k-new">–</span><span class="kpi__sub" id="k-new-sub"></span><span class="kpi__help">Premières connexions</span></div>
+          <div class="surface kpi"><span class="kpi__label">Taux de retour</span><span class="kpi__val" id="k-ret">–</span><span class="kpi__sub" id="k-ret-sub"></span><span class="kpi__help">Utilisateurs revenus un autre jour que leur inscription</span></div>
         </div>
 
         <!-- Personnes connectées ces 7 derniers jours -->
         <section class="surface chart people" aria-labelledby="g-people">
           <div class="chart__head">
             <div>
-              <h2 class="chart__title" id="g-people"><span class="emoji" aria-hidden="true">👥</span>Connectés ces 7 derniers jours</h2>
+              <h2 class="chart__title" id="g-people">Connectés ces 7 derniers jours</h2>
               <p class="chart__note" id="p-note" style="margin-top:4px"></p>
             </div>
           </div>
@@ -154,7 +160,7 @@
         <section class="surface chart uniq" aria-labelledby="g0">
           <div class="uniq__head">
             <div>
-              <h2 class="chart__title" id="g0"><span class="emoji" aria-hidden="true">🌍</span>Utilisateurs depuis le lancement</h2>
+              <h2 class="chart__title" id="g0">Utilisateurs depuis le lancement</h2>
               <div class="uniq__total"><span id="u-total">–</span><small>utilisateurs uniques</small></div>
               <div class="kpi__sub" id="u-sub"></div>
             </div>
@@ -165,38 +171,38 @@
 
         <div class="dash-grid">
           <section class="surface chart" aria-labelledby="g1">
-            <div class="chart__head"><h2 class="chart__title" id="g1"><span class="emoji" aria-hidden="true">👀</span>Visiteurs par jour</h2><span class="chart__note">60 derniers jours, visiteurs uniques</span></div>
+            <div class="chart__head"><h2 class="chart__title" id="g1">Visiteurs par jour</h2><span class="chart__note">60 derniers jours, visiteurs uniques</span></div>
             <div class="chart__box"><canvas id="c-daily" role="img" aria-label="Visiteurs uniques par jour"></canvas></div>
             <p class="note" id="n-daily"></p>
           </section>
 
           <section class="surface chart" aria-labelledby="g2">
-            <div class="chart__head"><h2 class="chart__title" id="g2"><span class="emoji" aria-hidden="true">↕️</span>Arrivées et départs</h2>
+            <div class="chart__head"><h2 class="chart__title" id="g2">Arrivées et départs</h2>
               <span class="legend-inline"><span><i style="background:#9E2A3F"></i>Arrivées</span><span><i style="background:#2A86B8"></i>Départs</span></span></div>
             <div class="chart__box"><canvas id="c-weekly" role="img" aria-label="Arrivées et départs par semaine"></canvas></div>
             <p class="note">Par semaine, 12 dernières semaines. Départs = déconnexions, suppressions et révocations automatiques.</p>
           </section>
 
           <section class="surface chart" aria-labelledby="g3">
-            <div class="chart__head"><h2 class="chart__title" id="g3"><span class="emoji" aria-hidden="true">📈</span>Évolution des comptes</h2>
+            <div class="chart__head"><h2 class="chart__title" id="g3">Évolution des comptes</h2>
               <span class="legend-inline"><span><i style="background:#9E2A3F"></i>Places occupées</span><span><i style="background:#2A86B8"></i>Actifs 31 j</span></span></div>
             <div class="chart__box"><canvas id="c-snap" role="img" aria-label="Évolution des places occupées et des actifs"></canvas></div>
             <p class="note" id="n-snap"></p>
           </section>
 
           <section class="surface chart" aria-labelledby="g4">
-            <div class="chart__head"><h2 class="chart__title" id="g4"><span class="emoji" aria-hidden="true">🕒</span>Dernière visite</h2><span class="chart__note">Répartition des comptes connectés</span></div>
+            <div class="chart__head"><h2 class="chart__title" id="g4">Dernière visite</h2><span class="chart__note">Répartition des comptes connectés</span></div>
             <div class="hbar" id="recency"></div>
             <p class="note" id="n-recency"></p>
           </section>
 
           <section class="surface chart" aria-labelledby="g5">
-            <div class="chart__head"><h2 class="chart__title" id="g5"><span class="emoji" aria-hidden="true">🩺</span>Santé de l'app</h2></div>
+            <div class="chart__head"><h2 class="chart__title" id="g5">Santé de l'app</h2></div>
             <ul class="health" id="health"></ul>
           </section>
 
           <section class="surface chart" aria-labelledby="g6">
-            <div class="chart__head"><h2 class="chart__title" id="g6"><span class="emoji" aria-hidden="true">🧾</span>Derniers événements</h2><span class="chart__note">Anonymes</span></div>
+            <div class="chart__head"><h2 class="chart__title" id="g6">Derniers événements</h2><span class="chart__note">Anonymes</span></div>
             <table class="events"><tbody id="events"></tbody></table>
           </section>
         </div>
@@ -224,9 +230,9 @@
   const dayLbl = (s) => d(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).replace('.', '');
   const ago = (s) => { const m = Math.max(0, Math.round((Date.now() - d(s)) / 60000)); return m < 1 ? 'à l\'instant' : m < 60 ? `il y a ${m} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`; };
   const delta = (cur, prev, ref) => {
-    if (!prev) return cur ? `<span class="delta delta--up">▲ nouveau</span> <span class="delta__ref">${ref}</span>` : `<span class="delta__ref">${ref} : 0</span>`;
-    const p = (cur - prev) / prev * 100, cls = Math.abs(p) < .5 ? '' : p > 0 ? ' delta--up' : ' delta--down';
-    return `<span class="delta${cls}">${p > 0 ? '▲' : p < 0 ? '▼' : '='} ${p >= 0 ? '+' : '−'}${fmt(Math.abs(p))}\u00a0%</span> <span class="delta__ref">${ref} (${fmt(prev)})</span>`;
+    if (!prev) return cur ? `<span class="delta delta--up">nouveau</span> <span class="delta__ref">${ref}</span>` : `<span class="delta__ref">${ref} : 0</span>`;
+    const p = (cur - prev) / prev * 100, flat = Math.abs(p) < .5, cls = flat ? ' delta--flat' : p > 0 ? ' delta--up' : ' delta--down';
+    return `<span class="delta${cls}">${flat ? 'stable' : (p > 0 ? '+' : '−') + fmt(Math.abs(p)) + '\u00a0%'}</span> <span class="delta__ref">${ref} (${fmt(prev)})</span>`;
   };
   function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
 
@@ -236,7 +242,7 @@
       const s = await Unlock.getJSON('/api/admin/stats');
       render(s);
       $('updated').textContent = 'Actualisé à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-    } catch (e) { Unlock.toast('⚠️ Impossible de charger le tableau de bord.'); }
+    } catch (e) { Unlock.toast('Impossible de charger le tableau de bord.', 'alert'); }
     finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
   }
 
@@ -253,14 +259,14 @@
     const net = (+s.flow_30.arrivals || 0) - (+s.flow_30.departures || 0);
     const side = [];
     const level = pct >= 95 ? 'bad' : pct >= 80 ? 'warn' : '';
-    side.push(`<div class="callout${level ? ' callout--' + level : ''}"><span class="emoji">${level === 'bad' ? '🚨' : level === 'warn' ? '⚠️' : '✅'}</span><span><b>${fmt(pct, pct < 10 ? 1 : 0)}\u00a0% du quota utilisé.</b> ${level === 'bad' ? 'Les nouveaux utilisateurs risquent d\'être refusés : demande une hausse du quota à Strava.' : level === 'warn' ? 'Pense à demander une hausse du quota à Strava.' : 'Il reste de la marge.'}</span></div>`);
+    side.push(`<div class="callout${level ? ' callout--' + level : ''}">${Unlock.icon(level ? 'alert' : 'check-circle', 'i callout__i')}<span><b>${fmt(pct, pct < 10 ? 1 : 0)}\u00a0% du quota utilisé.</b> ${level === 'bad' ? 'Les nouveaux utilisateurs risquent d\'être refusés : demande une hausse du quota à Strava.' : level === 'warn' ? 'Pense à demander une hausse du quota à Strava.' : 'Il reste de la marge.'}</span></div>`);
     if (net > 0) {
       const days = Math.round(free / (net / 30));
-      side.push(`<div class="callout"><span class="emoji">🔮</span><span>Au rythme des 30 derniers jours (<b>+${fmt(net)}</b> comptes nets), l'app serait pleine dans <b>~${fmt(days)} jours</b>.</span></div>`);
+      side.push(`<div class="callout">${Unlock.icon('trend', 'i callout__i')}<span>Au rythme des 30 derniers jours (<b>+${fmt(net)}</b> comptes nets), l'app serait pleine dans <b>~${fmt(days)} jours</b>.</span></div>`);
     } else {
-      side.push(`<div class="callout"><span class="emoji">⚖️</span><span>Sur 30 jours, les départs compensent les arrivées (<b>${net >= 0 ? '+' : ''}${fmt(net)}</b> comptes nets) : pas de risque de saturation.</span></div>`);
+      side.push(`<div class="callout">${Unlock.icon('scale', 'i callout__i')}<span>Sur 30 jours, les départs compensent les arrivées (<b>${net >= 0 ? '+' : ''}${fmt(net)}</b> comptes nets) : pas de risque de saturation.</span></div>`);
     }
-    side.push(`<div class="callout"><span class="emoji">🧹</span><span><b>${fmt(u.at_risk)}</b> compte${u.at_risk > 1 ? 's' : ''} sans visite depuis plus de ${s.inactive_days - 7} jours, révoqué${u.at_risk > 1 ? 's' : ''} d'ici une semaine s'ils ne reviennent pas.</span></div>`);
+    side.push(`<div class="callout">${Unlock.icon('broom', 'i callout__i')}<span><b>${fmt(u.at_risk)}</b> compte${u.at_risk > 1 ? 's' : ''} sans visite depuis plus de ${s.inactive_days - 7} jours, révoqué${u.at_risk > 1 ? 's' : ''} d'ici une semaine s'ils ne reviennent pas.</span></div>`);
     $('cap-side').innerHTML = side.join('');
 
     /* KPI */
@@ -323,7 +329,7 @@
     $('n-snap').textContent = sn.length < 7 ? 'Un point est ajouté chaque jour : la courbe se dessine au fil du temps.' : `Quota Strava : ${fmt(cap)} places.`;
 
     /* Dernière visite */
-    const rows = [['Aujourd\'hui', u.seen_today], ['Cette semaine', u.seen_week], [`8 à ${s.inactive_days - 7} jours`, u.seen_month], [`Plus de ${s.inactive_days - 7} jours ⚠️`, u.at_risk]];
+    const rows = [['Aujourd\'hui', u.seen_today], ['Cette semaine', u.seen_week], [`8 à ${s.inactive_days - 7} jours`, u.seen_month], [`Plus de ${s.inactive_days - 7} jours`, u.at_risk]];
     const max = Math.max(1, ...rows.map((r) => r[1]));
     $('recency').innerHTML = rows.map(([l, v]) => `<div class="hbar__row"><span>${l}</span><div class="hbar__track"><div class="hbar__fill" style="width:${v / max * 100}%"></div></div><span class="hbar__val">${fmt(v)}</span></div>`).join('');
     $('n-recency').textContent = `Sans visite pendant ${s.inactive_days} jours, un compte est révoqué automatiquement et sa place libérée.`;
@@ -345,14 +351,14 @@
     if (s.kofi) H.push(s.kofi.enabled
       ? { ok: true, label: 'Dons Ko-fi', help: '', html: `<small>${fmt(s.kofi.d30)} clic${s.kofi.d30 > 1 ? 's' : ''} sur « Faire un don » ces 30 derniers jours (${fmt(s.kofi.total)} au total)</small>` }
       : { ok: null, label: 'Dons Ko-fi', help: 'Désactivés : ajoutez KOFI_URL dans Vercel pour afficher « Soutenir Unlock ».' });
-    $('health').innerHTML = H.map((h) => `<li><span class="emoji" aria-hidden="true">${h.ok === null ? '⏳' : h.ok ? '✅' : '⚠️'}</span><span><b>${h.label}</b>${h.html || (h.help ? `<small>${h.help}</small>` : '')}</span></li>`).join('');
+    $('health').innerHTML = H.map((h) => `<li><span class="health__i health__i--${h.ok === null ? 'wait' : h.ok ? 'ok' : 'bad'}">${Unlock.icon(h.ok === null ? 'clock' : h.ok ? 'check-circle' : 'alert')}</span><span><b>${h.label}</b>${h.html || (h.help ? `<small>${h.help}</small>` : '')}</span></li>`).join('');
 
     P.rows = s.people === undefined ? [] : s.people; renderPeople();
 
     /* Événements */
-    const LBL = { signup: ['🆕', 'Nouvel utilisateur'], logout: ['🚪', 'Déconnexion'], delete: ['🗑️', 'Données supprimées par l\'utilisateur'], revoke_inactive: ['🧹', 'Révocation automatique (inactif)'] };
+    const LBL = { signup: ['users', 'Nouvel utilisateur'], logout: ['logout', 'Déconnexion'], delete: ['trash', 'Données supprimées par l\'utilisateur'], revoke_inactive: ['broom', 'Révocation automatique (inactif)'] };
     const ev = s.recent || [];
-    $('events').innerHTML = ev.length ? ev.map((e) => `<tr><td><span class="emoji">${LBL[e.kind][0]}</span> ${LBL[e.kind][1]}</td><td>${ago(e.created_at)}</td></tr>`).join('')
+    $('events').innerHTML = ev.length ? ev.map((e) => `<tr><td><span class="ev">${Unlock.icon(LBL[e.kind][0])}${LBL[e.kind][1]}</span></td><td>${ago(e.created_at)}</td></tr>`).join('')
       : '<tr><td>Aucun événement pour l\'instant.</td><td></td></tr>';
   }
 
@@ -379,7 +385,7 @@
         <td class="p-name p-nm"><span class="p-last">${r.last_name ? esc(r.last_name) : unk}</span><span class="p-mob"> ${r.first_name ? esc(r.first_name) : ''}</span></td>
         <td class="p-fn">${r.first_name ? esc(r.first_name) : unk}</td>
         <td class="p-date">${when(r.last_login_date)}</td>
-        <td class="p-id"><a href="https://www.strava.com/athletes/${id}" target="_blank" rel="noopener" title="Voir le profil Strava">${id}</a><button type="button" class="p-copy" data-id="${id}" aria-label="Copier l'ID ${id}">📋</button></td>
+        <td class="p-id"><a href="https://www.strava.com/athletes/${id}" target="_blank" rel="noopener" title="Voir le profil Strava">${id}</a><button type="button" class="p-copy" data-id="${id}" aria-label="Copier l'ID ${id}">${Unlock.icon('copy')}</button></td>
       </tr>`;
     }).join('') || `<tr><td colspan="4">${n ? 'Personne ne correspond à cette recherche.' : 'Personne ces 7 derniers jours.'}</td></tr>`;
     $('p-more-wrap').hidden = !!q || all.length <= 15;
@@ -389,7 +395,7 @@
   $('p-more').addEventListener('click', () => { P.open = !P.open; renderPeople(); });
   $('people').addEventListener('click', async (e) => {
     const b = e.target.closest('.p-copy'); if (!b) return;
-    try { await navigator.clipboard.writeText(b.dataset.id); Unlock.toast('📋 ID Strava copié'); } catch (err) { Unlock.toast('Copie impossible : ' + b.dataset.id); }
+    try { await navigator.clipboard.writeText(b.dataset.id); Unlock.toast('ID Strava copié', 'check'); } catch (err) { Unlock.toast('Copie impossible : ' + b.dataset.id); }
   });
 
   $('refresh').addEventListener('click', load);
