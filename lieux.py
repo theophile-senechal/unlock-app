@@ -15,18 +15,18 @@ RAYON_M = 60          # distance de passage pour débloquer un lieu (marge GPS c
 RAYON_MAX_M = 250     # emprise maximale prise en compte pour un grand site
 PAS_M = 15            # pas de densification des traces
 
-# Catégories : code -> (libellé, emoji). L'ordre est celui de l'affichage.
+# Catégories : code -> (libellé, libellé court). Le code sert aussi de nom d'icône (icons.py). L'ordre est celui de l'affichage.
 CATEGORIES = {
-    'chateau':   ('Châteaux et manoirs', '🏰'),
-    'religieux': ('Églises et abbayes', '⛪'),
-    'megalithe': ('Mégalithes et sites antiques', '🪨'),
-    'fortif':    ('Forts et remparts', '🛡️'),
-    'musee':     ('Musées et culture', '🏛️'),
-    'monument':  ('Monuments et patrimoine', '🗿'),
-    'vue':       ('Points de vue', '🔭'),
-    'cascade':   ('Cascades', '💧'),
-    'jardin':    ('Parcs et jardins', '🌳'),
-    'sommet':    ('Sommets', '⛰️'),
+    'chateau':   ('Châteaux et manoirs', 'Châteaux'),
+    'religieux': ('Églises et abbayes', 'Églises'),
+    'megalithe': ('Mégalithes et sites antiques', 'Mégalithes'),
+    'fortif':    ('Forts et remparts', 'Forts'),
+    'musee':     ('Musées et culture', 'Musées'),
+    'monument':  ('Monuments et patrimoine', 'Monuments'),
+    'vue':       ('Points de vue', 'Points de vue'),
+    'cascade':   ('Cascades', 'Cascades'),
+    'jardin':    ('Parcs et jardins', 'Jardins'),
+    'sommet':    ('Sommets', 'Sommets'),
 }
 
 _CACHE, _LOCK = {}, threading.Lock()

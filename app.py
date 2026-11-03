@@ -13,6 +13,7 @@ import math
 import numpy as np
 import acces   # grille des blocs, marge GPS, blocs inaccessibles (données OpenStreetMap)
 import lieux   # lieux historiques et culturels à collectionner (données OpenStreetMap)
+import icons   # icônes au trait (pages et JavaScript)
 import shapely
 from shapely.geometry import Point, Polygon, shape as shp_shape
 from shapely.ops import transform as shp_transform
@@ -27,6 +28,8 @@ from sqlalchemy.pool import NullPool
 # ============================================================
 load_dotenv()
 app = Flask(__name__)
+app.jinja_env.globals['icon'] = icons.icon
+ICONS_JSON = json.dumps(icons.ICONS, separators=(',', ':'))
 app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -42,7 +45,7 @@ app.config.update(
 # ------------------------------------------------------------
 # Fonctionnalités / infos légales
 # ------------------------------------------------------------
-# ⚠️ Classement désactivé par défaut : il affiche les données Strava d'autres
+# Classement désactivé par défaut : il affiche les données Strava d'autres
 # utilisateurs et les agrège par commune, ce que la Strava API Policy (juin 2026)
 # interdit (§2.3, §5.4, §5.7, §6.2). Ne le réactiver qu'après accord écrit de Strava.
 ENABLE_LEADERBOARD = os.getenv('ENABLE_LEADERBOARD', 'false').lower() == 'true'
@@ -52,7 +55,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.02b'
+ASSET_VERSION = '2026.11.03'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -77,11 +80,11 @@ def _grid_size(default=250):
     return value if value in ALLOWED_GRID_SIZES else default
 
 NAV_ITEMS = [
-    ('map', '/', '🗺️', 'Carte'),
-    ('lieux', '/lieux', '🏰', 'Lieux'),
-    ('timelapse', '/timelapse', '⏱️', 'Timelapse'),
-    ('story', '/story', '📸', 'Story'),
-    ('stats', '/stats', '📊', 'Stats'),
+    ('map', '/', 'map', 'Carte'),
+    ('lieux', '/lieux', 'landmark', 'Lieux'),
+    ('timelapse', '/timelapse', 'play', 'Timelapse'),
+    ('story', '/story', 'story', 'Story'),
+    ('stats', '/stats', 'stats', 'Stats'),
 ]
 
 # Version des CGU et de la politique de confidentialité : la changer redemande l'accord de chacun
@@ -154,6 +157,7 @@ def inject_globals():
         # Utilisateur connecté qui n'a pas encore accepté cette version des CGU : fenêtre d'accord (sauf pages légales)
         'cgu_needed': 'access_token' in session and session.get('cgu') != CGU_VERSION and request.path not in _LEGAL_PATHS,
         'cgu_version': CGU_VERSION,
+        'icons_json': ICONS_JSON,
     }
 
 def sync_state():
@@ -1196,7 +1200,7 @@ def api_lieux():
         dep, com = (resume[0]['code'] if resume else None), None
     out = {"departements": resume,
            "sans_donnees": [{"code": c, "name": DEPARTEMENTS.get(c, c)} for c in base['deps'] if not lieux.departement(c)],
-           "categories": {k: {"label": v[0], "emoji": v[1]} for k, v in lieux.CATEGORIES.items()},
+           "categories": {k: {"label": v[0], "short": v[1], "icon": k} for k, v in lieux.CATEGORIES.items()},
            "ordre": list(lieux.CATEGORIES),    # ordre d'affichage (les clés d'un objet JSON sont triées)
            "rayon_m": lieux.RAYON_M, "source": "© contributeurs OpenStreetMap (ODbL)", "dep": None, "commune": None}
     out["absent"] = absent
@@ -1249,7 +1253,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
         "stats": { "total_distance": 0, "activity_count": 0, "cells_conquered": 0 }
     }
 
-    # 🚀 OPTIMISATION N°1: Utilisation d'un Dictionnaire au lieu d'une Liste
+    # Dictionnaire plutôt que liste
     # pour garder un index parfait avec grid_store_db
     activity_cache = {} 
     grid_store = {}
@@ -1357,7 +1361,7 @@ def _activities_data(sel_year, sel_sport, grid_meters):
                             print(f"Erreur traitement commune {row.nom_commune}: {e}")
                     if len(identified_cities) >= MAX_COMMUNES: break
         except Exception as e:
-            print(f"⚠️ Erreur Batch DB: {e}")
+            print(f"Erreur Batch DB: {e}")
 
         visited = set(filtered_cell_acts.keys())
         profil = data["acces_profil"]   # à pied si toutes les sorties affichées le sont, vélo idem, sinon les deux
