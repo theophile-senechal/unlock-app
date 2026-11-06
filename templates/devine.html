@@ -1,0 +1,452 @@
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Devine la commune · Unlock{% endblock %}
+
+{% block head %}
+<style>
+  /* ---------- Devine la commune (préfixe dv- / dd-) ---------- */
+  .dv-page { max-width: 1080px; }
+  .dv-page .page__head { max-width: 560px; margin: 0 auto 14px; }
+  .dv-lead { display: none; }
+  .dv { max-width: 560px; margin: 0 auto; }
+  .dv-grid { display: flex; flex-direction: column; }
+  .dv-side { display: contents; }
+  .dv-grid > .dv-card { order: 2; }
+  .dv-side > * { order: 3; }
+  .dv-side > .dd-day { order: 1; }
+
+  .dd-day { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 10px; margin: 0 0 12px; }
+  .dv-q { font-size: .6875rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  .dd-chips { display: flex; gap: 6px; flex-wrap: nowrap; }
+  .dd-chip { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 999px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); font-size: var(--fs-xs); font-weight: 650; color: var(--ink-2); white-space: nowrap; }
+  .dd-chip .i { width: 14px; height: 14px; color: var(--brand); }
+
+  .dv-card { position: relative; display: flex; flex-direction: column; border-radius: var(--r-lg); background: var(--surface); box-shadow: 0 0 0 1px var(--line); padding: 14px; }
+  .dv-shape { display: block; width: 100%; height: clamp(110px, calc(100dvh - 560px), 300px); }
+  .dv--r .dv-shape { height: clamp(100px, calc(100dvh - 590px), 250px); }
+  .dv:has(.dd-tour) .dv-shape { height: clamp(90px, calc(100dvh - 700px), 200px); }
+  .dv-card:has(.dd-tag) .dv-shape { height: clamp(100px, calc(100dvh - 600px), 270px); }
+  .dv-shape .o { fill: var(--canvas); stroke: none; }
+  .dv-shape .l { fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+  .dv-shape .b { fill: var(--brand); opacity: .78; }
+  .dv-shape.is-new .b { animation: dv-pop .35s var(--ease) both; animation-delay: calc(var(--k, 0) * 1ms); transform-box: fill-box; transform-origin: center; }
+  @keyframes dv-pop { from { opacity: 0; transform: scale(.3); } to { opacity: .78; transform: none; } }
+  .dd-tag { align-self: flex-start; max-width: 100%; margin-bottom: 8px; display: inline-flex; align-items: center; gap: 6px; min-height: 26px; padding: 3px 10px; border-radius: 13px; font-size: var(--fs-xs); font-weight: 650; line-height: 1.35; }
+  .dd-tag .i { width: 14px; height: 14px; }
+  .dd-tag--seconde { background: #FDF1DC; color: #7A4B00; }
+  .dd-tag--nouvelle { background: var(--brand-50); color: var(--brand); }
+  .dv-cap { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 22px; margin-top: 8px; font-size: var(--fs-xs); color: var(--muted); }
+  .dv-cap > * { white-space: nowrap; }
+  .dd-hint { display: inline-flex; align-items: center; gap: 6px; height: 34px; margin: -2px 0; padding: 0 12px; border: 0; border-radius: 999px; background: var(--canvas); box-shadow: inset 0 0 0 1px var(--line); font-size: var(--fs-xs); font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .dd-hint:hover { background: var(--brand-50); }
+  .dd-hint:disabled { opacity: .6; cursor: progress; }
+  .dd-hint .i, .dd-used .i { width: 15px; height: 15px; color: var(--brand); }
+  .dd-used { display: inline-flex; align-items: center; gap: 6px; font-weight: 650; color: var(--brand); }
+  .dd-name { display: none; }
+
+  .dv-ask { margin: 14px 0 0; font-family: var(--font-display); font-weight: 750; font-size: 1.25rem; letter-spacing: -.02em; line-height: 1.25; color: var(--ink); }
+  .dv-field { margin-top: 10px; }
+  .dv-input { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 6px 0 14px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); transition: box-shadow .15s; }
+  .dv-input:focus-within { box-shadow: 0 0 0 2px var(--ink); }
+  .dv-input > .i { width: 18px; height: 18px; color: var(--muted); }
+  .dv-input input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: none; padding: 0; font-size: 16px; color: var(--ink); text-overflow: ellipsis; }
+  .dv-input input::placeholder { color: var(--muted); opacity: 1; }
+  .dv-input input:focus-visible { outline: 0; }
+  .dv-go { flex: none; height: 40px; padding: 0 14px; border: 0; border-radius: 10px; background: var(--ink); color: #fff; font-size: var(--fs-sm); font-weight: 700; }
+  .dv-go:disabled { background: var(--canvas); color: var(--muted); box-shadow: inset 0 0 0 1px var(--line); cursor: default; }
+  .dv-go:focus-visible { outline-offset: 2px; }
+  .dv-sugg { margin: 6px 0 0; padding: 0; list-style: none; border-radius: 14px; background: var(--surface); box-shadow: 0 10px 28px -12px rgba(24,22,27,.35), 0 0 0 1px var(--line); overflow: hidden; }
+  .dv-sugg li { display: flex; flex-direction: column; justify-content: center; gap: 1px; min-height: 48px; padding: 7px 14px; border-top: 1px solid var(--line); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .dv-sugg li:first-child { border-top: 0; }
+  .dv-sugg li[aria-selected="true"] { background: var(--canvas); }
+  @media (hover: hover) { .dv-sugg li:hover { background: var(--canvas); } }
+  .dv-sugg b { max-width: 100%; font-weight: 500; color: var(--ink); line-height: 1.3; overflow-wrap: anywhere;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+  .dv-sugg b strong { font-weight: 750; }
+  .dv-sugg small { max-width: 100%; display: flex; font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; }
+  .dv-sugg small span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .dv-sugg small i { flex: none; font-style: normal; white-space: pre; }
+  .dv-sugg .dv-none { display: block; color: var(--muted); font-size: var(--fs-sm); cursor: default; }
+  .dv-sugg .dv-none:hover { background: none; }
+  .dv-note, .dv-err { display: flex; gap: 8px; margin-top: 10px; font-size: var(--fs-xs); color: var(--muted); line-height: 1.45; }
+  .dv-note .i, .dv-err .i { width: 15px; height: 15px; flex: none; margin-top: 1px; }
+  .dv-err { color: var(--danger); font-weight: 600; }
+
+  .dd-res { margin-top: 12px; padding: 13px 14px; border-radius: 16px; display: grid; grid-template-columns: 22px minmax(0,1fr); gap: 3px 10px; animation: dv-in .4s var(--ease) both; }
+  .dd-res .i { width: 22px; height: 22px; }
+  .dd-res b { font-size: 1.05rem; line-height: 1.3; overflow-wrap: anywhere; }
+  .dd-res p { grid-column: 2; margin: 0; font-size: var(--fs-sm); line-height: 1.45; overflow-wrap: anywhere; }
+  .dd-res--ok { background: #E6F4EC; color: #155C35; }
+  .dd-res--ko { background: #FCE9E7; color: #8E1F17; }
+  @keyframes dv-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .dd-tour { margin-top: 10px; padding: 14px; border-radius: 16px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+  .dd-tour h3 { font-size: 1.05rem; letter-spacing: -.01em; line-height: 1.25; color: var(--ink); }
+  .dd-tour p { margin-top: 4px; font-size: var(--fs-sm); color: var(--ink-2); line-height: 1.45; }
+  .dd-bar { display: flex; height: 8px; margin-top: 10px; border-radius: 99px; overflow: hidden; background: var(--canvas); }
+  .dd-bar i { display: block; background: var(--ok); }
+  .dd-bar i + i { background: var(--danger); opacity: .55; }
+  .dd-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: var(--fs-xs); color: var(--ink-2); }
+  .dd-legend span::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 6px; }
+  .dd-legend span + span::before { background: var(--danger); opacity: .55; }
+  .dd-stats { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; margin-top: 10px; }
+  .dd-stat { padding: 11px 14px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); min-width: 0; }
+  .dd-stat > span { display: block; font-size: .6875rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .dd-stat b { display: block; margin-top: 3px; font-family: var(--font-display); font-size: 1.5rem; letter-spacing: -.02em; line-height: 1.2; color: var(--ink); white-space: nowrap; }
+  .dd-stat b small { font-size: .9rem; color: var(--muted); font-weight: 600; letter-spacing: 0; }
+  .dd-stat em { display: inline-flex; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-style: normal; font-family: var(--font-ui); font-size: 11px; font-weight: 700; letter-spacing: 0; vertical-align: 4px; background: #E6F4EC; color: #1E7A47; }
+  .dd-stats--pc { display: none; }
+  .dd-next { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 10px; min-height: 48px; padding: 6px 12px; border-radius: 14px; background: var(--surface); box-shadow: 0 0 0 1px var(--line); font-weight: 650; color: var(--ink-2); font-size: var(--fs-sm); text-align: center; }
+  .dd-next .i { width: 17px; height: 17px; }
+  .dd-next b { color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dd-sec { margin-top: 14px; font-size: .6875rem; font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .dd-week { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)); gap: 6px; margin-top: 8px; }
+  .dd-week div { text-align: center; min-width: 0; }
+  .dd-week i { display: grid; place-items: center; width: 100%; max-width: 38px; aspect-ratio: 1; margin: 0 auto; border-radius: 10px; background: transparent; box-shadow: inset 0 0 0 1.5px var(--line-2); color: var(--muted); }
+  .dd-week i.ok { background: #E6F4EC; color: #1E7A47; box-shadow: none; }
+  .dd-week i.ko { background: #FCE9E7; color: #B3261E; box-shadow: none; }
+  .dd-week i.miss { background: var(--line); box-shadow: none; }
+  .dd-week i.today { box-shadow: 0 0 0 2px var(--ink); }
+  .dd-week i.jour { background: var(--surface); box-shadow: 0 0 0 2px var(--ink); }
+  .dd-week i .i { width: 16px; height: 16px; }
+  .dd-week small { display: block; margin-top: 4px; font-size: 11px; color: var(--muted); }
+  .dd-week small.cur { color: var(--ink); font-weight: 700; }
+  .dv-week { order: 4 !important; }
+  .dv-back { display: flex; align-items: center; justify-content: center; margin-top: 6px; height: 44px; font-weight: 650; font-size: var(--fs-sm); color: var(--ink-2); text-decoration: none; }
+  .dv-back:hover { color: var(--ink); }
+
+  .dv-msg { padding: 28px 20px; border-radius: var(--r-lg); background: var(--surface); box-shadow: 0 0 0 1px var(--line); text-align: center; }
+  .dv-msg__ic { display: grid; place-items: center; width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; background: var(--brand-50); color: var(--brand); }
+  .dv-msg__ic .i { width: 26px; height: 26px; }
+  .dv-msg h2 { font-size: 1.25rem; line-height: 1.25; text-wrap: balance; }
+  .dv-msg p { margin: 8px auto 0; max-width: 40ch; color: var(--ink-2); font-size: var(--fs-sm); line-height: 1.5; text-wrap: pretty; }
+  .dv-msg .dd-bar { max-width: 260px; margin: 16px auto 0; }
+  .dv-msg .dd-bar i { background: var(--brand); }
+  .dv-msg .btn { margin-top: 18px; }
+  .dv-skel { height: 320px; border-radius: var(--r-lg); background: var(--surface); box-shadow: 0 0 0 1px var(--line); }
+
+  /* Saisie sur téléphone : la forme rétrécit pour laisser la place aux suggestions au-dessus du clavier */
+  @media (max-width: 899px) {
+    .dv.is-typing .dv-shape { height: 110px; }
+    .dv.is-typing .dv-cap { display: none; }
+    .dv.is-typing .dv-card { padding: 10px 14px; }
+    .dv.is-typing .dv-note { display: none; }
+    .dv-page:has(.dv.is-typing) .page__head { display: none; }
+    body.dv-kb .bottomnav { display: none; }
+  }
+  @media (max-width: 899px) { .dv--q .dv-week, .dv-back { display: none; } .dv:has(.dd-tour) .dd-stats { display: none; } }
+  @media (max-width: 899px) and (max-height: 899px) { .dv--r .dv-week { display: none; } }
+  @media (max-width: 899px) and (max-height: 760px) { .dv-sugg li:nth-child(n+4) { display: none; } }
+  @media (max-width: 899px) and (max-height: 700px) {
+    .dv-page:has(.dv--q, .dv--r) .page__head { display: none; }
+    .dv--r .dd-tour p { display: none; }
+    .dv--r .dd-stats { display: none; }
+    .dv:has(.dd-tour) .dv-cap { display: none; }
+    .dv-msg { padding: 20px 16px; }
+  }
+  .dv:has(.dd-tour) .dv-week { display: none; }
+  @media (max-width: 899px) {
+    .dv-page:has(.dd-tour) .page__head { display: none; }
+    .dv:has(.dd-tour) .dd-tour h3 { font-size: .95rem; }
+  }
+  @media (max-width: 899px) and (max-height: 800px) { .dv:has(.dd-tour) .dd-tour p { display: none; } }
+  @media (max-height: 600px) { .dv--q .dv-note { display: none; } }
+  @media (max-width: 899px) and (max-height: 600px) { .dv.is-typing .dv-shape { height: 90px; } .dv:has(.dd-tour) .dv-card { display: none; } }
+
+  /* Écran large : la forme à gauche, le jeu à droite, le tout sans défiler */
+  @media (min-width: 900px) {
+    .dv-lead { display: block; }
+    .dv-page .page__head { max-width: none; }
+    .dv { max-width: none; }
+    .dv-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+    .dv-side { display: flex; flex-direction: column; min-width: 0; }
+    .dv-side > * { order: 0 !important; }
+    .dv-grid > .dv-card { order: 0; }
+    .dv-side > .dd-day { margin-bottom: 4px; }
+    .dv-card { height: clamp(380px, calc(100dvh - var(--topbar-h) - 200px), 640px); padding: 18px; }
+    .dv-shape, .dv--r .dv-shape { flex: 1; height: auto; min-height: 0; }
+    .dv-ask { margin-top: 10px; font-size: 1.5rem; }
+    .dd-name { display: block; margin-top: 6px; font-family: var(--font-display); font-weight: 750; font-size: 1.5rem; letter-spacing: -.02em; line-height: 1.2; color: var(--ink); text-align: center; overflow-wrap: anywhere; text-wrap: balance; }
+    .dd-name + .dv-cap { justify-content: center; }
+    .dd-name + .dv-cap > span:last-child { display: none; }
+    .dd-res { margin-top: 8px; }
+    .dd-stats--pc { display: grid; }
+    .dv:has(.dd-tour) .dd-stats--pc { display: none; }
+    .dv.is-typing .dv-week, .dv.is-typing .dv-note { display: none; }
+    .dv-back { align-self: center; padding: 0 16px; }
+  }
+  @media (min-width: 900px) and (max-height: 820px) { .dd-stats--pc { display: none; } }
+  @media (prefers-reduced-motion: reduce) { .dd-res, .dv-shape.is-new .b { animation: none; } }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="scrollmain">
+    <div class="page dv-page">
+      <div class="page__head">
+        <div>
+          <h1 class="page__title">Devine la commune</h1>
+          <p class="page__lead dv-lead">Une de vos communes par jour, à reconnaître à sa seule forme.</p>
+        </div>
+      </div>
+      <div class="dv" id="dv" data-csrf="{{ csrf_token }}" aria-live="polite"><div class="dv-skel" aria-hidden="true"></div></div>
+    </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
+{{ ui.loader("Préparation du défi du jour…") }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  const U = window.Unlock, esc = U.esc, I = (n, c) => U.icon(n, c);
+  const root = document.getElementById('dv');
+  const CSRF = root.dataset.csrf;
+  const DLAT = 250 / 111320;
+  let S = null, sel = null, items = [], active = -1, seq = 0, timer = null, tick = null, busy = false;
+
+  const plural = (n, one, many) => (n > 1 ? many : one);
+  const jours = (n) => `${n} ${plural(n, 'jour', 'jours')}`;
+
+  /* ---------- Forme de la commune (contour + blocs) ---------- */
+  function shapeSVG(shape, blocks, animate) {
+    const size = 360, rings = shape.flat(1), pts = rings.flat();
+    if (!pts.length) return `<svg class="dv-shape" viewBox="0 0 ${size} ${size}" aria-hidden="true"></svg>`;
+    const lat0 = pts.reduce((t, p) => t + p[0], 0) / pts.length, k = Math.cos(lat0 * Math.PI / 180);
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    pts.forEach(([la, lo]) => { const x = lo * k, y = -la; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; });
+    const pad = size * .05, sc = (size - 2 * pad) / Math.max(x1 - x0, y1 - y0, 1e-9);
+    const ox = (size - (x1 - x0) * sc) / 2, oy = (size - (y1 - y0) * sc) / 2;
+    const X = (lo) => (lo * k - x0) * sc + ox, Y = (la) => (-la - y0) * sc + oy;
+    const d = rings.map((r) => 'M' + r.map((p) => `${X(p[1]).toFixed(1)},${Y(p[0]).toFixed(1)}`).join('L') + 'Z').join('');
+    let rects = '';
+    if (blocks && blocks.length) {
+      const cs = DLAT * sc, g = cs * .14, top = Math.min(...blocks.map((b) => Y(b[0]))), span = Math.max(1, Math.max(...blocks.map((b) => Y(b[0]))) - top);
+      rects = `<g clip-path="url(#dv-clip)">` + blocks.map(([la, lo]) => {
+        const y = Y(la);
+        return `<rect class="b" x="${(X(lo) - cs / 2 + g / 2).toFixed(1)}" y="${(y - cs / 2 + g / 2).toFixed(1)}" width="${(cs - g).toFixed(1)}" height="${(cs - g).toFixed(1)}" rx="${Math.min(2, cs * .12).toFixed(1)}"${animate ? ` style="--k:${Math.round((y - top) / span * 500)}"` : ''}/>`;
+      }).join('') + '</g>';
+    }
+    return `<svg class="dv-shape${animate ? ' is-new' : ''}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Contour de la commune à deviner, nord en haut">
+      <defs><clipPath id="dv-clip"><path d="${d}" clip-rule="evenodd"/></clipPath></defs>
+      <path class="o" d="${d}" fill-rule="evenodd"/>${rects}<path class="l" d="${d}"/></svg>`;
+  }
+
+  /* ---------- Morceaux d'écran ---------- */
+  const day = () => `<div class="dd-day"><span class="dv-q">${esc(S.date_label)}</span><div class="dd-chips">
+      <span class="dd-chip" title="Jours réussis d'affilée">${I('trend')}Série ${jours(S.serie)}</span>
+      <span class="dd-chip" title="Communes trouvées au moins une fois">${I('grid')}<span class="num">${S.trouvees} / ${S.total}</span><span class="sr-only"> communes trouvées</span></span></div></div>`;
+
+  function card(animate) {
+    const R = S.result, q = S.state === 'question';
+    let tag = '';
+    if (q && S.raison) tag = `<span class="dd-tag dd-tag--${S.raison.kind}">${I(S.raison.kind === 'nouvelle' ? 'sparkle' : 'clock')}<span>${esc(S.raison.text)}</span></span>`;
+    let left;
+    if (q && !S.indice) left = `<button type="button" class="dd-hint" id="dv-hint">${I('grid')}Indice, voir mes blocs</button>`;
+    else if (q) left = `<span class="dd-used">${I('grid')}Indice, vos blocs en rouge</span>`;
+    else left = S.indice ? `<span class="dd-used">${I('grid')}Avec l'indice</span>` : '<span>Sans indice</span>';
+    const name = R ? `<p class="dd-name">Aujourd'hui, ${esc(R.name)}</p>` : '';
+    return `<div class="dv-card">${tag}${shapeSVG(S.shape, S.blocks, animate)}${name}<div class="dv-cap">${left}<span>Nord en haut</span></div></div>`;
+  }
+
+  const note = () => S.note ? `${esc(S.note)} Un seul essai.` : 'Un seul essai. Majuscules, accents et tirets sont facultatifs.';
+
+  function question() {
+    return `<p class="dv-ask" id="dv-ask">Quelle est cette commune ?</p>
+      <div class="dv-field">
+        <div class="dv-input">${I('search')}
+          <input id="dv-in" type="text" inputmode="search" enterkeyhint="go" autocomplete="off" autocorrect="off" autocapitalize="words" spellcheck="false"
+                 placeholder="Nom de la commune" aria-labelledby="dv-ask" role="combobox" aria-autocomplete="list" aria-controls="dv-sugg" aria-expanded="false">
+          <button type="button" class="dv-go" id="dv-go" disabled>Valider</button>
+        </div>
+        <ul class="dv-sugg" id="dv-sugg" role="listbox" aria-label="Communes" hidden></ul>
+      </div>
+      <p class="dv-err" id="dv-err" role="alert" hidden></p>
+      <p class="dv-note">${I('info')}<span>${note()}</span></p>`;
+  }
+
+  function week() {
+    return `<div class="dv-week"><p class="dd-sec">Cette semaine</p><div class="dd-week">${S.week.map((w) => {
+      const cls = w.s === 'futur' ? '' : w.s === '' ? 'miss' : w.s;
+      const ic = w.s === 'ok' ? I('check') : w.s === 'ko' ? I('x') : '';
+      const lbl = { ok: 'trouvée', ko: 'ratée', jour: 'à jouer', futur: 'à venir', '': 'pas joué' }[w.s];
+      return `<div><i class="${cls}${w.today ? ' today' : ''}" title="${lbl}">${ic}</i><small${w.today ? ' class="cur"' : ''}>${w.d}</small></div>`;
+    }).join('')}</div></div>`;
+  }
+
+  const left = () => {
+    const s = Math.max(0, S.seconds_left), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60);
+    return h ? `${h} h ${String(m).padStart(2, '0')}` : `${Math.max(1, m)} min`;
+  };
+
+  function result() {
+    const R = S.result;
+    const line = [R.pct ? `${R.pct} exploré` : '', R.blocks_n ? `${U.fmt(R.blocks_n)} ${plural(R.blocks_n, 'bloc', 'blocs')} sur ${U.fmt(R.blocks_total)}` : ''].filter(Boolean).join(' · ');
+    const res = R.trouve
+      ? `<div class="dd-res dd-res--ok">${I('check-circle')}<b>Bravo, c'est ${esc(R.name)}</b><p>${line}</p></div>`
+      : `<div class="dd-res dd-res--ko">${I('x')}<b>Raté, c'était ${esc(R.name)}</b><p>${R.reponse ? `Vous avez répondu ${esc(R.reponse)}.<br>` : ''}${line}</p></div>`;
+    let tour = '';
+    if (S.cycle) {
+      const c = S.cycle, tot = Math.max(1, c.trouvees + c.ratees);
+      tour = `<div class="dd-tour"><h3>Toutes vos communes sont passées</h3>
+        <p>${c.ratees ? `Dès demain, ${c.ratees > 1 ? `les ${c.ratees} que vous avez ratées reviennent` : 'celle que vous avez ratée revient'} en premier.` : 'Dès demain, elles repassent dans un nouvel ordre.'}</p>
+        <div class="dd-bar" aria-hidden="true"><i style="width:${(c.trouvees / tot * 100).toFixed(1)}%"></i><i style="width:${(c.ratees / tot * 100).toFixed(1)}%"></i></div>
+        <div class="dd-legend"><span>${c.trouvees} ${plural(c.trouvees, 'trouvée', 'trouvées')}</span><span>${c.ratees} ${plural(c.ratees, 'ratée', 'ratées')}</span></div></div>`;
+    }
+    const plus = R.trouve && S.serie > 0 ? '<em>+1</em>' : '';
+    return `${res}${tour}
+      <div class="dd-stats"><div class="dd-stat"><span>Série</span><b>${jours(S.serie)}${plus}</b></div>
+        <div class="dd-stat"><span>Trouvées</span><b>${S.trouvees} <small>sur ${S.total}</small></b></div></div>
+      <div class="dd-next">${I('clock')}<span>Prochaine commune dans</span><b id="dv-left">${left()}</b></div>
+      ${week()}
+      <div class="dd-stats dd-stats--pc"><div class="dd-stat"><span>Meilleure série</span><b>${jours(S.serie_best)}</b></div>
+        <div class="dd-stat"><span>Réussite</span><b>${S.reussite == null ? '–' : S.reussite + ' %'}</b></div></div>
+      <a class="dv-back" href="/">Revenir à la carte</a>`;
+  }
+
+  function message(icon, title, text, extra) {
+    root.className = 'dv';
+    root.innerHTML = `<div class="dv-msg"><div class="dv-msg__ic">${I(icon)}</div><h2>${title}</h2><p>${text}</p>${extra || ''}</div>`;
+  }
+
+  /* ---------- Rendu ---------- */
+  function render(animate) {
+    clearInterval(tick);
+    document.body.classList.remove('dv-kb');
+    if (!S || S.state === 'error') {
+      message('alert', 'Le défi n’a pas pu être chargé', esc((S && S.message) || 'Vérifiez votre connexion puis réessayez.'),
+        '<button type="button" class="btn btn--primary" id="dv-retry">Réessayer</button>');
+      document.getElementById('dv-retry').onclick = () => load(true);
+      return;
+    }
+    if (S.state === 'locked') {
+      const n = S.explored, need = S.needed, reste = Math.max(1, need - n);
+      message('lock', 'Pas encore assez de communes',
+        `Le défi commence dès ${need} communes explorées. Vous en avez ${n}, encore ${reste} à découvrir lors de vos prochaines sorties.`,
+        `<div class="dd-bar" aria-hidden="true"><i style="width:${Math.min(100, n / need * 100)}%"></i></div><a class="btn btn--primary" href="/">Revenir à la carte</a>`);
+      return;
+    }
+    const q = S.state === 'question';
+    root.className = 'dv ' + (q ? 'dv--q' : 'dv--r');
+    root.innerHTML = `<div class="dv-grid">${card(animate)}<div class="dv-side">${day()}${q ? question() + week() : result()}</div></div>`;
+    if (q) bindQuestion();
+    else tick = setInterval(() => {
+      S.seconds_left -= 30;
+      if (S.seconds_left <= 0) { clearInterval(tick); load(false); return; }
+      const el = document.getElementById('dv-left'); if (el) el.textContent = left();
+    }, 30000);
+    const hint = document.getElementById('dv-hint');
+    if (hint) hint.onclick = askHint;
+  }
+
+  /* ---------- Saisie avec suggestions ---------- */
+  const fold = (s) => Array.from(s || '').map((c) => { const b = c.normalize('NFD')[0].toLowerCase(); return /[a-z0-9]/.test(b) ? b : ' '; }).join('');
+  function highlight(name, q) {
+    const f = fold(name), t = fold(q).replace(/\s+/g, ' ').trim();
+    if (!t) return esc(name);
+    let i = f.indexOf(t);
+    while (i > 0 && f[i - 1] !== ' ') i = f.indexOf(t, i + 1);
+    if (i < 0) return esc(name);
+    return esc(name.slice(0, i)) + '<strong>' + esc(name.slice(i, i + t.length)) + '</strong>' + esc(name.slice(i + t.length));
+  }
+
+  function bindQuestion() {
+    const inp = document.getElementById('dv-in'), list = document.getElementById('dv-sugg'), go = document.getElementById('dv-go'), err = document.getElementById('dv-err');
+    sel = null; items = []; active = -1;
+    const typing = (on) => root.classList.toggle('is-typing', on);
+    const close = () => { list.hidden = true; list.innerHTML = ''; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); typing(false); active = -1; };
+    const mark = () => list.querySelectorAll('li[data-i]').forEach((li) => {
+      const on = +li.dataset.i === active; li.setAttribute('aria-selected', String(on));
+      if (on) { inp.setAttribute('aria-activedescendant', li.id); }
+    });
+    const showErr = (t) => { err.innerHTML = t ? I('alert') + `<span>${esc(t)}</span>` : ''; err.hidden = !t; };
+    function draw(q) {
+      if (!items.length) {
+        list.innerHTML = `<li class="dv-none" role="option" aria-disabled="true">Aucune commune ne commence par « ${esc(q)} »</li>`;
+      } else {
+        list.innerHTML = items.map((c, i) => `<li role="option" id="dv-o${i}" data-i="${i}" aria-selected="false"><b>${highlight(c.name, q)}</b><small><span>${esc(c.dep_name)}</span><i> (${esc(c.dep)})</i></small></li>`).join('');
+      }
+      list.hidden = false; inp.setAttribute('aria-expanded', 'true'); typing(true);
+      active = items.length ? 0 : -1; mark();
+    }
+    function pick(c) {
+      sel = c; inp.value = c.name; go.disabled = false; close(); showErr('');
+    }
+    inp.addEventListener('input', () => {
+      sel = null; go.disabled = true; showErr('');
+      const q = inp.value.trim();
+      clearTimeout(timer);
+      if (fold(q).replace(/\s/g, '').length < 2) { close(); return; }
+      timer = setTimeout(async () => {
+        const my = ++seq;
+        try {
+          const r = await U.getJSON('/api/devine/communes?q=' + encodeURIComponent(q));
+          if (my !== seq || inp.value.trim() !== q) return;
+          items = (r.communes || []).slice(0, 4); draw(q);
+        } catch (e) { if (my === seq) { close(); showErr('Suggestions indisponibles, vérifiez votre connexion.'); } }
+      }, 120);
+    });
+    inp.addEventListener('keydown', (e) => {
+      if (!list.hidden && items.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault(); active = (active + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length; mark();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (!list.hidden && items[active]) pick(items[active]);
+        else if (sel) submit();
+      } else if (e.key === 'Escape' && !list.hidden) { e.preventDefault(); close(); }
+    });
+    // mousedown : choisit sans faire perdre le focus au champ (le clavier du téléphone reste ouvert)
+    list.addEventListener('mousedown', (e) => e.preventDefault());
+    list.addEventListener('click', (e) => { const li = e.target.closest('li[data-i]'); if (li) pick(items[+li.dataset.i]); });
+    go.addEventListener('mousedown', (e) => e.preventDefault());
+    go.addEventListener('click', submit);
+    inp.addEventListener('focus', () => document.body.classList.add('dv-kb'));
+    inp.addEventListener('blur', () => { document.body.classList.remove('dv-kb'); setTimeout(() => { if (document.activeElement !== inp) close(); }, 150); });
+
+    async function submit() {
+      if (busy) return;
+      if (!sel) { showErr('Choisissez une commune dans la liste.'); inp.focus(); return; }
+      busy = true; go.disabled = true; go.textContent = '…';
+      try {
+        const r = await post('/api/devine/repondre', { code: sel.code });
+        S = r; inp.blur(); render(true);
+      } catch (e) {
+        showErr(e.message || 'Réponse non enregistrée, réessayez.'); go.disabled = !sel; go.textContent = 'Valider';
+      } finally { busy = false; }
+    }
+  }
+
+  async function post(url, body) {
+    const res = await fetch(url, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': CSRF }, body: JSON.stringify(body || {}) });
+    if (res.status === 401) { window.location.href = '/login'; throw new Error('auth'); }
+    let data = null; try { data = await res.json(); } catch (e) { /* réponse vide */ }
+    if (!res.ok) throw new Error((data && data.error) || 'Une erreur est survenue, réessayez.');
+    return data;
+  }
+
+  async function askHint() {
+    const b = document.getElementById('dv-hint'); if (!b || busy) return;
+    busy = true; b.disabled = true;
+    const typed = (document.getElementById('dv-in') || {}).value || '';
+    try {
+      S = await post('/api/devine/indice');
+      render(true);
+      const inp = document.getElementById('dv-in'); if (inp && typed) inp.value = typed;
+    } catch (e) { U.toast(e.message || 'Indice indisponible, réessayez.', 'alert'); b.disabled = false; }
+    finally { busy = false; }
+  }
+
+  async function load(first) {
+    if (first) U.loader.show(['Préparation du défi du jour…', 'Recherche de vos communes explorées…']);
+    try { S = await U.getJSON('/api/devine'); }
+    catch (e) { if (e.message === 'auth') return; S = { state: 'error' }; }
+    finally { U.loader.hide(); }
+    render(false);
+  }
+  load(true);
+})();
+</script>
+{% endblock %}
