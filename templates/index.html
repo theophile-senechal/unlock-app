@@ -45,6 +45,15 @@
           <h1 id="panel-title">Vos tracés</h1>
           <p id="filter-summary">Tous les sports, toutes les années</p>
         </div>
+        {% if annee and annee.card %}
+        <!-- Bilan de l'année : sous le titre sur PC, posé au-dessus du panneau sur téléphone (déplacé par le script) -->
+        <div class="annee-card" id="annee-card" hidden>
+          <span class="annee-card__ico">{{ icon('star') }}</span>
+          <span class="annee-card__txt"><b>{{ annee.title }}</b><small>{{ annee.sub }}</small></span>
+          <a class="annee-card__btn" href="/annee">Voir<span class="annee-card__more"> mon bilan</span></a>
+          <button type="button" class="annee-card__x" id="annee-card-x" aria-label="Masquer">{{ icon('x') }}</button>
+        </div>
+        {% endif %}
 
         <div class="stats" id="act-stats">
           <div class="stat"><span class="stat__top">Sorties</span><span class="stat__val" id="s-count">–</span></div>
@@ -336,6 +345,23 @@
       e.stopImmediatePropagation();
       panel.classList.contains('is-collapsed') ? openAnimated(0) : closeAnimated(0);
     }, true);
+  })();
+  /* Bilan de l'année : carte d'annonce (jusqu'à ce qu'on l'ouvre ou la ferme) */
+  (function anneeCard() {
+    const card = $('annee-card'); if (!card) return;
+    const KEY = 'unlock-annee-{{ annee.year if annee else '' }}-vu';
+    let vu = false; try { vu = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    if (vu) { card.remove(); return; }
+    const heading = panel.querySelector('.panel-heading');
+    const place = () => {
+      if (mqFloat.matches) { heading.after(card); card.classList.remove('annee-card--float'); $('mapview').classList.remove('has-annee'); }
+      else { panel.prepend(card); card.classList.add('annee-card--float'); $('mapview').classList.add('has-annee'); }
+      requestAnimationFrame(() => $('mapview').style.setProperty('--annee-h', mqFloat.matches ? '0px' : (card.offsetHeight + 12) + 'px'));
+    };
+    card.hidden = false; place();
+    mqFloat.addEventListener('change', place);
+    card.addEventListener('touchstart', (e) => e.stopPropagation(), { passive: true });   // ne déclenche pas le glissement du panneau
+    $('annee-card-x').addEventListener('click', () => { try { localStorage.setItem(KEY, '1'); } catch (e) {} card.remove(); $('mapview').classList.remove('has-annee'); });
   })();
   function syncPanelHeight() {
     const h = mqFloat.matches ? 0 : panel.getBoundingClientRect().height;

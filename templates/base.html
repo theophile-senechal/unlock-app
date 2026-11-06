@@ -96,6 +96,7 @@
     {% endif %}
 
     <ul class="menu-group">
+      {% if annee %}<li><a class="menu-item menu-item--annee" href="/annee">{{ icon('star') }}<span>{{ annee.title }}{% if annee.badge %}<span class="badge-new">Nouveau</span>{% endif %}{% if annee.preview %}<span class="badge-new badge-new--admin">Aperçu</span>{% endif %}<small>{{ annee.sub }}</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
       <li><button type="button" class="menu-item" data-install hidden>{{ icon('install') }}<span>Installer l'app<small>Ajoutez Unlock à votre écran d'accueil</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
       {% if is_admin %}<li><a class="menu-item" href="/admin">{{ icon('gauge') }}<span>Tableau de bord<small>Réservé à l'administrateur</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
       {% if leaderboard_enabled %}<li><a class="menu-item" href="/leaderboard">{{ icon('trophy') }}<span>Classement</span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}

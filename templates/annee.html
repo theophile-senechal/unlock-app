@@ -1,0 +1,515 @@
+{% extends "base.html" %}
+{% block title %}{{ annee.title }} · Unlock{% endblock %}
+{% block body_class %}yr-body{% endblock %}
+{% block head %}
+<style>
+  /* ============ Bilan de l'année : page plein écran (mobile), story centrée (PC) ============ */
+  html:has(.yr-body), .yr-body { height: 100%; overflow: hidden; overscroll-behavior: none; background: #0B0A0C; }
+  .yr { --a: #FF5A6E; --b: #5A0A1A; --s: #121014; position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .yr[data-theme="ocean"] { --a: #5AB4FF; --b: #0B3A66; }
+  .yr[data-theme="foret"] { --a: #5BE38F; --b: #0B5C2C; }
+
+  /* Barre du haut (PC) */
+  .yr__top { position: absolute; top: 0; left: 0; right: 0; display: none; align-items: center; justify-content: space-between; padding: 18px 28px; }
+  .yr__word { font-family: var(--font-display); font-weight: 800; font-size: 1.375rem; letter-spacing: -.04em; color: #fff; text-decoration: none; }
+  .yr__act { display: flex; align-items: center; gap: 14px; font-size: 13px; color: rgba(255,255,255,.6); }
+  .yr__close { width: 44px; height: 44px; flex: none; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; display: grid; place-items: center; cursor: pointer; }
+  .yr__close:hover { background: rgba(255,255,255,.2); }
+  .yr__close .i { width: 20px; height: 20px; }
+  .yr__nav { width: 48px; height: 48px; flex: none; border: 0; border-radius: 50%; background: rgba(255,255,255,.12); color: #fff; display: none; place-items: center; cursor: pointer; }
+  .yr__nav:hover { background: rgba(255,255,255,.2); }
+  .yr__nav:disabled { opacity: .3; cursor: default; }
+  .yr__nav .i { width: 22px; height: 22px; }
+  .yr__help { position: absolute; bottom: 18px; left: 0; right: 0; margin: 0; text-align: center; font-size: 13px; color: rgba(255,255,255,.4); display: none; }
+
+  /* La story */
+  .story { position: relative; width: 100%; height: 100%; background: var(--s); overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .st-prog { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 21px); left: 16px; right: 56px; display: flex; gap: 4px; }
+  .st-prog span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.22); overflow: hidden; }
+  .st-prog b { display: block; height: 100%; width: 0; background: #fff; }
+  .st-prog span.done b { width: 100%; }
+  .st-prog span.cur b { animation: st-prog var(--dur, 6s) linear forwards; }
+  .story.is-paused .st-prog span.cur b { animation-play-state: paused; }
+  @keyframes st-prog { to { width: 100%; } }
+  .st-x { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 4px); right: 8px; width: 36px; height: 36px; border: 0; background: none; color: rgba(255,255,255,.85); display: grid; place-items: center; cursor: pointer; padding: 0; }
+  .st-x .i { width: 20px; height: 20px; }
+  .st-tap { position: absolute; z-index: 1; inset: 0; }
+
+  .scr { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+         padding: calc(var(--safe-t, 0px) + 56px) 24px calc(var(--safe-b, 0px) + 56px); }
+  .scr.is-on { display: flex; }
+  /* Le contenu reste sous la zone de toucher, sauf les éléments cliquables */
+  .actions, .swatches, .share { position: relative; z-index: 3; }
+  .scr__hint { position: absolute; bottom: calc(var(--safe-b, 0px) + 20px); left: 0; right: 0; margin: 0; font-size: 13px; color: rgba(255,255,255,.4); pointer-events: none; }
+
+  .k { font-size: 11px; font-weight: 650; letter-spacing: .1em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+  .y-num { font-family: var(--font-display); font-weight: 800; letter-spacing: -.045em; line-height: .95; color: var(--a); font-variant-numeric: tabular-nums; }
+  .y-num--xl { font-size: clamp(88px, 31vw, 128px); margin-top: 12px; }
+  .y-num--l { font-size: clamp(64px, 23vw, 92px); margin-top: 14px; }
+  .y-num--m { font-size: clamp(54px, 18vw, 72px); margin-top: 6px; }
+  .t { font-family: var(--font-display); font-weight: 750; letter-spacing: -.03em; font-size: 26px; line-height: 1.12; margin: 10px 0 0; color: #fff; text-wrap: balance; }
+  .t--l { font-size: clamp(30px, 9.6vw, 38px); }
+  .t--m { font-size: clamp(26px, 8.2vw, 32px); }
+  .s { color: rgba(255,255,255,.64); font-size: 14.5px; line-height: 1.45; margin: 10px 0 0; max-width: 320px; text-wrap: balance; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .pill--up { background: rgba(91,227,143,.14); color: #7CE6A4; }
+  .pill--down { background: rgba(255,255,255,.08); color: rgba(255,255,255,.75); }
+  .pill--info { background: rgba(255,255,255,.08); color: rgba(255,255,255,.85); font-weight: 600; }
+  .pill .i { width: 15px; height: 15px; color: var(--a); }
+  .sub { display: block; margin-top: 8px; font-size: 14px; color: rgba(255,255,255,.6); }
+
+  .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; max-width: 360px; margin-top: 34px; }
+  .tile { padding: 14px 6px; border-radius: 14px; background: rgba(255,255,255,.06); min-width: 0; }
+  .tile b { display: block; font-family: var(--font-display); font-size: 23px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tile small { display: block; font-size: 12px; color: rgba(255,255,255,.55); margin-top: 2px; }
+  .tile em { display: block; font-style: normal; font-size: 11.5px; font-weight: 700; margin-top: 6px; color: #7CE6A4; min-height: 15px; }
+  .tile em.is-down { color: rgba(255,255,255,.55); }
+
+  .y-meta { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .y-meta span { padding: 6px 11px; border-radius: 999px; background: rgba(255,255,255,.08); font-size: 13px; color: rgba(255,255,255,.82); white-space: nowrap; }
+
+  .y-chart { width: 100%; max-width: 360px; margin-top: 20px; padding: 14px 14px 10px; border-radius: 16px; background: rgba(255,255,255,.05); text-align: left; }
+  .y-chart__t { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; font-weight: 650; letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.5); margin-bottom: 10px; }
+  .y-chart__t b { color: #fff; letter-spacing: 0; text-transform: none; font-size: 12px; font-weight: 700; }
+  .vbars { display: grid; gap: 3px; align-items: end; height: 96px; }
+  .vb { height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 5px; min-width: 0; }
+  .vb span { width: 100%; height: var(--h); min-height: 2px; border-radius: 3px 3px 1px 1px; background: var(--b); transform-origin: bottom; }
+  .vb--hi span { background: var(--a); }
+  .vb--off span { background: rgba(255,255,255,.08); }
+  .vb i { font-style: normal; font-size: 10.5px; line-height: 12px; height: 12px; color: rgba(255,255,255,.45); white-space: nowrap; }
+  .stack { display: flex; height: 16px; border-radius: 99px; overflow: hidden; gap: 2px; }
+  .stack span { width: var(--w); transform-origin: left; }
+  .slegend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 12px; font-size: 13px; color: rgba(255,255,255,.75); }
+  .slegend span { white-space: nowrap; }
+  .slegend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+  .slegend b { color: #fff; }
+
+  .list { width: 100%; max-width: 360px; margin-top: 20px; display: grid; gap: 10px; text-align: left; }
+  .row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,.05); }
+  .pos { width: 24px; height: 24px; border-radius: 7px; background: rgba(255,255,255,.1); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .row:first-child .pos { background: var(--a); color: var(--s); }
+  .row__n { min-width: 0; }
+  .row__n b { display: block; font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row__n small { display: block; color: rgba(255,255,255,.52); font-size: 12px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row__p { font-family: var(--font-display); font-weight: 800; color: var(--a); font-size: 19px; letter-spacing: -.02em; white-space: nowrap; }
+  .y-bar { grid-column: 2 / -1; height: 5px; border-radius: 9px; background: rgba(255,255,255,.08); overflow: hidden; }
+  .y-bar span { display: block; height: 100%; width: var(--w); border-radius: 9px; background: var(--a); transform-origin: left; }
+  .row--dep { grid-template-columns: minmax(0, 1fr) auto; }
+  .row--dep .y-bar { grid-column: 1 / -1; height: 7px; margin-top: 4px; }
+  .row--dep .row__s { grid-column: 1 / -1; font-size: 12px; color: rgba(255,255,255,.52); margin-top: 2px; }
+
+  .mosaic { display: block; margin: 0 auto; }
+  .route { display: block; margin: 0 auto; overflow: visible; }
+
+  /* Écran final : carte à partager (aperçu exact de l'image téléchargée) */
+  .share { height: min(533px, calc(100% - 160px)); width: auto; aspect-ratio: 9 / 16; max-width: 100%; flex: none; border-radius: 22px; overflow: hidden; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 20px 50px -20px rgba(0,0,0,.7); }
+  .share canvas { display: block; width: 100%; height: 100%; }
+  .swatches { display: flex; gap: 12px; justify-content: center; margin-top: 16px; }
+  .swatch { width: 28px; height: 28px; border-radius: 50%; border: 0; padding: 0; cursor: pointer; box-shadow: 0 0 0 2px var(--s); }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--s), 0 0 0 4px #fff; }
+  .actions { display: grid; gap: 2px; width: 100%; max-width: 340px; margin-top: 16px; }
+  .btn-w { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; border: 0; border-radius: 14px; font: inherit; font-weight: 700; font-size: 15px; cursor: pointer; text-decoration: none; }
+  .btn-w .i { width: 18px; height: 18px; }
+  .btn-w--main { background: #fff; color: var(--s); }
+  .btn-w--ghost { background: none; color: rgba(255,255,255,.75); }
+  .btn-w--ghost:hover { color: #fff; }
+
+  /* Écran sans sortie */
+  .empty-ico { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,.08); display: grid; place-items: center; color: var(--a); margin-bottom: 18px; }
+  .empty-ico .i { width: 28px; height: 28px; }
+
+  /* Aperçu admin */
+  .apercu { position: absolute; z-index: 4; left: 12px; top: calc(var(--safe-t, 0px) + 34px); }
+  /* Téléphone : le contenu descend un peu pour laisser la place à l'étiquette (admin seulement) */
+  .yr.has-apercu .scr { padding-top: calc(var(--safe-t, 0px) + 88px); }
+  .apercu > button { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px; border: 1px dashed rgba(255,255,255,.35); border-radius: 999px; background: rgba(18,16,20,.85); color: rgba(255,255,255,.85); font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+  .apercu > button .i { width: 14px; height: 14px; }
+  .apercu form { position: absolute; left: 0; top: 38px; width: 236px; padding: 12px; border-radius: 14px; background: #242128; box-shadow: 0 20px 40px -12px rgba(0,0,0,.7); display: grid; gap: 6px; text-align: left; }
+  .apercu form[hidden] { display: none; }
+  .apercu p { margin: 0 0 4px; font-size: 12px; color: rgba(255,255,255,.6); line-height: 1.4; }
+  .apercu form button { height: 36px; padding: 0 12px; border: 0; border-radius: 10px; background: rgba(255,255,255,.08); color: #fff; font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+  .apercu form button[aria-pressed="true"] { background: var(--a); color: var(--s); }
+
+  /* Animations à l'arrivée sur l'écran */
+  .an { opacity: 0; transform: translateY(14px); }
+  .pop { opacity: 0; transform: scale(.86); }
+  .px { opacity: 0; transform-box: fill-box; transform-origin: center; transform: scale(.2); }
+  .draw { stroke-dasharray: 1; stroke-dashoffset: 1; }
+  .gy { transform: scaleY(0); } .gx { transform: scaleX(0); }
+  .is-on .an { animation: yr-up .6s cubic-bezier(.2,.8,.2,1) var(--d, 0ms) forwards; }
+  .is-on .pop { animation: yr-pop .7s cubic-bezier(.2,1.3,.3,1) var(--d, 0ms) forwards; }
+  .is-on .px { animation: yr-px .45s cubic-bezier(.2,1.4,.3,1) var(--d, 0ms) forwards; }
+  .is-on .draw { animation: yr-draw 1.9s ease-in-out .3s forwards; }
+  .is-on .gy { animation: yr-g .7s cubic-bezier(.2,.8,.2,1) var(--d, 0ms) forwards; }
+  .is-on .gx { animation: yr-g .9s cubic-bezier(.2,.8,.2,1) var(--d, 0ms) forwards; }
+  .story.is-paused .is-on * { animation-play-state: paused !important; }
+  @keyframes yr-up { to { opacity: 1; transform: none; } }
+  @keyframes yr-pop { to { opacity: 1; transform: none; } }
+  @keyframes yr-px { to { opacity: 1; transform: none; } }
+  @keyframes yr-draw { to { stroke-dashoffset: 0; } }
+  @keyframes yr-g { to { transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    .an, .pop, .px, .gy, .gx { opacity: 1 !important; transform: none !important; animation: none !important; }
+    .draw { stroke-dashoffset: 0 !important; animation: none !important; }
+  }
+
+  /* Petits téléphones : on resserre */
+  @media (max-height: 700px) {
+    .scr { padding-top: calc(var(--safe-t, 0px) + 48px); padding-bottom: calc(var(--safe-b, 0px) + 44px); }
+    .scr__hint { bottom: calc(var(--safe-b, 0px) + 14px); }
+    .y-num--xl { font-size: 92px; } .y-num--l { font-size: 70px; } .y-num--m { font-size: 52px; }
+    .t { font-size: 23px; } .t--l { font-size: 30px; } .t--m { font-size: 25px; }
+    .tiles { margin-top: 22px; } .tile { padding: 11px 4px; } .tile b { font-size: 20px; }
+    .y-chart { margin-top: 12px; padding: 11px 12px 8px; } .vbars { height: 72px; }
+    .list { margin-top: 14px; gap: 7px; } .row { padding: 9px 12px; }
+    .s { font-size: 13.5px; margin-top: 6px; }
+    .share { height: min(533px, calc(100% - 150px)); }
+    .btn-w { height: 46px; }
+  }
+  @media (max-height: 600px) {
+    .vbars { height: 56px; } .row__n small { display: none; } .y-meta { margin-top: 10px; }
+    .y-num--xl { font-size: 80px; }
+  }
+  @media (max-width: 340px) {
+    .scr { padding-left: 16px; padding-right: 16px; }
+    .tiles { gap: 7px; } .tile b { font-size: 19px; } .tile small { font-size: 11px; }
+  }
+
+  /* PC et tablette : story au format téléphone, centrée, l'app floutée derrière */
+  @media (min-width: 768px) and (min-height: 560px) {
+    .yr { background: rgba(11,10,12,.9); gap: 28px; }
+    .yr__top, .yr__nav { display: flex; }
+    .yr__nav { display: grid; }
+    .yr__help { display: block; }
+    .story { width: 390px; height: 844px; flex: none; border-radius: 22px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); transform: scale(var(--k, 1)); transform-origin: center; margin: calc((844px * var(--k, 1) - 844px) / 2) calc((390px * var(--k, 1) - 390px) / 2); }
+    .story .st-x { display: none; }
+    .story .st-prog { right: 16px; top: 21px; }
+    .story .scr, .yr.has-apercu .story .scr { padding-top: 56px; padding-bottom: 56px; }
+    .story .scr__hint { display: none; }
+    .apercu { position: fixed; left: 28px; top: auto; bottom: 18px; }
+    .apercu form { top: auto; bottom: 38px; }
+  }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="yr{% if annee.preview %} has-apercu{% endif %}" id="yr" data-theme="bordeaux">
+  <div class="yr__top">
+    <a class="yr__word" href="/" aria-label="Unlock, retour à la carte">unlock</a>
+    <span class="yr__act">Échap pour fermer<button type="button" class="yr__close" data-close aria-label="Fermer">{{ icon('x') }}</button></span>
+  </div>
+  <button type="button" class="yr__nav" id="prev" aria-label="Écran précédent">{{ icon('chev-l') }}</button>
+
+  <section class="story" id="story" aria-roledescription="diaporama" aria-label="{{ annee.title }}">
+    <div class="st-prog" id="prog" aria-hidden="true"></div>
+    <button type="button" class="st-x" data-close aria-label="Fermer">{{ icon('x') }}</button>
+    <div class="st-tap" id="tap"></div>
+    <div id="screens"></div>
+  </section>
+
+  <button type="button" class="yr__nav" id="next" aria-label="Écran suivant">{{ icon('chev') }}</button>
+  <p class="yr__help">Flèches du clavier ou clic pour naviguer</p>
+
+  {% if annee.preview %}
+  <div class="apercu">
+    <button type="button" id="apercu-btn" aria-expanded="false">{{ icon('info') }}Aperçu admin</button>
+    <form method="post" action="/annee/apercu" id="apercu-form" hidden>
+      <input type="hidden" name="csrf" value="{{ csrf_token }}"><input type="hidden" name="next" value="/annee">
+      <p>Visible par vous seul. Période simulée pour la carte et le menu :</p>
+      <button name="phase" value="new" aria-pressed="{{ 'true' if annee.phase == 'new' else 'false' }}">1er au 15 décembre</button>
+      <button name="phase" value="card" aria-pressed="{{ 'true' if annee.phase == 'card' else 'false' }}">16 au 31 décembre</button>
+      <button name="phase" value="menu" aria-pressed="{{ 'true' if annee.phase == 'menu' else 'false' }}">Janvier</button>
+      <button name="phase" value="">Calendrier réel</button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{{ ui.loader("Calcul de votre année…", "On rassemble vos sorties de l'année.") }}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = Unlock.esc, fmt = (n, d = 0) => Unlock.fmt(n, d);
+  const YEAR = {{ annee.year }}, KEY = `unlock-annee-${YEAR}-vu`;
+  try { localStorage.setItem(KEY, '1'); } catch (e) {}
+  const story = $('story'), screensEl = $('screens'), progEl = $('prog');
+  const nb = (s) => String(s).replace(/ /g, ' ');
+  const pts = (n) => `${n > 0 ? '+' : ''}${fmt(n, Math.abs(n) < 10 && n % 1 ? 1 : 0)} point${Math.abs(n) >= 2 ? 's' : ''}`;
+  const pct = (n, d = 0) => `${fmt(n, d)} %`;
+  const plural = (n, one, many) => `${fmt(n)} ${n > 1 ? many : one}`;
+  const MONTHS = 'JFMAMJJASOND'.split('');
+  const DAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+  const DAYS_LONG = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+
+  /* ---------- Fermer ---------- */
+  const close = () => { if (document.referrer.startsWith(location.origin) && history.length > 1) history.back(); else location.href = '/'; };
+  document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', close));
+
+  /* ---------- Aperçu admin ---------- */
+  const ab = $('apercu-btn');
+  if (ab) ab.addEventListener('click', (e) => { e.stopPropagation(); const f = $('apercu-form'); f.hidden = !f.hidden; ab.setAttribute('aria-expanded', String(!f.hidden)); });
+
+  /* ---------- PC : la story garde le format téléphone et s'adapte à la hauteur ---------- */
+  const mqPC = matchMedia('(min-width: 768px) and (min-height: 560px)');
+  function fit() { const k = mqPC.matches ? Math.min(1, (innerHeight - 120) / 844, (innerWidth - 200) / 390) : 1; story.style.setProperty('--k', k.toFixed(4)); }
+  addEventListener('resize', fit); fit();
+
+  /* ---------- Dessins ---------- */
+  function mosaicSVG(m, size, maxDelay = 1100) {
+    if (!m || !m.cells.length) return '';
+    const R = m.rows, C = m.cols, cell = Math.min(size / C, size / R), w = C * cell, h = R * cell, g = cell * .18;
+    const cr = R / 2, cc = C / 2, dmax = Math.hypot(cr, cc) || 1;
+    const rects = m.cells.map(([r, c, n]) => `<rect class="px" style="--d:${Math.round(Math.hypot(r - cr, c - cc) / dmax * maxDelay + (r * 7 + c * 13) % 180)}ms" x="${(c * cell + g / 2).toFixed(2)}" y="${(r * cell + g / 2).toFixed(2)}" width="${(cell - g).toFixed(2)}" height="${(cell - g).toFixed(2)}" rx="${(cell * .15).toFixed(2)}" fill="var(${n ? '--a' : '--b'})"/>`).join('');
+    return `<svg class="mosaic" viewBox="0 0 ${w.toFixed(1)} ${h.toFixed(1)}" width="${w.toFixed(0)}" height="${h.toFixed(0)}" role="img" aria-label="Vos blocs, ceux de ${YEAR} en couleur vive">${rects}</svg>`;
+  }
+  function routeSVG(s, size) {
+    const lat0 = s.trace.reduce((t, p) => t + p[0], 0) / s.trace.length, k = Math.cos(lat0 * Math.PI / 180);
+    const P = (lat, lon) => [lon * k, -lat];
+    const all = s.trace.map((p) => P(p[0], p[1]));
+    const half = s.dlat / 2;
+    s.cells.forEach(([la, lo]) => { all.push(P(la - half, lo - half / k)); all.push(P(la + half, lo + half / k)); });
+    const xs = all.map((p) => p[0]), ys = all.map((p) => p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const span = Math.max(x1 - x0, y1 - y0) || 1, sc = (size - 16) / span;
+    const ox = (size - (x1 - x0) * sc) / 2, oy = (size - (y1 - y0) * sc) / 2;
+    const X = (p) => ((p[0] - x0) * sc + ox).toFixed(1), Y = (p) => ((p[1] - y0) * sc + oy).toFixed(1);
+    const cs = s.dlat * sc;
+    const n = s.cells.length;
+    const cells = s.cells.map(([la, lo], i) => { const p = P(la + half, lo - half / k); return `<rect class="px" style="--d:${300 + Math.round(i / Math.max(1, n) * 1500)}ms" x="${X(p)}" y="${Y(p)}" width="${(cs * .86).toFixed(1)}" height="${(cs * .86).toFixed(1)}" rx="${(cs * .18).toFixed(1)}" fill="var(--a)" fill-opacity=".3"/>`; }).join('');
+    // Blocs dans l'ordre de passage : approximation par la distance au départ le long de la trace
+    const line = all.slice(0, s.trace.length).map((p) => `${X(p)},${Y(p)}`).join(' ');
+    const st = all[0];
+    return `<svg class="route" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" role="img" aria-label="Tracé de la sortie">${cells}<polyline class="draw" pathLength="1" points="${line}" fill="none" stroke="var(--a)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${X(st)}" cy="${Y(st)}" r="5" fill="#fff"/></svg>`;
+  }
+  function vbars(vals, labels, hi, opts = {}) {
+    const mx = Math.max(1, ...vals);
+    return `<div class="vbars" style="grid-template-columns:repeat(${vals.length},minmax(0,1fr))">${vals.map((v, i) =>
+      `<div class="vb${hi.has(i) ? ' vb--hi' : ''}${opts.off && opts.off(i) ? ' vb--off' : ''}"><span class="gy" style="--h:${Math.max(v / mx * 100, 2).toFixed(0)}%;--d:${(opts.d0 || 200) + i * 45}ms"></span><i>${labels[i] || ''}</i></div>`).join('')}</div>`;
+  }
+
+  /* ---------- Écrans ---------- */
+  const SCREENS = [];   // {html, dur}
+  const add = (html, dur = 6000, hint = true) => SCREENS.push({ html, dur, hint });
+
+  function build(d) {
+    const c = d.chiffres, h = d.habitudes;
+    const asOf = d.complete ? "Bilan complet de l'année" : d.as_of ? `Chiffres au ${d.as_of}` : '';
+    const until = `<span class="pill pill--info an" style="--d:750ms">{{ icon('clock') }}Disponible jusqu'au 31 janvier</span>`;
+    const small = innerHeight < 700;
+
+    if (d.empty) {
+      add(`<div class="empty-ico an" style="--d:100ms">{{ icon('calendar') }}</div>
+        <span class="k an" style="--d:150ms">Unlock · votre bilan</span>
+        <p class="t t--m an" style="--d:250ms">Pas encore de sortie en ${YEAR}</p>
+        <p class="s an" style="--d:400ms">${d.complete ? `Aucune sortie GPS n'a été enregistrée sur Strava en ${YEAR}.` : "Votre bilan se remplira avec vos sorties GPS de l'année. Revenez après votre prochaine sortie."}</p>
+        <div class="actions an" style="--d:550ms"><a class="btn-w btn-w--main" href="/">Revenir à la carte</a></div>`, 0, false);
+      return;
+    }
+
+    // 1. Ouverture
+    add(`<span class="k an" style="--d:100ms">Unlock · votre bilan</span>
+      <div class="y-num y-num--xl pop" style="--d:250ms">${YEAR}</div>
+      <p class="t an" style="--d:500ms">Votre année en blocs</p>
+      ${asOf ? `<span class="sub an" style="--d:650ms">${asOf}</span>` : ''}${until}
+      <div class="an" style="--d:300ms;margin-top:${small ? 18 : 28}px">${mosaicSVG(d.mosaique, small ? 170 : 220)}</div>`, 5600);
+
+    // 2. Chiffres clés
+    const ev = c.new_blocks_evol;
+    const evPill = c.first_year ? `<span class="pill pill--info an" style="--d:900ms">Votre première année sur Unlock</span>`
+      : ev === null ? '' : `<span class="pill ${ev >= 0 ? 'pill--up' : 'pill--down'} an" style="--d:900ms">${ev >= 0 ? '+' : '−'}${fmt(Math.abs(ev))} % par rapport à ${YEAR - 1}</span>`;
+    const em = (v, unit = '') => v === null || v === undefined ? '<em></em>' : `<em class="${v < 0 ? 'is-down' : ''}">${v > 0 ? '+' : v < 0 ? '−' : ''}${fmt(Math.abs(v))}${unit}</em>`;
+    add(`<span class="k an" style="--d:100ms">Vos chiffres clés</span>
+      <div class="y-num y-num--l an" style="--d:200ms"><span class="cnt" data-to="${c.new_blocks}">${nb(fmt(c.new_blocks))}</span></div>
+      <p class="t an" style="--d:400ms">nouveau${c.new_blocks > 1 ? 'x' : ''} bloc${c.new_blocks > 1 ? 's' : ''} débloqué${c.new_blocks > 1 ? 's' : ''}</p>
+      ${evPill}
+      <div class="tiles">
+        <div class="tile an" style="--d:1100ms"><b><span class="cnt" data-to="${c.outings}">${nb(fmt(c.outings))}</span></b><small>sortie${c.outings > 1 ? 's' : ''}</small>${em(c.outings_diff)}</div>
+        <div class="tile an" style="--d:1250ms"><b><span class="cnt" data-to="${c.km}">${nb(fmt(c.km))}</span></b><small>km</small>${em(c.km_evol, ' %')}</div>
+        <div class="tile an" style="--d:1400ms"><b><span class="cnt" data-to="${c.new_communes}">${nb(fmt(c.new_communes))}</span></b><small>nouvelle${c.new_communes > 1 ? 's' : ''} commune${c.new_communes > 1 ? 's' : ''}</small><em></em></div>
+      </div>`, 6000);
+
+    // 3. Sortie la plus marquante
+    if (d.sortie) {
+      const s = d.sortie;
+      add(`<span class="k an" style="--d:100ms">Votre sortie la plus marquante</span>
+        <div style="margin-top:${small ? 8 : 14}px">${routeSVG(s, small ? 190 : 250)}</div>
+        <div class="y-num y-num--m an" style="--d:1500ms"><span class="cnt" data-to="${s.new_blocks}">${s.new_blocks}</span></div>
+        <p class="t an" style="--d:1700ms">nouveau${s.new_blocks > 1 ? 'x' : ''} bloc${s.new_blocks > 1 ? 's' : ''} en une seule sortie</p>
+        <div class="y-meta an" style="--d:1900ms"><span>${esc(s.date)}</span><span>${esc(s.sport)}</span><span>${fmt(s.km, 1)} km</span></div>`, 6500);
+    }
+
+    // 4. Habitudes : quand
+    if (h.moment) {
+      const m = h.moment, hi = new Set();
+      for (let x = m.from; x < m.to; x++) hi.add(x % 24);
+      const hourLbl = Array.from({ length: 24 }, (_, i) => i % 6 === 0 ? `${i}h` : '');
+      add(`<span class="k an" style="--d:100ms">Vos habitudes</span>
+        <p class="t t--l an" style="--d:200ms">${esc(m.title)}</p>
+        <p class="s an" style="--d:350ms">${fmt(m.percent)} % de vos sorties démarrent ${esc(m.label)}.</p>
+        <div class="y-chart an" style="--d:450ms"><span class="y-chart__t">Heure de départ</span>${vbars(h.hours, hourLbl, hi, { d0: 500 })}</div>
+        <div class="y-chart an" style="--d:650ms"><span class="y-chart__t">Jour de la semaine${h.top_day ? `<b>Le ${esc(h.top_day.toLowerCase())}</b>` : ''}</span>${vbars(h.days, DAYS, new Set(h.top_day_index === null ? [] : [h.top_day_index]), { d0: 700 })}</div>`, 6500);
+    }
+
+    // 5. Habitudes : comment
+    const COLORS = ['var(--a)', '#C98A96', '#7A6A70', '#4A4247'];
+    const stack = h.sports.length ? `<div class="y-chart an" style="--d:350ms"><span class="y-chart__t">Répartition des sorties</span>
+        <div class="stack">${h.sports.map((sp, i) => `<span class="gx" style="--w:${sp.percent}%;--d:${400 + i * 200}ms;background:${COLORS[i]}"></span>`).join('')}</div>
+        <div class="slegend">${h.sports.map((sp, i) => `<span><i style="background:${COLORS[i]}"></i>${esc(sp.label)} <b>${sp.percent} %</b></span>`).join('')}</div></div>` : '';
+    const rec = h.record;
+    add(`<span class="k an" style="--d:100ms">Vos habitudes</span>
+      <p class="t t--m an" style="--d:200ms">${esc(h.sport_title || 'Vos sorties')}</p>
+      ${stack}
+      <div class="y-chart an" style="--d:600ms"><span class="y-chart__t">Nouveaux blocs par mois</span>${vbars(h.months, MONTHS, new Set(rec ? [rec.index] : []), { d0: 650, off: (i) => i >= h.last_month })}</div>
+      ${rec ? `<p class="s an" style="--d:900ms">${esc(rec.month.charAt(0).toUpperCase() + rec.month.slice(1))}, votre mois record avec ${plural(rec.blocks, 'nouveau bloc', 'nouveaux blocs')}.</p>` : ''}`, 6500);
+
+    // 6. Top communes
+    if (d.communes.length) {
+      add(`<span class="k an" style="--d:100ms">Vos communes en ${YEAR}</span>
+        <p class="t t--m an" style="--d:200ms">${d.communes.length > 1 ? `Le top ${d.communes.length} de l'année` : "La commune de l'année"}</p>
+        <div class="list">${d.communes.map((cm, i) => `<div class="row an" style="--d:${250 + i * 130}ms"><span class="pos">${i + 1}</span>
+          <span class="row__n"><b>${esc(cm.name)}</b><small>${cm.new ? `Découverte en ${YEAR}` : `${pts(cm.points)} en ${YEAR}`}</small></span><span class="row__p">${pct(cm.percent)}</span>
+          <span class="y-bar"><span class="gx" style="--w:${Math.max(cm.percent, 1)}%;--d:${450 + i * 130}ms"></span></span></div>`).join('')}</div>`, 6000);
+    }
+
+    // 7. Départements
+    if (d.departements.length) {
+      const top = Math.max(...d.departements.map((x) => x.percent), .1), n = d.departements_total || d.departements.length;
+      add(`<span class="k an" style="--d:100ms">Vos départements en ${YEAR}</span>
+        <p class="t t--m an" style="--d:200ms">${n > 1 ? `${n} départements explorés` : `Un département exploré`}</p>
+        <div class="list">${d.departements.map((dp, i) => `<div class="row row--dep an" style="--d:${250 + i * 140}ms">
+          <span class="row__n"><b>${esc(dp.name)} <small style="display:inline;font-weight:600">(${esc(dp.code)})</small></b></span><span class="row__p">${pct(dp.percent, 1)}</span>
+          <span class="y-bar"><span class="gx" style="--w:${Math.max(dp.percent / top * 100, 2).toFixed(0)}%;--d:${450 + i * 140}ms"></span></span>
+          <span class="row__s">${dp.points > 0 ? `${pts(dp.points)} en ${YEAR} · ` : ''}${plural(dp.communes, 'commune explorée', 'communes explorées')}</span></div>`).join('')}</div>
+        <p class="s an" style="--d:900ms;font-size:12.5px">Part des communes du département où vous êtes passé.</p>`, 6000);
+    }
+
+    // 8. Story à partager
+    const canShare = !!(navigator.canShare && matchMedia('(pointer: coarse)').matches);
+    add(`<div class="share pop" style="--d:100ms"><canvas id="share-canvas" width="1080" height="1920" aria-label="Aperçu de votre story"></canvas></div>
+      <div class="swatches an" style="--d:450ms" role="group" aria-label="Couleur de la story">
+        <button type="button" class="swatch" data-theme="bordeaux" aria-pressed="true" aria-label="Bordeaux" style="background:#FF5A6E"></button>
+        <button type="button" class="swatch" data-theme="ocean" aria-pressed="false" aria-label="Océan" style="background:#5AB4FF"></button>
+        <button type="button" class="swatch" data-theme="foret" aria-pressed="false" aria-label="Forêt" style="background:#5BE38F"></button>
+      </div>
+      <div class="actions an" style="--d:600ms">
+        <button type="button" class="btn-w btn-w--main" id="dl">{{ icon('download') }}${canShare ? 'Partager ma story' : 'Télécharger ma story'}</button>
+        <a class="btn-w btn-w--ghost" href="/">Revenir à la carte</a>
+      </div>`, 0, false);
+  }
+
+  /* ---------- Image de la story (1080 × 1920) ---------- */
+  const THEMES = { bordeaux: ['#FF5A6E', '#5A0A1A', '#3A0410'], ocean: ['#5AB4FF', '#0B3A66', '#06213B'], foret: ['#5BE38F', '#0B5C2C', '#05301A'] };
+  let DATA = null, theme = 'bordeaux';
+  function drawStory(cv) {
+    const ctx = cv.getContext('2d'), W = 1080, H = 1920, [A, B, T] = THEMES[theme], c = DATA.chiffres, m = DATA.mosaique;
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, T); g.addColorStop(.62, '#121014'); g.addColorStop(1, '#121014');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(255,255,255,.6)';
+    ctx.font = '650 34px Sora, sans-serif'; ctx.letterSpacing = '6px';
+    ctx.fillText(`MON ANNÉE ${YEAR}`, W / 2, 190); ctx.letterSpacing = '0px';
+    // Mosaïque
+    if (m && m.cells.length) {
+      const size = 760, cell = Math.min(size / m.cols, size / m.rows), w = m.cols * cell, h = m.rows * cell, x0 = (W - w) / 2, y0 = 270 + (size - h) / 2, gp = cell * .18;
+      m.cells.forEach(([r, k, n]) => { ctx.fillStyle = n ? A : B; const s = cell - gp; const x = x0 + k * cell + gp / 2, y = y0 + r * cell + gp / 2;
+        if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, s, s, s * .15); ctx.fill(); } else ctx.fillRect(x, y, s, s); });
+    }
+    // Chiffres
+    const stats = [[c.new_blocks, c.new_blocks > 1 ? 'nouveaux blocs' : 'nouveau bloc'], [c.km, 'km'], [c.outings, c.outings > 1 ? 'sorties' : 'sortie']];
+    stats.forEach(([v, l], i) => {
+      const x = W / 2 + (i - 1) * 330;
+      ctx.fillStyle = A; ctx.font = '800 92px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText(fmt(v).replace(/\s/g, ' '), x, 1235); ctx.letterSpacing = '0px';
+      ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '500 34px Sora, sans-serif'; ctx.fillText(l, x, 1290);
+    });
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(140, 1400, W - 280, 2);
+    ctx.fillStyle = '#fff'; ctx.font = '800 84px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText('unlock', W / 2, 1560); ctx.letterSpacing = '0px';
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '500 36px Sora, sans-serif'; ctx.fillText('unlock-app.fr', W / 2, 1625);
+  }
+  async function exportStory() {
+    const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; drawStory(cv);
+    const blob = await new Promise((r) => cv.toBlob(r, 'image/png'));
+    const name = `unlock-annee-${YEAR}.png`;
+    try {
+      const file = new File([blob], name, { type: 'image/png' });
+      if (navigator.canShare && matchMedia('(pointer: coarse)').matches && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: `Mon année ${YEAR} sur Unlock` }); return;
+      }
+    } catch (e) { if (e && e.name === 'AbortError') return; }
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    Unlock.toast('Story enregistrée', 'check');
+  }
+
+  /* ---------- Navigation ---------- */
+  let cur = -1, timer = null, left = 0, startedAt = 0, paused = false;
+  function count(el) {
+    const to = +el.dataset.to, d = 1100, delay = parseFloat(getComputedStyle(el.closest('.an,.pop') || el).getPropertyValue('--d')) || 0, t0 = performance.now();
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches || !to) { el.textContent = nb(fmt(to)); return; }
+    el.textContent = '0';
+    const step = (t) => { const k = Math.min(1, Math.max(0, (t - t0 - delay) / d)); el.textContent = nb(fmt(Math.round(to * (1 - Math.pow(1 - k, 3))))); if (k < 1) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  function schedule(ms) { clearTimeout(timer); left = ms; startedAt = Date.now(); if (ms > 0) timer = setTimeout(() => go(cur + 1), ms); }
+  function go(i) {
+    const els = screensEl.children;
+    if (i < 0 || i >= els.length) return;
+    [...els].forEach((s) => s.classList.remove('is-on')); void els[i].offsetWidth; els[i].classList.add('is-on'); cur = i;
+    [...progEl.children].forEach((p, k) => { p.className = k < i ? 'done' : k === i ? 'cur' : ''; p.style.setProperty('--dur', (SCREENS[i].dur || 1) + 'ms'); });
+    if (!SCREENS[i].dur) progEl.children[i].className = 'done';
+    els[i].querySelectorAll('.cnt').forEach(count);
+    if (els[i].querySelector('#share-canvas')) drawStory($('share-canvas'));
+    $('prev').disabled = i === 0; $('next').disabled = i === els.length - 1;
+    paused = false; story.classList.remove('is-paused');
+    schedule(SCREENS[i].dur);
+    els[i].setAttribute('aria-hidden', 'false');
+  }
+  function pause() { if (paused || !SCREENS[cur] || !SCREENS[cur].dur) return; paused = true; story.classList.add('is-paused'); clearTimeout(timer); left -= Date.now() - startedAt; }
+  function resume() { if (!paused) return; paused = false; story.classList.remove('is-paused'); schedule(Math.max(300, left)); }
+
+  // Toucher : à gauche, écran précédent ; ailleurs, suivant. Appui long : pause.
+  let holdT = null, held = false;
+  $('tap').addEventListener('pointerdown', () => { held = false; holdT = setTimeout(() => { held = true; pause(); }, 260); });
+  $('tap').addEventListener('pointerup', (e) => {
+    clearTimeout(holdT);
+    if (held) { resume(); return; }
+    const r = story.getBoundingClientRect();
+    go((e.clientX - r.left) < r.width * .3 ? cur - 1 : cur + 1);
+  });
+  $('tap').addEventListener('pointerleave', () => { clearTimeout(holdT); if (held) resume(); });
+  $('prev').addEventListener('click', () => go(cur - 1));
+  $('next').addEventListener('click', () => go(cur + 1));
+  addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
+    else if (e.key === 'Escape') { const f = $('apercu-form'); if (f && !f.hidden) { f.hidden = true; return; } close(); }
+  });
+  document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
+  screensEl.addEventListener('click', (e) => {
+    const sw = e.target.closest('.swatch');
+    if (sw) { theme = sw.dataset.theme; $('yr').dataset.theme = theme; document.querySelectorAll('.swatch').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); drawStory($('share-canvas')); }
+    if (e.target.closest('#dl')) exportStory();
+  });
+
+  /* ---------- Chargement ---------- */
+  Unlock.loader.show(['Calcul de votre année…', 'Vos communes de l\'année…', 'Presque prêt…']);
+  fetch('/api/annee').then((r) => { if (r.status === 401) { location.href = '/login?error=expired'; throw new Error('401'); } if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(async (d) => {
+      DATA = d; build(d);
+      screensEl.innerHTML = SCREENS.map((s) => `<div class="scr" aria-hidden="true">${s.html}${s.hint ? '<p class="scr__hint">Touchez pour continuer</p>' : ''}</div>`).join('');
+      progEl.innerHTML = SCREENS.map(() => '<span><b></b></span>').join('');
+      if (document.fonts && document.fonts.ready) await document.fonts.ready;
+      Unlock.loader.hide(); go(0);
+    })
+    .catch((e) => {
+      if (String(e.message) === '401') return;
+      Unlock.loader.hide();
+      SCREENS.length = 0;
+      add(`<div class="empty-ico">{{ icon('alert') }}</div><p class="t t--m">Bilan indisponible</p><p class="s">Le calcul n'a pas abouti. Réessayez dans quelques instants.</p>
+        <div class="actions"><button type="button" class="btn-w btn-w--main" onclick="location.reload()">Réessayer</button><a class="btn-w btn-w--ghost" href="/">Revenir à la carte</a></div>`, 0, false);
+      screensEl.innerHTML = `<div class="scr" style="z-index:3">${SCREENS[0].html}</div>`; progEl.innerHTML = '<span class="done"><b></b></span>';
+      go(0);
+    });
+})();
+</script>
+{% endblock %}
