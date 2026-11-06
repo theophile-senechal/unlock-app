@@ -55,7 +55,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.05'
+ASSET_VERSION = '2026.11.06'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -2073,6 +2073,387 @@ def api_annee():
     if key not in cache:
         cache[key] = compute_annee(st['year'], as_of)
     return jsonify(cache[key])
+
+
+# ============================================================
+# 19. EXPORT DE MES CHIFFRES (zip de fichiers CSV + GeoJSON)
+# ============================================================
+# Uniquement les chiffres de l'utilisateur connecté, calculés à la demande par Unlock (rien n'est stocké en plus).
+# Pas de traces GPS ni de données brutes Strava (Strava a déjà son propre export).
+import io, csv, zipfile
+EXPORT_MIN_PCT = 5            # évolution par commune : communes explorées à 5 % ou plus
+JOURS_FR = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+
+def _fr(x, nd=1):
+    """Nombre au format français (virgule décimale) pour Excel."""
+    if x is None or x == '': return ''
+    if isinstance(x, int): return str(x)
+    return f"{x:.{nd}f}".replace('.', ',')
+
+def _csv(rows, header):
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=';', lineterminator='\r\n')
+    w.writerow(header); w.writerows(rows)
+    return '﻿' + buf.getvalue()          # BOM : Excel ouvre les accents correctement
+
+def _mois_suivant(k):
+    y, m = int(k[:4]), int(k[5:]) + 1
+    return f"{y + (m > 12)}-{(m - 1) % 12 + 1:02d}"
+
+def _dt_fr(v):
+    if not v: return ''
+    try:
+        from datetime import timezone
+        if not getattr(v, 'tzinfo', None): v = v.replace(tzinfo=timezone.utc)   # colonnes sans fuseau : enregistrées en UTC
+        return v.astimezone(PARIS).strftime('%d/%m/%Y %H:%M')
+    except Exception: return str(v)
+
+def _d_fr(iso):
+    return f"{iso[8:10]}/{iso[5:7]}/{iso[:4]}" if iso else ''
+
+def _wiki_url(w):
+    """Même lien que la fiche lieu : article Wikipédia en français, sinon fiche Wikidata."""
+    if not w: return ''
+    if w.startswith('fr:'):
+        from urllib.parse import quote
+        return 'https://fr.wikipedia.org/wiki/' + quote(w[3:].replace(' ', '_'))
+    return 'https://www.wikidata.org/wiki/' + w
+
+def compute_export():
+    grid_m = 250
+    dlat = grid_m / 111320
+    today = _today_paris()
+    activities = sorted(get_strava_activities_cached(), key=lambda a: a['start_date_local'])
+    files = {}
+
+    # --- Sorties décodées, blocs nouveaux par sortie (global et par sport) ---
+    first_cell, cell_sports = {}, defaultdict(set)
+    sport_seen = defaultdict(set)
+    acts = []
+    for a in activities:
+        pts = polyline.decode(a['polyline']) if a.get('polyline') else []
+        cells = get_cells_from_polyline(pts, dlat) if len(pts) >= 2 else set()
+        d = a['start_date_local']
+        new = {c for c in cells if c not in first_cell}
+        for c in new: first_cell[c] = d[:10]
+        for c in cells: cell_sports[c].add(a['type'])
+        new_sport = cells - sport_seen[a['type']]; sport_seen[a['type']] |= cells
+        acts.append({"a": a, "d": d, "dt": datetime.strptime(d, "%Y-%m-%dT%H:%M:%SZ"), "cells": cells,
+                     "new": len(new), "new_sport": len(new_sport), "km": (a.get('distance', 0) or 0) / 1000})
+
+    data = _activities_data('all', 'all', grid_m) if activities else {}
+    cities = [c for c in data.get('top_municipalities', []) if c.get('code')]
+    profil = data.get('acces_profil', 'tous')
+
+    # --- Contours des communes visitées (une seule requête) ---
+    geoms = {}
+    if DB_URL and cities:
+        try:
+            with _engine().connect() as conn:
+                for r in conn.execute(text("SELECT code_insee, ST_AsGeoJSON(geometry) AS g FROM communes WHERE code_insee = ANY(:c)"),
+                                      {"c": [c['code'] for c in cities]}):
+                    if r.g and r.code_insee not in geoms:
+                        geoms[r.code_insee] = shp_transform(lambda x, y, z=None: (y, x), shp_shape(json.loads(r.g))).buffer(0)
+        except Exception as e:
+            print(f"Export : contours indisponibles ({e})")
+    com_cells, cell_com = {}, {}
+    for c in cities:
+        g = geoms.get(c['code'])
+        if g is None or g.is_empty: continue
+        cc = commune_cells(g, dlat); com_cells[c['code']] = cc
+        for cell in cc:
+            if cell in first_cell and cell not in cell_com: cell_com[cell] = c['code']
+    name_of = {c['code']: c['name'] for c in cities}
+    first_com = {c['code']: c['stats'].get('first') for c in cities}
+
+    # --- Lieux débloqués ---
+    lieux_rows, lieux_par_jour = [], defaultdict(list)
+    try:
+        base = _lieux_base() if activities else {'deps': []}
+        for dep in base['deps']:
+            d = lieux.departement(dep)
+            if not d: continue
+            pris = _lieux_pris(base, dep)
+            for i, date in pris.items():
+                r = d['lieux'][i]
+                lieux_rows.append([r[6], lieux.CATEGORIES.get(r[4], (r[4],))[0], 'oui' if r[5] else 'non',
+                                   d['communes'].get(r[7], ''), DEPARTEMENTS.get(dep, dep), _d_fr(date),
+                                   _fr(r[1], 5), _fr(r[2], 5), _wiki_url(r[8])])
+                lieux_par_jour[date].append(r[6])
+    except Exception as e:
+        print(f"Export : lieux indisponibles ({e})")
+    lieux_rows.sort(key=lambda r: (r[5][6:] + r[5][3:5] + r[5][:2], r[0]))
+
+    # ============ Photos du jour ============
+    files['communes.csv'] = _csv([[c['name'], c['code'], DEPARTEMENTS.get(c['dep'], c['dep']), _fr(c['stats']['percent'], 1),
+                                   c['stats']['blocks'], c['stats']['total_blocks'], _fr(c['stats'].get('km', 0), 1),
+                                   c['stats'].get('activities', 0), _d_fr(c['stats'].get('first')), _d_fr(c['stats'].get('last'))]
+                                  for c in sorted(cities, key=lambda c: c['stats']['percent'], reverse=True)],
+                                 ['Commune', 'Code INSEE', 'Département', '% exploré', 'Blocs explorés', 'Blocs au total',
+                                  'Km dans la commune', 'Sorties', 'Première sortie', 'Dernière sortie'])
+    files['departements.csv'] = _csv([[d['name'], d['code'], d['visited'], d['total'], _fr(d['percent'], 1), d['at100'], d['over50']]
+                                      for d in data.get('departements', [])],
+                                     ['Département', 'Code', 'Communes visitées', 'Communes au total', '% des communes visitées',
+                                      'Communes à 100 %', 'Communes à 50 % ou plus'])
+    files['lieux.csv'] = _csv(lieux_rows, ['Lieu', 'Catégorie', 'Monument historique', 'Commune', 'Département',
+                                           'Date de déblocage', 'Latitude', 'Longitude', 'Wikipédia ou Wikidata'])
+    sp = defaultdict(lambda: {"n": 0, "km": 0.0})
+    for x in acts: sp[x['a']['type']]['n'] += 1; sp[x['a']['type']]['km'] += x['km']
+    files['sports.csv'] = _csv([[SPORT_TRANSLATIONS.get(k, k), v['n'], _fr(v['km'], 1), len(sport_seen[k]),
+                                 len({cell_com[c] for c in sport_seen[k] if c in cell_com})]
+                                for k, v in sorted(sp.items(), key=lambda kv: kv[1]['n'], reverse=True)],
+                               ['Sport', 'Sorties', 'Km', 'Blocs parcourus', 'Communes visitées'])
+
+    # ============ Évolution ============
+    mois = []
+    if acts:
+        k, fin = acts[0]['d'][:7], f"{today:%Y-%m}"
+        while k <= fin: mois.append(k); k = _mois_suivant(k)
+    par_mois = defaultdict(lambda: {"n": 0, "km": 0.0, "new": 0})
+    par_mois_sport = defaultdict(lambda: {"n": 0, "km": 0.0, "new": 0})
+    for x in acts:
+        m = x['d'][:7]; s = x['a']['type']
+        par_mois[m]['n'] += 1; par_mois[m]['km'] += x['km']; par_mois[m]['new'] += x['new']
+        ms = par_mois_sport[(m, s)]; ms['n'] += 1; ms['km'] += x['km']; ms['new'] += x['new_sport']
+    com_mois = defaultdict(int)
+    for code, f in first_com.items():
+        if f: com_mois[f[:7]] += 1
+    lieux_mois = defaultdict(int)
+    for date, noms in lieux_par_jour.items(): lieux_mois[date[:7]] += len(noms)
+    rows, cb, cc, cl = [], 0, 0, 0
+    for m in mois:
+        p = par_mois[m]; cb += p['new']; cc += com_mois[m]; cl += lieux_mois[m]
+        rows.append([m, p['n'], _fr(p['km'], 1), p['new'], cb, com_mois[m], cc, lieux_mois[m], cl])
+    files['evolution_mensuelle.csv'] = _csv(rows, ['Mois', 'Sorties', 'Km', 'Nouveaux blocs', 'Blocs cumulés',
+                                                   'Nouvelles communes', 'Communes cumulées', 'Lieux débloqués', 'Lieux cumulés'])
+    files['evolution_par_sport.csv'] = _csv([[m, SPORT_TRANSLATIONS.get(s, s), v['n'], _fr(v['km'], 1), v['new']]
+                                             for (m, s), v in sorted(par_mois_sport.items())],
+                                            ['Mois', 'Sport', 'Sorties', 'Km', 'Nouveaux blocs pour ce sport'])
+    totals = dep_totals()
+    rows = []
+    for dep in sorted({c['dep'] for c in cities if c.get('dep')}):
+        firsts = sorted(f[:7] for code, f in first_com.items() if f and dep_of(code) == dep)
+        if not firsts: continue
+        total = max(totals.get(dep, 0), len(firsts))
+        n = 0
+        for m in mois:
+            if m < firsts[0]: continue
+            n = sum(1 for f in firsts if f <= m)
+            rows.append([m, DEPARTEMENTS.get(dep, dep), dep, n, total, _fr(n / total * 100, 1)])
+    files['evolution_departements.csv'] = _csv(rows, ['Mois', 'Département', 'Code', 'Communes visitées (cumul)',
+                                                      'Communes au total', '% des communes visitées'])
+
+    # % par commune, fin de chaque mois (communes explorées à 5 % ou plus)
+    cell_mois = {c: d[:7] for c, d in first_cell.items()}
+    rows, cent_pour_cent = [], []
+    for c in sorted(cities, key=lambda c: c['stats']['percent'], reverse=True):
+        if c['stats']['percent'] < EXPORT_MIN_PCT or c['code'] not in com_cells: continue
+        allc = com_cells[c['code']]
+        try:
+            hors = set(acces.filtre_inaccessibles(acces.keys_of_cells(allc, dlat), c['dep'], grid_m, profil).tolist()) if allc else set()
+        except Exception:
+            hors = set()
+        vus_par_mois = defaultdict(set)
+        for cell in allc:
+            if cell in cell_mois: vus_par_mois[cell_mois[cell]].add(cell)
+        if not vus_par_mois: continue
+        vus, n_hors_vus, atteint = set(), 0, None
+        for m in mois:
+            if m < min(vus_par_mois): continue
+            neufs = vus_par_mois.get(m, set())
+            if neufs and hors:
+                n_hors_vus += sum(1 for k in acces.keys_of_cells(neufs, dlat).tolist() if k in hors)
+            vus |= neufs
+            total = max(len(vus), len(allc) - (len(hors) - n_hors_vus))
+            pct = min(100.0, len(vus) / max(1, total) * 100)
+            rows.append([m, c['name'], c['code'], _fr(pct, 1), len(vus), total])
+            if pct >= 100 and not atteint: atteint = m
+        if atteint: cent_pour_cent.append((atteint, c['name']))
+    files['evolution_communes.csv'] = _csv(rows, ['Mois', 'Commune', 'Code INSEE', '% exploré en fin de mois', 'Blocs explorés', 'Blocs au total'])
+
+    # Résumé annuel : global puis par sport, écart avec l'année précédente
+    annees = sorted({x['d'][:4] for x in acts})
+    def bilan(sel):
+        out = {}
+        for y in annees:
+            xs = [x for x in acts if x['d'][:4] == y and (sel is None or x['a']['type'] == sel)]
+            out[y] = {"n": len(xs), "km": sum(x['km'] for x in xs),
+                      "new": sum(x['new'] if sel is None else x['new_sport'] for x in xs)}
+        return out
+    def ecart(cur, prev):
+        return '' if not prev else _fr((cur - prev) / prev * 100, 0)
+    rows = []
+    g = bilan(None)
+    for i, y in enumerate(annees):
+        p = g[annees[i - 1]] if i else None
+        nc = sum(1 for f in first_com.values() if f and f[:4] == y)
+        nl = sum(len(v) for k, v in lieux_par_jour.items() if k[:4] == y)
+        rows.append([y, 'Tous', g[y]['n'], _fr(g[y]['km'], 1), g[y]['new'], nc, nl,
+                     '' if not p else g[y]['n'] - p['n'], ecart(g[y]['km'], p and p['km']), ecart(g[y]['new'], p and p['new'])])
+    for s in sorted(sp, key=lambda k: sp[k]['n'], reverse=True):
+        b = bilan(s)
+        for i, y in enumerate(annees):
+            if not b[y]['n']: continue
+            p = b[annees[i - 1]] if i else None
+            rows.append([y, SPORT_TRANSLATIONS.get(s, s), b[y]['n'], _fr(b[y]['km'], 1), b[y]['new'], '', '',
+                         '' if not p or not p['n'] else b[y]['n'] - p['n'], ecart(b[y]['km'], p and p['km']), ecart(b[y]['new'], p and p['new'])])
+    files['resume_annuel.csv'] = _csv(rows, ['Année', 'Sport', 'Sorties', 'Km', 'Nouveaux blocs', 'Nouvelles communes',
+                                             'Lieux débloqués', 'Écart sorties', 'Écart km (%)', 'Écart nouveaux blocs (%)'])
+
+    # ============ Détail par sortie ============
+    files['sorties.csv'] = _csv([[_d_fr(x['d'][:10]), x['d'][11:16], SPORT_TRANSLATIONS.get(x['a']['type'], x['a']['type']), _fr(x['km'], 2),
+                                  x['new'], ' | '.join(sorted({name_of[cell_com[c]] for c in x['cells'] if c in cell_com})),
+                                  ' | '.join(lieux_par_jour.get(x['d'][:10], []))] for x in reversed(acts)],
+                                ['Date', 'Heure', 'Sport', 'Km', 'Nouveaux blocs', 'Communes traversées', 'Lieux débloqués ce jour-là'])
+
+    # ============ Records ============
+    rec = []
+    if acts:
+        b = max(acts, key=lambda x: x['new'])
+        rec.append(['Sortie avec le plus de nouveaux blocs', b['new'], _d_fr(b['d'][:10]), f"{SPORT_TRANSLATIONS.get(b['a']['type'], b['a']['type'])}, {_fr(b['km'], 1)} km"])
+        l = max(acts, key=lambda x: x['km'])
+        rec.append(['Plus longue sortie (km)', _fr(l['km'], 1), _d_fr(l['d'][:10]), SPORT_TRANSLATIONS.get(l['a']['type'], l['a']['type'])])
+        mm = max(mois, key=lambda m: par_mois[m]['new'])
+        rec.append(['Mois avec le plus de nouveaux blocs', par_mois[mm]['new'], mm, ''])
+        yy = max(annees, key=lambda y: g[y]['n'])
+        rec.append(["Année avec le plus de sorties", g[yy]['n'], yy, ''])
+        semaines = sorted({x['dt'].isocalendar()[:2] for x in acts})
+        best, run, start, best_start = 0, 0, None, None
+        prev = None
+        for wk in semaines:
+            d0 = datetime.fromisocalendar(wk[0], wk[1], 1)
+            run = run + 1 if prev and (d0 - prev).days == 7 else 1
+            if run == 1: start = d0
+            if run > best: best, best_start = run, start
+            prev = d0
+        rec.append(['Plus longue série de semaines avec au moins une sortie', best, f"à partir du {best_start:%d/%m/%Y}" if best_start else '', ''])
+        if cent_pour_cent:
+            m, n = min(cent_pour_cent)
+            rec.append(['Première commune explorée à 100 %', n, m, ''])
+        zones = _zones(set(first_cell), dlat)
+        if zones and geoms:
+            z = zones[0]; zlat = sum(c[0] for c in z) / len(z); zlon = sum(c[1] for c in z) / len(z)
+            def dist(code):
+                ct = geoms[code].centroid
+                return math.hypot((ct.x - zlat) * 111.32, (ct.y - zlon) * 111.32 * math.cos(math.radians(zlat)))
+            far = max(geoms, key=dist)
+            rec.append(['Commune explorée la plus éloignée de votre zone principale', name_of.get(far, far), '', f"{_fr(dist(far), 0)} km"])
+    files['records.csv'] = _csv(rec, ['Record', 'Valeur', 'Date', 'Détail'])
+
+    # ============ Habitudes ============
+    rows = []
+    for y in annees:
+        xs = [x for x in acts if x['d'][:4] == y]
+        for h in range(24):
+            n = sum(1 for x in xs if x['dt'].hour == h)
+            if n: rows.append([y, 'Heure de départ', f"{h} h", n])
+        for j in range(7):
+            n = sum(1 for x in xs if x['dt'].weekday() == j)
+            if n: rows.append([y, 'Jour de la semaine', JOURS_FR[j], n])
+    files['habitudes.csv'] = _csv(rows, ['Année', 'Type', 'Valeur', 'Sorties'])
+
+    # ============ Cartes (GeoJSON) ============
+    feats = []
+    for (la, lo), d in sorted(first_cell.items(), key=lambda kv: kv[1]):
+        dl = _dlon(la, dlat); h, w = dlat / 2, dl / 2
+        ring = [[round(lo - w, 6), round(la - h, 6)], [round(lo + w, 6), round(la - h, 6)], [round(lo + w, 6), round(la + h, 6)],
+                [round(lo - w, 6), round(la + h, 6)], [round(lo - w, 6), round(la - h, 6)]]
+        feats.append({"type": "Feature", "geometry": {"type": "Polygon", "coordinates": [ring]},
+                      "properties": {"premier_passage": d, "sports": ', '.join(sorted(SPORT_TRANSLATIONS.get(s, s) for s in cell_sports[(la, lo)]))}})
+    files['blocs.geojson'] = json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False, separators=(',', ':'))
+    feats = []
+    for c in cities:
+        gg = geoms.get(c['code'])
+        if gg is None: continue
+        simp = shp_transform(lambda x, y, z=None: (round(y, 5), round(x, 5)), gg.simplify(0.0002, preserve_topology=True))
+        feats.append({"type": "Feature", "geometry": simp.__geo_interface__,
+                      "properties": {"nom": c['name'], "code_insee": c['code'], "departement": DEPARTEMENTS.get(c['dep'], c['dep']),
+                                     "pourcentage": c['stats']['percent'], "blocs": c['stats']['blocks'], "blocs_total": c['stats']['total_blocks']}})
+    files['communes.geojson'] = json.dumps({"type": "FeatureCollection", "features": feats}, ensure_ascii=False, separators=(',', ':'))
+
+    # ============ Mon compte (droit d'accès RGPD) ============
+    rows = [['Identifiant Strava', session.get('athlete_id', '')]]
+    if DB_URL and session.get('athlete_id'):
+        try:
+            with _engine().connect() as conn:
+                u = conn.execute(text("""SELECT first_name, last_name, name_at, first_login_date, last_login_date, login_count,
+                                                cgu_version, cgu_accepted_at, full_sync_at
+                                         FROM strava_users WHERE athlete_id = :a"""), {"a": session['athlete_id']}).mappings().first()
+                n_cache = conn.execute(text("SELECT COUNT(*) FROM activities WHERE athlete_id = :a"), {"a": session['athlete_id']}).scalar()
+            if u:
+                rows += [['Prénom (copie Strava, 7 jours au plus)', u['first_name'] or ''], ['Nom (copie Strava, 7 jours au plus)', u['last_name'] or ''],
+                         ['Nom mis à jour le', _dt_fr(u['name_at'])], ['Première connexion', _dt_fr(u['first_login_date'])],
+                         ['Dernière connexion', _dt_fr(u['last_login_date'])], ['Nombre de connexions', u['login_count'] or 0],
+                         ['Version des CGU acceptée', u['cgu_version'] or ''], ['CGU acceptées le', _dt_fr(u['cgu_accepted_at'])],
+                         ['Dernière synchronisation complète avec Strava', _dt_fr(u['full_sync_at'])],
+                         ['Sorties gardées en cache (47 heures au plus)', n_cache or 0]]
+        except Exception as e:
+            print(f"Export : compte indisponible ({e})")
+    rows.append(["Jetons d'accès Strava", 'Enregistrés pour la connexion, non exportés (ce sont des secrets)'])
+    files['mon_compte.csv'] = _csv(rows, ['Information', 'Valeur'])
+
+    files['lisez-moi.txt'] = EXPORT_LISEZ_MOI.format(date=today.strftime('%d/%m/%Y'), pct=EXPORT_MIN_PCT, maxc=MAX_COMMUNES)
+    return files
+
+EXPORT_LISEZ_MOI = """Unlock · vos chiffres au {date}
+==============================
+
+Ce dossier contient uniquement vos chiffres, calculés par Unlock à partir de vos sorties Strava.
+Les traces GPS et le détail Strava de vos activités n'y sont pas. Strava propose son propre export
+(Paramètres du compte > Mon compte > Télécharger ou supprimer votre compte).
+
+Fichiers CSV : séparateur point-virgule, virgule décimale, encodage UTF-8. Ils s'ouvrent dans Excel,
+LibreOffice ou Numbers. Blocs de 250 m, comme la carte par défaut.
+
+À la date du téléchargement
+- mon_compte.csv : ce qu'Unlock enregistre sur vous (droit d'accès RGPD).
+- communes.csv : chaque commune visitée, % exploré, blocs, km dans la commune, première et dernière sortie
+  ({maxc} communes au plus).
+- departements.csv : part des communes visitées par département.
+- lieux.csv : lieux débloqués (monuments, points de vue...), avec la date de déblocage.
+- sports.csv : sorties, km, blocs parcourus et communes visitées par sport.
+- records.csv : vos records personnels.
+
+Dans le temps
+- evolution_mensuelle.csv : chaque mois, sorties, km, nouveaux blocs, communes et lieux, avec les cumuls.
+- evolution_par_sport.csv : la même chose par sport. Un bloc parcouru en course puis à vélo compte comme
+  nouveau pour chacun des deux sports. L'addition des sports dépasse donc le total.
+- evolution_departements.csv : communes visitées par département, mois après mois.
+- evolution_communes.csv : % exploré en fin de mois, pour les communes explorées à {pct} % ou plus.
+- resume_annuel.csv : chaque année, au total puis par sport, avec l'écart sur l'année précédente.
+- habitudes.csv : heures et jours de départ de vos sorties, année par année.
+
+Détail
+- sorties.csv : chaque sortie avec ses nouveaux blocs, les communes traversées et les lieux débloqués ce jour-là.
+
+Cartes (GeoJSON, à ouvrir dans uMap, QGIS ou Google My Maps)
+- blocs.geojson : vos blocs explorés, avec la date du premier passage et les sports.
+- communes.geojson : le contour de vos communes avec leur pourcentage.
+Ces deux cartes montrent précisément où vous vous déplacez, notamment autour de chez vous.
+Réfléchissez avant de les partager.
+
+Sources. Vos sorties Strava (via l'API Strava). Contours des communes et lieux © contributeurs OpenStreetMap (ODbL).
+"""
+
+@app.route('/api/export')
+def api_export():
+    """Télécharge un zip avec tous les chiffres de l'utilisateur connecté (et seulement les siens)."""
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    try:
+        files = compute_export()
+    except Exception as e:
+        print(f"Export impossible : {e}")
+        return jsonify({"error": "Export indisponible"}), 500
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for name, content in files.items():
+            z.writestr(name, content.encode('utf-8'))
+    name = f"unlock-chiffres-{_today_paris():%Y-%m-%d}.zip"
+    resp = make_response(buf.getvalue())
+    resp.headers['Content-Type'] = 'application/zip'
+    resp.headers['Content-Disposition'] = f'attachment; filename="{name}"'
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.errorhandler(404)
