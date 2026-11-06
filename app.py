@@ -1836,28 +1836,57 @@ def _evol(cur, prev):
     if not prev: return None
     return round((cur - prev) / prev * 100)
 
-def _carte_blocs(cells_upto, cells_year, dlat, max_cells=2600):
-    """Blocs de la zone la plus fréquentée (pour la mosaïque) : centrés sur les blocs de l'année.
-    Renvoie des indices de grille relatifs [ligne, colonne, débloqué cette année]."""
-    ref = cells_year or cells_upto
-    if not ref: return {"rows": 0, "cols": 0, "cells": []}
-    lats = np.array([c[0] for c in ref]); lons = np.array([c[1] for c in ref])
-    lat0, lat1 = np.percentile(lats, [6, 94]); lon0, lon1 = np.percentile(lons, [6, 94])
-    pad_lat = max(dlat * 3, (lat1 - lat0) * .12); pad_lon = max(dlat * 4, (lon1 - lon0) * .12)
+ZONE_KM = 20          # taille des carrés utilisés pour regrouper les blocs en zones
+ZONE_MIN_BLOCS = 8    # une zone plus petite ne compte pas comme « autre zone » (simple passage)
+
+def _zones(cells, dlat):
+    """Regroupe des blocs en zones : carrés de ~20 km voisins réunis. Renvoie une liste d'ensembles, la plus grande en premier."""
+    q = ZONE_KM * 1000 / 111320
+    buckets = defaultdict(set)
+    for c in cells:
+        buckets[(int(c[0] // q), int(c[1] // (q / max(.2, math.cos(math.radians(c[0]))))))].add(c)
+    seen, zones = set(), []
+    for start in buckets:
+        if start in seen: continue
+        stack, comp = [start], set()
+        seen.add(start)
+        while stack:
+            b0 = stack.pop(); comp |= buckets[b0]
+            for di in (-1, 0, 1):
+                for dj in (-1, 0, 1):
+                    nb = (b0[0] + di, b0[1] + dj)
+                    if nb in buckets and nb not in seen: seen.add(nb); stack.append(nb)
+        zones.append(comp)
+    zones.sort(key=len, reverse=True)
+    return zones
+
+def _carte_blocs(cells_upto, cells_new, cells_touched, dlat, max_cells=2600):
+    """Mosaïque de la zone principale de l'année (celle où l'on a débloqué le plus de blocs), pour qu'elle
+    reste lisible même quand on a exploré plusieurs villes éloignées.
+    Renvoie des indices de grille relatifs [ligne, colonne, débloqué cette année] + le nombre d'autres zones."""
+    ref = cells_new or cells_touched or cells_upto
+    if not ref: return {"rows": 0, "cols": 0, "cells": [], "other_zones": 0, "zone": set()}
+    zones = _zones(ref, dlat)
+    main = zones[0]
+    others = sum(1 for z in zones[1:] if len(z) >= ZONE_MIN_BLOCS)
+    lats = np.array([c[0] for c in main]); lons = np.array([c[1] for c in main])
+    lat0, lat1 = np.percentile(lats, [3, 97]); lon0, lon1 = np.percentile(lons, [3, 97])
+    pad_lat = max(dlat * 3, (lat1 - lat0) * .1); pad_lon = max(dlat * 4, (lon1 - lon0) * .1)
     lat0, lat1, lon0, lon1 = lat0 - pad_lat, lat1 + pad_lat, lon0 - pad_lon, lon1 + pad_lon
     dl = _dlon((lat0 + lat1) / 2, dlat)
     rows = int(round((lat1 - lat0) / dlat)) + 1; cols = int(round((lon1 - lon0) / dl)) + 1
-    # Zone trop grande : on agrandit les blocs affichés pour rester lisible
+    # Zone encore très grande : on regroupe les blocs affichés pour rester lisible
     step = 1
     while rows * cols / (step * step) > 90 * 90: step += 1
     out = {}
     for c in cells_upto:
         if lat0 <= c[0] <= lat1 and lon0 <= c[1] <= lon1:
-            r = int((lat1 - c[0]) / dlat) // step; k = int((c[1] - lon0) / dl) // step
-            out[(r, k)] = out.get((r, k), False) or (c in cells_year)
+            # arrondi (et non troncature) : sinon des lignes de blocs se dédoublent ou disparaissent
+            r = int(round((lat1 - c[0]) / dlat)) // step; k = int(round((c[1] - lon0) / dl)) // step
+            out[(r, k)] = out.get((r, k), False) or (c in cells_new)
     cells = [[r, k, 1 if v else 0] for (r, k), v in out.items()]
     if len(cells) > max_cells: cells = cells[:max_cells]
-    return {"rows": rows // step + 1, "cols": cols // step + 1, "cells": cells}
+    return {"rows": rows // step + 1, "cols": cols // step + 1, "cells": cells, "other_zones": others, "zone": main}
 
 def compute_annee(year, as_of):
     """Bilan de l'année `year` pour l'utilisateur connecté (ses données seulement)."""
@@ -1905,7 +1934,9 @@ def compute_annee(year, as_of):
         "first_year": not before,
     }
     # Mosaïque (couverture et story)
-    res["mosaique"] = _carte_blocs(upto, seen - before, dlat)
+    res["mosaique"] = _carte_blocs(upto, seen - before, seen, dlat)
+    zone_cells = res["mosaique"].pop("zone")
+    res["mosaique"]["name"] = None
 
     # Sortie la plus marquante : la plus riche en blocs jamais traversés auparavant
     if best:
@@ -1954,12 +1985,12 @@ def compute_annee(year, as_of):
     res["communes"], res["departements"], res["chiffres"]["new_communes"] = [], [], 0
     if DB_URL and acts_y:
         try:
-            _annee_territoires(res, year, before, upto, seen, dlat, grid_m)
+            _annee_territoires(res, year, before, upto, seen, dlat, grid_m, zone_cells)
         except Exception as e:
             print(f"Bilan : communes indisponibles ({e})")
     return res
 
-def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m):
+def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m, zone_cells=frozenset()):
     """Top 5 des communes (points gagnés dans l'année) et départements explorés dans l'année."""
     data = _activities_data('all', 'all', grid_m)
     ys, ye = f"{year}-01-01", f"{year}-12-31"
@@ -1977,12 +2008,16 @@ def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m):
             geoms[r.code_insee] = shp_transform(lambda x, y, z=None: (y, x), shp_shape(json.loads(r.g))).buffer(0)
     profil = data.get('acces_profil', 'tous')
     communes, active_deps = [], set()
+    best_zone = [0, None]   # commune qui concentre le plus de blocs de l'année dans la zone de la mosaïque
+    zb = (min(k[0] for k in zone_cells), max(k[0] for k in zone_cells), min(k[1] for k in zone_cells), max(k[1] for k in zone_cells)) if zone_cells else None
     for c in cand:
         g = geoms.get(c['code'])
         if g is None or g.is_empty: continue
         all_cells = commune_cells(g, dlat)
         if not all_cells or not (all_cells & cells_y): continue
         active_deps.add(c['dep'])
+        dans_zone = sum(1 for k in (all_cells & cells_y) if zb and zb[0] <= k[0] <= zb[1] and zb[2] <= k[1] <= zb[3])
+        if dans_zone and dans_zone > best_zone[0]: best_zone[0], best_zone[1] = dans_zone, c['name']
         hors = acces.filtre_inaccessibles(acces.keys_of_cells(all_cells, dlat), c['dep'], grid_m, profil)
         hors = set(hors.tolist()) if len(hors) else set()
         def pct(vus):
@@ -1993,6 +2028,7 @@ def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m):
         p1, p0 = pct(upto), pct(before)
         communes.append({"name": c['name'], "code": c['code'], "percent": round(p1), "points": round(p1 - p0),
                          "new": not (all_cells & before)})
+    res["mosaique"]["name"] = best_zone[1]
     communes.sort(key=lambda x: (x['points'], x['percent']), reverse=True)
     res["communes"] = [c for c in communes if c['points'] > 0][:5] or communes[:5]
     totals = dep_totals()
