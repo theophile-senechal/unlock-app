@@ -2461,73 +2461,37 @@ def api_export():
 # ============================================================
 # 20. DEVINE LA COMMUNE (défi du jour)
 # ============================================================
-# Une des communes explorées par l'utilisateur chaque jour, à reconnaître à sa forme. Un seul essai.
+# Une des communes de l'utilisateur chaque jour, à reconnaître à sa forme. Un seul essai.
+# Seules les communes explorées à 5 % ou plus jouent (forme, suggestions de réponse).
 # Le contour seul s'affiche ; l'indice ajoute les blocs de l'utilisateur sur la forme.
-# Toutes les communes explorées passent une fois avant de revenir, puis les ratées reviennent en premier.
-# Une commune explorée après la première partie passe en priorité.
+# Toutes les communes passent une fois avant de revenir, puis les ratées reviennent en premier.
+# Une commune qui atteint 5 % après la première partie passe en priorité.
+# Pour une réponse immédiate, la page reçoit d'avance tout ce qu'il faut pour afficher le résultat,
+# sauf la commune à trouver : la réponse du serveur ne fait qu'une mise à jour en base.
 # Enregistré (table devine_parties, migrations/2026-11-06_devine.sql), pour l'utilisateur seul :
 # la commune du jour, la réponse et le résultat. Effacé avec son compte.
 import random as _random
-DEVINE_MIN = 5                      # communes explorées nécessaires pour jouer
-DEVINE_SUGG = 6                     # suggestions renvoyées (4 affichées, 3 sur petit écran)
-_DEVINE_NOMS = {'ts': 0, 'rows': None, 'by_code': {}}
+DEVINE_MIN = 5                      # communes nécessaires pour jouer
+DEVINE_PCT = 5                      # % exploré minimum d'une commune pour jouer
 JOURS_COURTS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
-
-def _devine_fold(t):
-    """Minuscules, sans accents ni tirets ni apostrophes : « Montrichard-Val-de-Cher » = « montrichard val de cher »."""
-    return lieux._norm(t)
-
-def _devine_noms():
-    """[(code INSEE, nom, nom simplifié)] de toutes les communes de France (donnée publique, gardée 1 jour)."""
-    N = _DEVINE_NOMS
-    if N['rows'] is None or time.time() - N['ts'] > 86400:
-        rows = []
-        if DB_URL:
-            try:
-                with _engine().connect() as conn:
-                    rows = [(r.code_insee, r.nom_commune) for r in conn.execute(text(
-                        "SELECT code_insee, nom_commune FROM communes WHERE code_insee IS NOT NULL AND nom_commune IS NOT NULL"))]
-            except Exception as e:
-                print(f"Noms des communes : {e}")
-        if not rows:   # secours : communes des départements dont les lieux sont calculés
-            rows = [(r[0], r[1]) for r in lieux._communes()]
-        uniq = {}
-        for c, n in rows: uniq.setdefault(c, n)
-        N['rows'] = [(c, n, _devine_fold(n)) for c, n in uniq.items()]
-        N['by_code'] = {c: n for c, n in uniq.items()}
-        N['ts'] = time.time()
-    return N['rows']
-
-def _devine_nom(code):
-    _devine_noms()
-    return _DEVINE_NOMS['by_code'].get(code) or code
 
 def _devine_dep(code):
     d = dep_of(code)
     return {"dep": d, "dep_name": DEPARTEMENTS.get(d, d)}
 
-def devine_chercher(q, limite=DEVINE_SUGG):
-    """Communes dont le nom (ou un de ses mots) commence par la saisie. « st » vaut aussi « saint », « ste » « sainte »."""
-    f = _devine_fold(q)
-    if len(f.replace(' ', '')) < 2: return []
-    variantes = {f, ' '.join({'st': 'saint', 'ste': 'sainte'}.get(w, w) for w in f.split())}
-    res = []
-    for code, nom, n in _devine_noms():
-        best = None
-        for v in variantes:
-            if n == v: r = 0
-            elif n.startswith(v): r = 1
-            elif (' ' + v) in (' ' + n): r = 2
-            else: continue
-            best = r if best is None else min(best, r)
-        if best is not None: res.append((best, len(n), n, code, nom))
-    res.sort(key=lambda x: x[:3])
-    return [dict(code=c, name=nom, **_devine_dep(c)) for _, _, _, c, nom in res[:limite]]
-
 def _devine_pool():
-    """Communes explorées par l'utilisateur : {code: stats} (blocs, %, date de 1re sortie)."""
+    """Communes de l'utilisateur explorées à 5 % ou plus : {code: stats + nom}."""
     data = _activities_data('all', 'all', 250)
-    return {c['code']: c['stats'] for c in data.get('top_municipalities', []) if c.get('code') and c['stats'].get('blocks')}
+    return {c['code']: {**c['stats'], 'name': c['name']} for c in data.get('top_municipalities', [])
+            if c.get('code') and c['stats'].get('blocks') and float(c['stats'].get('percent') or 0) >= DEVINE_PCT}
+
+def _devine_nom(code, pool):
+    if code in pool: return pool[code]['name']
+    try:
+        nom, _ = _commune_geom(code)
+        return nom or code
+    except Exception:
+        return code
 
 def _devine_parties(aid):
     with _engine().connect() as conn:
@@ -2538,7 +2502,8 @@ def _devine_parties(aid):
 
 def _devine_cycles(rows, pool):
     """Parcourt l'historique dans l'ordre. Renvoie les communes déjà passées depuis le dernier passage complet,
-    la dernière erreur de chaque commune (jour, réponse) et le dernier passage complet (jour de fin, parties)."""
+    les parties de ce passage en cours, la dernière erreur de chaque commune (jour, réponse)
+    et le dernier passage complet (jour de fin, parties)."""
     vues, cycle, fin, rates = set(), [], None, {}
     for r in rows:
         if r['trouve']: rates.pop(r['code'], None)
@@ -2546,11 +2511,11 @@ def _devine_cycles(rows, pool):
         vues.add(r['code']); cycle.append(r)
         if pool and set(pool) <= vues:
             fin = (r['jour'], cycle); vues, cycle = set(), []
-    return vues, rates, fin
+    return vues, cycle, rates, fin
 
 def _devine_choisir(aid, today, rows, pool):
     """Commune du jour : nouvelle commune, sinon ratée au passage précédent, sinon au hasard parmi celles pas encore passées."""
-    vues, rates, _ = _devine_cycles(rows, pool)
+    vues, _, rates, _ = _devine_cycles(rows, pool)
     restantes = sorted(c for c in pool if c not in vues) or sorted(pool)
     jouees = {r['code'] for r in rows}
     if rows:
@@ -2570,7 +2535,7 @@ def _date_fr(d, today=None):
     return f"le {d.day}{'er' if d.day == 1 else ''} {MOIS_FR[d.month - 1]}"
 
 def _devine_forme(code):
-    """Contour simplifié de la commune, en (lat, lon)."""
+    """Contour simplifié de la commune (toutes ses parties), en (lat, lon)."""
     with _engine().connect() as conn:
         g = conn.execute(text("""SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(geometry, 0.0002), 5)
                                  FROM communes WHERE code_insee = :c LIMIT 1"""), {"c": code}).scalar()
@@ -2588,49 +2553,57 @@ def _pct_fr(p):
     p = float(p or 0)
     return (f"{p:.1f}".replace('.', ',') if 0 < p < 10 and round(p) != p else str(int(round(p)))) + ' %'
 
+def _devine_series(rows):
+    """Plus longue suite de jours consécutifs réussis."""
+    best, cur, prev = 0, 0, None
+    for r in rows:
+        if r['trouve']:
+            cur = cur + 1 if (prev is not None and cur and r['jour'] - prev == timedelta(days=1)) else 1
+        else:
+            cur = 0
+        prev = r['jour']; best = max(best, cur)
+    return best
+
 def devine_etat():
     """État complet du défi du jour pour l'utilisateur connecté (crée la partie du jour si besoin)."""
+    indispo = {"state": "error", "message": "Le défi n'est pas disponible pour le moment."}
     aid = session.get('athlete_id')
-    if not (DB_URL and aid): return {"state": "error", "message": "Le défi n'est pas disponible pour le moment."}
+    if not (DB_URL and aid): return indispo
     today = _today_paris()
     pool = _devine_pool()
     try:
         rows = _devine_parties(aid)
     except Exception as e:
         print(f"Devine (migration 2026-11-06_devine.sql faite ?) : {e}")
-        return {"state": "error", "message": "Le défi n'est pas disponible pour le moment."}
+        return indispo
     du_jour = next((r for r in rows if r['jour'] == today), None)
-    avant = [r for r in rows if r['jour'] < today]
     if du_jour is None:
         if len(pool) < DEVINE_MIN:
             session['devine_lock'] = [len(pool), today.isoformat()]
-            return {"state": "locked", "explored": len(pool), "needed": DEVINE_MIN}
-        code, raison = _devine_choisir(aid, today, avant, pool)
+            return {"state": "locked", "explored": len(pool), "needed": DEVINE_MIN, "pct": DEVINE_PCT}
+        code, raison = _devine_choisir(aid, today, rows, pool)
         with _engine().begin() as conn:
             conn.execute(text("""INSERT INTO devine_parties (athlete_id, jour, code_insee, raison)
                                  VALUES (:a, :j, :c, :r) ON CONFLICT (athlete_id, jour) DO NOTHING"""),
                          {"a": aid, "j": today, "c": code, "r": raison})
         rows = _devine_parties(aid)
         du_jour = next((r for r in rows if r['jour'] == today), None)
-        if du_jour is None: return {"state": "error", "message": "Le défi n'est pas disponible pour le moment."}
+        if du_jour is None: return indispo
     session.pop('devine_lock', None)
     repondu = du_jour['trouve'] is not None
     if repondu: session['devine_fait'] = today.isoformat()
+    avant = [r for r in rows if r['jour'] < today]
 
-    # Série : jours consécutifs réussis jusqu'à aujourd'hui (ou hier si la partie du jour n'est pas jouée)
+    # Série : jours consécutifs réussis jusqu'à aujourd'hui (ou hier tant que la partie du jour n'est pas jouée)
     res = {r['jour']: r['trouve'] for r in rows}
     def serie_depuis(d):
         n = 0
         while res.get(d) is True: n += 1; d -= timedelta(days=1)
         return n
     serie = serie_depuis(today) if repondu else serie_depuis(today - timedelta(days=1))
-    best, cur, prev = 0, 0, None
-    for r in rows:
-        cur = (cur + 1 if prev is not None and r['jour'] - prev == timedelta(days=1) and cur else 1) if r['trouve'] else 0
-        prev = r['jour']; best = max(best, cur)
-    jouees = [r for r in rows if r['jour'] < today or r['trouve'] is not None]
-    reussite = round(100 * sum(1 for r in jouees if r['trouve']) / len(jouees)) if jouees else None
-    trouvees = len({r['code'] for r in rows if r['trouve']} & set(pool))
+    jouees = rows if repondu else avant
+    reussies = sum(1 for r in jouees if r['trouve'])
+    trouvees_set = {r['code'] for r in rows if r['trouve']}
     lundi = today - timedelta(days=today.weekday())
     semaine = []
     for i in range(7):
@@ -2645,33 +2618,45 @@ def devine_etat():
     minuit = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=PARIS)
 
     code = du_jour['code']
-    out = {"state": "result" if repondu else "question",
+    out = {"state": "result" if repondu else "question", "pct_min": DEVINE_PCT,
            "date_label": f"Défi du {today.day}{'er' if today.day == 1 else ''} {MOIS_FR[today.month - 1]}",
-           "serie": serie, "serie_best": max(best, serie), "trouvees": trouvees, "total": len(pool),
-           "reussite": reussite, "week": semaine, "seconds_left": max(60, int((minuit - now).total_seconds())),
-           "shape": _devine_forme(code), "indice": du_jour['indice'], "raison": None, "note": None}
-    if du_jour['indice'] or repondu: out["blocks"] = _devine_blocs(code)
-    if du_jour['raison'] == 'nouvelle' and not repondu:
-        first = (pool.get(code) or {}).get('first')
-        try: quand = _date_fr(datetime.strptime(first, '%Y-%m-%d').date(), today)
-        except Exception: quand = None
-        out["raison"] = {"kind": "nouvelle", "text": "Nouvelle commune" + (f", explorée {quand}" if quand else "")}
-    elif du_jour['raison'] == 'seconde' and not repondu:
-        _, rates, _ = _devine_cycles(avant, pool)
-        jr, rep = rates.get(code, (None, None))
-        out["raison"] = {"kind": "seconde", "text": "Seconde chance" + (f", ratée {_date_fr(jr, today)}" if jr else "")}
-        if rep and rep != code: out["note"] = f"Vous l'aviez confondue avec {_devine_nom(rep)}."
-    if repondu:
+           "serie": serie, "serie_best": max(_devine_series(rows), serie),
+           "trouvees": len(trouvees_set & set(pool)), "total": len(pool),
+           "reussite": round(100 * reussies / len(jouees)) if jouees else None,
+           "week": semaine, "seconds_left": max(60, int((minuit - now).total_seconds())),
+           "shape": _devine_forme(code), "blocks": _devine_blocs(code), "indice": du_jour['indice'],
+           "raison": None, "note": None}
+    if not repondu:
+        # De quoi afficher le résultat sans attendre : les communes possibles (suggestions et chiffres)
+        # et ce qui change selon la réponse. La commune à trouver n'y est pas désignée.
+        out["choices"] = sorted(({"code": c, "name": s['name'], **_devine_dep(c), "pct": _pct_fr(s.get('percent')),
+                                  "b": s.get('blocks'), "t": s.get('total_blocks')} for c, s in pool.items()),
+                                key=lambda x: lieux._norm(x['name']))
+        vues, cycle, _, _ = _devine_cycles(avant, pool)
+        fin = bool(pool) and set(pool) <= (vues | {code})
+        out["after"] = {"deja": code in trouvees_set, "reussies": reussies, "jouees": len(avant),
+                        "best_avant": _devine_series(avant),
+                        "cycle": {"trouvees": sum(1 for r in cycle if r['trouve']),
+                                  "ratees": sum(1 for r in cycle if not r['trouve'])} if fin else None}
+        if du_jour['raison'] == 'nouvelle':
+            first = (pool.get(code) or {}).get('first')
+            try: quand = _date_fr(datetime.strptime(first, '%Y-%m-%d').date(), today)
+            except Exception: quand = None
+            out["raison"] = {"kind": "nouvelle", "text": "Nouvelle commune" + (f", explorée {quand}" if quand else "")}
+        elif du_jour['raison'] == 'seconde':
+            _, _, rates, _ = _devine_cycles(avant, pool)
+            jr, rep = rates.get(code, (None, None))
+            out["raison"] = {"kind": "seconde", "text": "Seconde chance" + (f", ratée {_date_fr(jr, today)}" if jr else "")}
+            if rep and rep != code: out["note"] = f"Vous l'aviez confondue avec {_devine_nom(rep, pool)}."
+    else:
         st = pool.get(code) or {}
-        nom = _devine_nom(code)
         rep = du_jour['reponse']
-        rep_nom = _devine_nom(rep) if rep else None
-        if rep_nom and rep_nom == nom and rep != code: rep_nom += f" ({_devine_dep(rep)['dep_name']})"
-        out["result"] = {"trouve": bool(du_jour['trouve']), "name": nom, **_devine_dep(code),
-                         "reponse": rep_nom, "pct": _pct_fr(st.get('percent')) if st else None,
+        out["result"] = {"trouve": bool(du_jour['trouve']), "code": code, "name": _devine_nom(code, pool), **_devine_dep(code),
+                         "reponse": _devine_nom(rep, pool) if rep else None,
+                         "pct": _pct_fr(st.get('percent')) if st else None,
                          "blocks_n": st.get('blocks'), "blocks_total": st.get('total_blocks')}
         # Ce jour-là, toutes les communes sont passées : bilan du passage
-        _, _, fin = _devine_cycles(rows, pool)
+        _, _, _, fin = _devine_cycles(rows, pool)
         if fin and fin[0] == today:
             ok = sum(1 for r in fin[1] if r['trouve'])
             out["cycle"] = {"trouvees": ok, "ratees": len(fin[1]) - ok}
@@ -2683,7 +2668,7 @@ def _devine_csrf_ok():
 @app.route('/devine')
 def devine_page():
     if _require_login(): return redirect(url_for('login_page'))
-    return render_template('devine.html', active='devine')
+    return render_template('devine.html', active='devine', devine_pct=DEVINE_PCT, devine_min=DEVINE_MIN)
 
 @app.route('/api/devine')
 def api_devine():
@@ -2696,52 +2681,40 @@ def api_devine():
     resp.headers['Cache-Control'] = 'no-store'
     return resp
 
-@app.route('/api/devine/communes')
-def api_devine_communes():
-    """Suggestions de communes (toute la France, donnée publique) pendant la saisie."""
-    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
-    return jsonify({"communes": devine_chercher(request.args.get('q', '')[:80])})
-
-def _devine_partie_du_jour():
-    aid, today = session.get('athlete_id'), _today_paris()
-    if not (DB_URL and aid): return None, None, today
-    with _engine().connect() as conn:
-        r = conn.execute(text("SELECT code_insee, trouve FROM devine_parties WHERE athlete_id = :a AND jour = :j"),
-                         {"a": aid, "j": today}).fetchone()
-    return aid, r, today
-
 @app.route('/api/devine/indice', methods=['POST'])
 def api_devine_indice():
+    """Note l'usage de l'indice (les blocs sont déjà sur la page)."""
     if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
     if not _devine_csrf_ok(): return jsonify({"error": "Session expirée, rechargez la page."}), 400
+    aid = session.get('athlete_id')
+    if not (DB_URL and aid): return jsonify({"error": "Indice indisponible, réessayez."}), 503
     try:
-        aid, r, today = _devine_partie_du_jour()
-        if r is not None and r.trouve is None:
-            with _engine().begin() as conn:
-                conn.execute(text("UPDATE devine_parties SET indice = true WHERE athlete_id = :a AND jour = :j AND trouve IS NULL"),
-                             {"a": aid, "j": today})
-        return jsonify(devine_etat())
+        with _engine().begin() as conn:
+            conn.execute(text("UPDATE devine_parties SET indice = true WHERE athlete_id = :a AND jour = :j AND trouve IS NULL"),
+                         {"a": aid, "j": _today_paris()})
+        return jsonify({"ok": True})
     except Exception as e:
         print(f"Devine indice : {e}")
         return jsonify({"error": "Indice indisponible, réessayez."}), 500
 
 @app.route('/api/devine/repondre', methods=['POST'])
 def api_devine_repondre():
+    """Enregistre la réponse du jour en une requête et renvoie la commune à trouver. Un seul essai."""
     if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
     if not _devine_csrf_ok(): return jsonify({"error": "Session expirée, rechargez la page."}), 400
     code = str((request.get_json(silent=True) or {}).get('code') or '')
-    _devine_noms()
-    if not re.fullmatch(r'[0-9AB]{5}', code) or code not in _DEVINE_NOMS['by_code']:
-        return jsonify({"error": "Choisissez une commune dans la liste."}), 400
+    if not re.fullmatch(r'[0-9AB]{5}', code): return jsonify({"error": "Choisissez une commune dans la liste."}), 400
+    aid, today = session.get('athlete_id'), _today_paris()
+    if not (DB_URL and aid): return jsonify({"error": "Réponse non enregistrée, réessayez."}), 503
     try:
-        aid, r, today = _devine_partie_du_jour()
-        if r is None: return jsonify({"error": "Le défi du jour a changé, rechargez la page."}), 409
-        if r.trouve is None:   # un seul essai : une réponse déjà donnée n'est jamais remplacée
-            with _engine().begin() as conn:
-                conn.execute(text("""UPDATE devine_parties SET reponse = :c, trouve = :t, answered_at = NOW()
-                                     WHERE athlete_id = :a AND jour = :j AND trouve IS NULL"""),
-                             {"c": code, "t": code == r.code_insee, "a": aid, "j": today})
-        return jsonify(devine_etat())
+        with _engine().begin() as conn:
+            r = conn.execute(text("""UPDATE devine_parties SET reponse = :c, trouve = (code_insee = :c), answered_at = NOW()
+                                     WHERE athlete_id = :a AND jour = :j AND trouve IS NULL
+                                     RETURNING code_insee, trouve"""), {"c": code, "a": aid, "j": today}).fetchone()
+        if r is None:   # déjà répondu (autre onglet) ou défi d'un autre jour : la page se recharge
+            return jsonify({"reload": True})
+        session['devine_fait'] = today.isoformat()
+        return jsonify({"code": r.code_insee, "trouve": bool(r.trouve)})
     except Exception as e:
         print(f"Devine réponse : {e}")
         return jsonify({"error": "Réponse non enregistrée, réessayez."}), 500
@@ -2750,9 +2723,9 @@ def devine_menu():
     """Ligne du menu : défi prêt (avec un point), déjà joué aujourd'hui, ou bloqué (moins de 5 communes)."""
     if 'access_token' not in session: return None
     today = _today_paris().isoformat()
-    lock = session.get('devine_lock')   # [communes explorées, jour] : revérifié chaque jour sur la page du jeu
+    lock = session.get('devine_lock')   # [communes, jour] : revérifié chaque jour sur la page du jeu
     if isinstance(lock, list) and len(lock) == 2 and lock[1] == today:
-        return {"lock": True, "sub": f"Dès {DEVINE_MIN} communes explorées ({lock[0]} sur {DEVINE_MIN})"}
+        return {"lock": True, "sub": f"Dès {DEVINE_MIN} communes à {DEVINE_PCT} % ({lock[0]} sur {DEVINE_MIN})"}
     if session.get('devine_fait') == today:
         return {"done": True, "sub": "Défi du jour terminé, à demain"}
     return {"ready": True, "sub": "Le défi du jour est prêt"}

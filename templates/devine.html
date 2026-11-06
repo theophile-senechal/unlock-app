@@ -149,7 +149,7 @@
     .dv:has(.dd-tour) .dd-tour h3 { font-size: .95rem; }
   }
   @media (max-width: 899px) and (max-height: 800px) { .dv:has(.dd-tour) .dd-tour p { display: none; } }
-  @media (max-height: 600px) { .dv--q .dv-note { display: none; } }
+  @media (max-height: 600px) { .dv--q .dv-note { display: none; } .dv-sugg b { -webkit-line-clamp: 1; overflow-wrap: normal; word-break: break-all; } }
   @media (max-width: 899px) and (max-height: 600px) { .dv.is-typing .dv-shape { height: 90px; } .dv:has(.dd-tour) .dv-card { display: none; } }
 
   /* Écran large : la forme à gauche, le jeu à droite, le tout sans défiler */
@@ -187,7 +187,7 @@
       <div class="page__head">
         <div>
           <h1 class="page__title">Devine la commune</h1>
-          <p class="page__lead dv-lead">Une de vos communes par jour, à reconnaître à sa seule forme.</p>
+          <p class="page__lead dv-lead">Chaque jour, une de vos communes à reconnaître à sa seule forme.</p>
         </div>
       </div>
       <div class="dv" id="dv" data-csrf="{{ csrf_token }}" aria-live="polite"><div class="dv-skel" aria-hidden="true"></div></div>
@@ -206,7 +206,7 @@
   const root = document.getElementById('dv');
   const CSRF = root.dataset.csrf;
   const DLAT = 250 / 111320;
-  let S = null, sel = null, items = [], active = -1, seq = 0, timer = null, tick = null, busy = false;
+  let S = null, sel = null, items = [], active = -1, tick = null, busy = false;
 
   const plural = (n, one, many) => (n > 1 ? many : one);
   const jours = (n) => `${n} ${plural(n, 'jour', 'jours')}`;
@@ -249,10 +249,10 @@
     else if (q) left = `<span class="dd-used">${I('grid')}Indice, vos blocs en rouge</span>`;
     else left = S.indice ? `<span class="dd-used">${I('grid')}Avec l'indice</span>` : '<span>Sans indice</span>';
     const name = R ? `<p class="dd-name">Aujourd'hui, ${esc(R.name)}</p>` : '';
-    return `<div class="dv-card">${tag}${shapeSVG(S.shape, S.blocks, animate)}${name}<div class="dv-cap">${left}<span>Nord en haut</span></div></div>`;
+    return `<div class="dv-card">${tag}${shapeSVG(S.shape, (S.indice || !q) ? S.blocks : null, animate)}${name}<div class="dv-cap">${left}<span>Nord en haut</span></div></div>`;
   }
 
-  const note = () => S.note ? `${esc(S.note)} Un seul essai.` : 'Un seul essai. Majuscules, accents et tirets sont facultatifs.';
+  const note = () => S.note ? `${esc(S.note)} Un seul essai.` : `Un seul essai, parmi vos communes explorées à ${S.pct_min}\u00a0% ou plus.`;
 
   function question() {
     return `<p class="dv-ask" id="dv-ask">Quelle est cette commune ?</p>
@@ -325,7 +325,7 @@
     if (S.state === 'locked') {
       const n = S.explored, need = S.needed, reste = Math.max(1, need - n);
       message('lock', 'Pas encore assez de communes',
-        `Le défi commence dès ${need} communes explorées. Vous en avez ${n}, encore ${reste} à découvrir lors de vos prochaines sorties.`,
+        `Le défi commence dès ${need} communes explorées à ${S.pct}\u00a0% ou plus. Vous en avez ${n}, encore ${reste} à atteindre lors de vos prochaines sorties.`,
         `<div class="dd-bar" aria-hidden="true"><i style="width:${Math.min(100, n / need * 100)}%"></i></div><a class="btn btn--primary" href="/">Revenir à la carte</a>`);
       return;
     }
@@ -353,6 +353,39 @@
     return esc(name.slice(0, i)) + '<strong>' + esc(name.slice(i, i + t.length)) + '</strong>' + esc(name.slice(i + t.length));
   }
 
+  /* Suggestions : uniquement les communes du joueur (reçues avec le défi), triées comme sur le serveur */
+  function search(q) {
+    const f = fold(q).replace(/\s+/g, ' ').trim();
+    const v = [f, f.split(' ').map((w) => ({ st: 'saint', ste: 'sainte' }[w] || w)).join(' ')];
+    const out = [];
+    (S.choices || []).forEach((c) => {
+      const n = c._f || (c._f = fold(c.name).replace(/\s+/g, ' ').trim());
+      let best = null;
+      v.forEach((t) => { const r = n === t ? 0 : n.startsWith(t) ? 1 : (' ' + n).includes(' ' + t) ? 2 : null; if (r !== null && (best === null || r < best)) best = r; });
+      if (best !== null) out.push([best, n.length, n, c]);
+    });
+    out.sort((a, b) => a[0] - b[0] || a[1] - b[1] || (a[2] < b[2] ? -1 : 1));
+    return out.slice(0, 4).map((x) => x[3]);
+  }
+
+  /* Résultat construit sur place à partir de la réponse du serveur (commune à trouver + réussite) */
+  function applyAnswer(r, chosen) {
+    const A = S.after, c = (S.choices || []).find((x) => x.code === r.code);
+    if (!A || !c) return false;
+    const ok = !!r.trouve;
+    S.serie = ok ? S.serie + 1 : 0;
+    S.serie_best = Math.max(A.best_avant, S.serie_best || 0, S.serie);
+    const jouees = A.jouees + 1, reussies = A.reussies + (ok ? 1 : 0);
+    S.reussite = Math.round(100 * reussies / jouees);
+    if (ok && !A.deja) S.trouvees += 1;
+    S.week = S.week.map((w) => (w.today ? { ...w, s: ok ? 'ok' : 'ko' } : w));
+    S.cycle = A.cycle ? { trouvees: A.cycle.trouvees + (ok ? 1 : 0), ratees: A.cycle.ratees + (ok ? 0 : 1) } : null;
+    S.result = { trouve: ok, code: c.code, name: c.name, dep: c.dep, dep_name: c.dep_name,
+                 reponse: ok ? null : chosen.name, pct: c.pct, blocks_n: c.b, blocks_total: c.t };
+    S.state = 'result'; S.raison = null; S.note = null;
+    return true;
+  }
+
   function bindQuestion() {
     const inp = document.getElementById('dv-in'), list = document.getElementById('dv-sugg'), go = document.getElementById('dv-go'), err = document.getElementById('dv-err');
     sel = null; items = []; active = -1;
@@ -365,7 +398,7 @@
     const showErr = (t) => { err.innerHTML = t ? I('alert') + `<span>${esc(t)}</span>` : ''; err.hidden = !t; };
     function draw(q) {
       if (!items.length) {
-        list.innerHTML = `<li class="dv-none" role="option" aria-disabled="true">Aucune commune ne commence par « ${esc(q)} »</li>`;
+        list.innerHTML = `<li class="dv-none" role="option" aria-disabled="true">Aucune de vos communes ne commence par « ${esc(q)} »</li>`;
       } else {
         list.innerHTML = items.map((c, i) => `<li role="option" id="dv-o${i}" data-i="${i}" aria-selected="false"><b>${highlight(c.name, q)}</b><small><span>${esc(c.dep_name)}</span><i> (${esc(c.dep)})</i></small></li>`).join('');
       }
@@ -378,16 +411,8 @@
     inp.addEventListener('input', () => {
       sel = null; go.disabled = true; showErr('');
       const q = inp.value.trim();
-      clearTimeout(timer);
-      if (fold(q).replace(/\s/g, '').length < 2) { close(); return; }
-      timer = setTimeout(async () => {
-        const my = ++seq;
-        try {
-          const r = await U.getJSON('/api/devine/communes?q=' + encodeURIComponent(q));
-          if (my !== seq || inp.value.trim() !== q) return;
-          items = (r.communes || []).slice(0, 4); draw(q);
-        } catch (e) { if (my === seq) { close(); showErr('Suggestions indisponibles, vérifiez votre connexion.'); } }
-      }, 120);
+      if (!fold(q).trim()) { close(); return; }
+      items = search(q); draw(q);
     });
     inp.addEventListener('keydown', (e) => {
       if (!list.hidden && items.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
@@ -412,7 +437,9 @@
       busy = true; go.disabled = true; go.textContent = '…';
       try {
         const r = await post('/api/devine/repondre', { code: sel.code });
-        S = r; inp.blur(); render(true);
+        inp.blur();
+        if (r.reload || !applyAnswer(r, sel)) { await load(false); return; }
+        render(true);
       } catch (e) {
         showErr(e.message || 'Réponse non enregistrée, réessayez.'); go.disabled = !sel; go.textContent = 'Valider';
       } finally { busy = false; }
@@ -429,14 +456,12 @@
 
   async function askHint() {
     const b = document.getElementById('dv-hint'); if (!b || busy) return;
-    busy = true; b.disabled = true;
-    const typed = (document.getElementById('dv-in') || {}).value || '';
-    try {
-      S = await post('/api/devine/indice');
-      render(true);
-      const inp = document.getElementById('dv-in'); if (inp && typed) inp.value = typed;
-    } catch (e) { U.toast(e.message || 'Indice indisponible, réessayez.', 'alert'); b.disabled = false; }
-    finally { busy = false; }
+    // Affiché tout de suite (les blocs sont déjà là), enregistré en arrière-plan
+    const inp0 = document.getElementById('dv-in'), typed = inp0 ? inp0.value : '', keep = sel;
+    S.indice = true; render(true);
+    const inp = document.getElementById('dv-in');
+    if (inp && typed) { inp.value = typed; if (keep) { sel = keep; document.getElementById('dv-go').disabled = false; } }
+    post('/api/devine/indice').catch(() => {});
   }
 
   async function load(first) {
