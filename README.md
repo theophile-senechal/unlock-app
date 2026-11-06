@@ -18,6 +18,7 @@ templates/
   deleted.html          Confirmation écrite de suppression des données
   offline.html, error.html
   lieux.html            Lieux à collectionner
+  annee.html            Bilan de l'année (« Votre année Unlock »)
   leaderboard.html      Classement (DÉSACTIVÉ, voir plus bas)
 acces.py               Grille des blocs, marge GPS de 20 m, blocs sans chemin
 lieux.py               Lieux historiques et culturels : déblocage à moins de 60 m (page /lieux)
@@ -80,6 +81,7 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Bilan de l'année** (`/annee`, `/api/annee`, section 18 de `app.py`) : 8 écrans animés façon story (ouverture, chiffres clés, sortie la plus marquante, habitudes horaires, sports et mois record, top 5 des communes, départements, story à télécharger ou partager en PNG 1080 × 1920, trois couleurs). Calendrier (heure de Paris) : 1er-15 décembre carte d'annonce sur la carte + menu avec « Nouveau », 16-31 décembre carte + menu, janvier menu seul (« Votre bilan AAAA complet »), retiré au 1er février. L'admin le voit toute l'année (badge « Aperçu ») et choisit la période simulée avec le bouton « Aperçu admin » de la page. Tout est calculé à la demande pour l'utilisateur seul, rien n'est enregistré.
 - **Interface sobre, sans emoji** : un seul jeu d'icônes au trait (`icons.py`, fonction Jinja `icon('nom')`, en JavaScript `Unlock.icon('nom')`, toasts `Unlock.toast(texte, 'nom')`). Titres et libellés sans emoji, petits titres gris en capitales sur les cartes de chiffres, évolutions en pastilles colorées (verte, rouge, grise « stable »), indicateurs des Stats en grille 2 × 2 sur téléphone, sélection en noir (modes de la carte, catégories), onglets soulignés dans la liste des lieux, menu neutre (seule la suppression en rouge), barre du bas avec un trait sur l'onglet actif. Aucune fonctionnalité retirée.
 - **Accord explicite des CGU** : case à cocher obligatoire avant « Se connecter avec Strava » (vérifiée aussi par le serveur sur `/auth`). Comptes existants : fenêtre d'accord à la prochaine visite (`/conditions/accepter`), impossible à fermer sans accepter ou se déconnecter. Version et date enregistrées (`strava_users.cgu_version`, `cgu_accepted_at`, migration `2026-11-02_cgu.sql`). Changer `CGU_VERSION` dans `app.py` redemande l'accord à tous.
 - **Connexion gardée 30 jours** : le cookie de session est durable (30 jours après la dernière visite, prolongé à chaque visite) au lieu de disparaître à la fermeture du navigateur. Page Confidentialité mise à jour.

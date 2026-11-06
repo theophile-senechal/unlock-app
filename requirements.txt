@@ -8,3 +8,4 @@ psycopg2-binary
 gunicorn
 geoalchemy2
 pyproj==3.6.1
+tzdata

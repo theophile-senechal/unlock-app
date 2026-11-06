@@ -55,7 +55,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.03'
+ASSET_VERSION = '2026.11.05'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -158,6 +158,8 @@ def inject_globals():
         'cgu_needed': 'access_token' in session and session.get('cgu') != CGU_VERSION and request.path not in _LEGAL_PATHS,
         'cgu_version': CGU_VERSION,
         'icons_json': ICONS_JSON,
+        # Bilan de l'année : entrée du menu et carte d'annonce selon le calendrier (aperçu pour l'admin)
+        'annee': annee_context(),
     }
 
 def sync_state():
@@ -1767,6 +1769,275 @@ def admin_stats():
          "help": "ENABLE_LEADERBOARD doit rester à false (règles Strava)."},
     ]
     return app.response_class(json.dumps(out, default=str), mimetype='application/json')
+
+# ============================================================
+# 18. BILAN DE L'ANNÉE (« Votre année Unlock »)
+# ============================================================
+# Calendrier (heure de Paris) :
+#   1er → 15 décembre  : carte d'annonce sur la carte + entrée du menu avec le badge « Nouveau »
+#   16 → 31 décembre   : carte d'annonce + entrée du menu
+#   1er → 31 janvier   : entrée du menu seulement (« Votre bilan AAAA complet »)
+#   à partir du 1er février : retiré complètement.
+# L'admin le voit toute l'année (aperçu), en choisissant la période simulée.
+# Tout est calculé à la demande pour l'utilisateur seul, rien n'est enregistré (règles Strava).
+try:
+    from zoneinfo import ZoneInfo
+    PARIS = ZoneInfo('Europe/Paris')
+except Exception:   # serveur sans base des fuseaux : heure d'hiver de Paris (décembre et janvier)
+    from datetime import timezone
+    PARIS = timezone(timedelta(hours=1))
+ANNEE_PHASES = ('new', 'card', 'menu')
+MOIS_FR = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+
+def _today_paris():
+    return datetime.now(PARIS).date()
+
+def annee_state():
+    """{'year', 'phase', 'preview'} si le bilan est visible pour l'utilisateur connecté, sinon None.
+    phase : 'new' (1er-15 déc.), 'card' (16-31 déc.), 'menu' (janvier)."""
+    if 'access_token' not in session: return None
+    d = _today_paris()
+    if d.month == 12: state = {'year': d.year, 'phase': 'new' if d.day <= 15 else 'card', 'preview': False}
+    elif d.month == 1: state = {'year': d.year - 1, 'phase': 'menu', 'preview': False}
+    else: state = None
+    if is_admin():
+        forced = session.get('annee_apercu')
+        if state is None:
+            state = {'year': d.year, 'phase': forced if forced in ANNEE_PHASES else 'new', 'preview': True}
+        elif forced in ANNEE_PHASES:
+            state = {**state, 'phase': forced, 'preview': True}
+    return state
+
+def annee_context():
+    st = annee_state()
+    if not st: return None
+    y, ph = st['year'], st['phase']
+    return {**st,
+            'title': f"Votre bilan {y} complet" if ph == 'menu' else f"Votre année {y}",
+            'sub': "Disponible jusqu'au 31 janvier",
+            'badge': ph == 'new', 'card': ph in ('new', 'card')}
+
+def _fr_date(d):
+    return f"{d.day}{'er' if d.day == 1 else ''} {MOIS_FR[d.month - 1]}"
+
+SPORT_TITRES = {'Run': 'La course à pied', 'TrailRun': 'Le trail', 'Hike': 'La randonnée', 'Walk': 'La marche',
+                'Snowshoe': 'Les raquettes', 'Ride': 'Le vélo', 'GravelRide': 'Le gravel', 'E-BikeRide': 'Le vélo électrique',
+                'Velomobile': 'Le vélomobile'}
+MOMENTS = [  # (début, fin, titre, libellé) : heure locale de départ
+    (5, 11, 'Plutôt du matin', 'le matin, entre 5 h et 11 h'),
+    (11, 14, 'Plutôt à midi', 'entre 11 h et 14 h'),
+    (14, 18, "Plutôt l'après-midi", "l'après-midi, entre 14 h et 18 h"),
+    (18, 22, 'Plutôt du soir', 'le soir, entre 18 h et 22 h'),
+    (22, 29, 'Plutôt de nuit', 'la nuit, après 22 h'),
+]
+
+def _evol(cur, prev):
+    """Évolution en % (None si pas de référence)."""
+    if not prev: return None
+    return round((cur - prev) / prev * 100)
+
+def _carte_blocs(cells_upto, cells_year, dlat, max_cells=2600):
+    """Blocs de la zone la plus fréquentée (pour la mosaïque) : centrés sur les blocs de l'année.
+    Renvoie des indices de grille relatifs [ligne, colonne, débloqué cette année]."""
+    ref = cells_year or cells_upto
+    if not ref: return {"rows": 0, "cols": 0, "cells": []}
+    lats = np.array([c[0] for c in ref]); lons = np.array([c[1] for c in ref])
+    lat0, lat1 = np.percentile(lats, [6, 94]); lon0, lon1 = np.percentile(lons, [6, 94])
+    pad_lat = max(dlat * 3, (lat1 - lat0) * .12); pad_lon = max(dlat * 4, (lon1 - lon0) * .12)
+    lat0, lat1, lon0, lon1 = lat0 - pad_lat, lat1 + pad_lat, lon0 - pad_lon, lon1 + pad_lon
+    dl = _dlon((lat0 + lat1) / 2, dlat)
+    rows = int(round((lat1 - lat0) / dlat)) + 1; cols = int(round((lon1 - lon0) / dl)) + 1
+    # Zone trop grande : on agrandit les blocs affichés pour rester lisible
+    step = 1
+    while rows * cols / (step * step) > 90 * 90: step += 1
+    out = {}
+    for c in cells_upto:
+        if lat0 <= c[0] <= lat1 and lon0 <= c[1] <= lon1:
+            r = int((lat1 - c[0]) / dlat) // step; k = int((c[1] - lon0) / dl) // step
+            out[(r, k)] = out.get((r, k), False) or (c in cells_year)
+    cells = [[r, k, 1 if v else 0] for (r, k), v in out.items()]
+    if len(cells) > max_cells: cells = cells[:max_cells]
+    return {"rows": rows // step + 1, "cols": cols // step + 1, "cells": cells}
+
+def compute_annee(year, as_of):
+    """Bilan de l'année `year` pour l'utilisateur connecté (ses données seulement)."""
+    grid_m = 250
+    dlat = grid_m / 111320
+    activities = sorted(get_strava_activities_cached(), key=lambda a: a['start_date_local'])
+    ys, ye = f"{year}-01-01", f"{year + 1}-01-01"
+    pys = f"{year - 1}-01-01"
+    before_prev, before, seen = set(), set(), set()
+    acts_y, acts_prev = [], []
+    cells_y_all = set()
+    month_new = [0] * 12
+    best = None
+    for a in activities:
+        d = a['start_date_local']
+        if d >= ye: break
+        pts = polyline.decode(a['polyline'])
+        if len(pts) < 2: continue
+        cells = get_cells_from_polyline(pts, dlat)
+        if d < ys:
+            if d < pys: before_prev |= cells
+            else: acts_prev.append(a)
+            before |= cells
+            continue
+        new = cells - before - seen
+        seen |= cells
+        cells_y_all |= cells
+        acts_y.append(a)
+        month_new[int(d[5:7]) - 1] += len(new)
+        if new and (best is None or len(new) > best[1]):
+            best = (a, len(new), pts, new)
+    new_y = len((before | seen)) - len(before)
+    new_prev = len(before) - len(before_prev)
+    upto = before | seen
+    km_y = sum(a.get('distance', 0) or 0 for a in acts_y) / 1000
+    km_prev = sum(a.get('distance', 0) or 0 for a in acts_prev) / 1000
+
+    res = {"year": year, "as_of": _fr_date(as_of) if as_of.year == year else None,
+           "complete": as_of.year > year, "empty": not acts_y}
+    res["chiffres"] = {
+        "new_blocks": new_y, "new_blocks_prev": new_prev, "new_blocks_evol": _evol(new_y, new_prev),
+        "total_before": len(before), "total_after": len(upto),
+        "outings": len(acts_y), "outings_prev": len(acts_prev), "outings_diff": len(acts_y) - len(acts_prev) if acts_prev else None,
+        "km": round(km_y), "km_evol": _evol(km_y, km_prev),
+        "first_year": not before,
+    }
+    # Mosaïque (couverture et story)
+    res["mosaique"] = _carte_blocs(upto, seen - before, dlat)
+
+    # Sortie la plus marquante : la plus riche en blocs jamais traversés auparavant
+    if best:
+        a, n, pts, new = best
+        step = max(1, len(pts) // 260)
+        tr = pts[::step] + ([pts[-1]] if (len(pts) - 1) % step else [])
+        dt = datetime.strptime(a['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+        res["sortie"] = {"new_blocks": n, "date": f"{['Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi','Dimanche'][dt.weekday()]} {_fr_date(dt)}",
+                         "sport": SPORT_TRANSLATIONS.get(a['type'], a['type']), "km": round((a.get('distance', 0) or 0) / 1000, 1),
+                         "trace": [[round(p[0], 5), round(p[1], 5)] for p in tr],
+                         "cells": [[round(c[0], 6), round(c[1], 6)] for c in list(new)[:400]], "dlat": dlat}
+    else:
+        res["sortie"] = None
+
+    # Habitudes : heures et jours de départ, sports, nouveaux blocs par mois
+    hours, days, sports = [0] * 24, [0] * 7, defaultdict(int)
+    for a in acts_y:
+        dt = datetime.strptime(a['start_date_local'], "%Y-%m-%dT%H:%M:%SZ")
+        hours[dt.hour] += 1; days[dt.weekday()] += 1; sports[a['type']] += 1
+    moment = None
+    if acts_y:
+        counts = [sum(hours[h % 24] for h in range(a0, b0)) for a0, b0, _, _ in MOMENTS]
+        i = max(range(len(MOMENTS)), key=lambda k: counts[k])
+        a0, b0, titre, lib = MOMENTS[i]
+        moment = {"title": titre, "label": lib, "percent": round(counts[i] / len(acts_y) * 100), "from": a0, "to": b0}
+    top_day = max(range(7), key=lambda k: days[k]) if acts_y else None
+    sp = sorted(sports.items(), key=lambda kv: kv[1], reverse=True)
+    split = [{"code": k, "label": SPORT_TRANSLATIONS.get(k, k), "percent": round(v / len(acts_y) * 100)} for k, v in sp[:3]] if acts_y else []
+    autres = 100 - sum(s['percent'] for s in split)
+    if len(sp) > 3 and autres > 0: split.append({"code": "autres", "label": "Autres", "percent": autres})
+    elif split: split[0]['percent'] += autres   # arrondis : le total fait toujours 100 %
+    if sp:
+        main, share = sp[0][0], sp[0][1] / len(acts_y)
+        sport_title = f"{SPORT_TITRES.get(main, SPORT_TRANSLATIONS.get(main, main))} avant tout" if share >= .5 else "Plusieurs sports au programme"
+    else:
+        sport_title = None
+    last_month = 12 if as_of.year > year else as_of.month
+    rec = max(range(last_month), key=lambda k: month_new[k]) if any(month_new) else None
+    res["habitudes"] = {"hours": hours, "days": days, "moment": moment,
+                        "top_day": WEEKDAYS_FR[top_day] if top_day is not None else None, "top_day_index": top_day,
+                        "sports": split, "sport_title": sport_title,
+                        "months": month_new, "last_month": last_month,
+                        "record": {"month": MOIS_FR[rec], "index": rec, "blocks": month_new[rec]} if rec is not None and month_new[rec] else None}
+
+    # Communes et départements de l'année
+    res["communes"], res["departements"], res["chiffres"]["new_communes"] = [], [], 0
+    if DB_URL and acts_y:
+        try:
+            _annee_territoires(res, year, before, upto, seen, dlat, grid_m)
+        except Exception as e:
+            print(f"Bilan : communes indisponibles ({e})")
+    return res
+
+def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m):
+    """Top 5 des communes (points gagnés dans l'année) et départements explorés dans l'année."""
+    data = _activities_data('all', 'all', grid_m)
+    ys, ye = f"{year}-01-01", f"{year}-12-31"
+    cities = data.get('top_municipalities', [])
+    # Nouvelles communes de l'année : 1re sortie dans la commune pendant l'année
+    res["chiffres"]["new_communes"] = sum(1 for c in cities if c['stats'].get('first') and ys <= c['stats']['first'] <= ye)
+    cand = [c for c in cities if c.get('code') and c['stats'].get('first') and c['stats']['first'] <= ye and c['stats'].get('last', '') >= ys]
+    if not cand: return
+    with _engine().connect() as conn:
+        rows = conn.execute(text("SELECT code_insee, ST_AsGeoJSON(geometry) AS g FROM communes WHERE code_insee = ANY(:c)"),
+                            {"c": [c['code'] for c in cand]}).fetchall()
+    geoms = {}
+    for r in rows:
+        if r.g and r.code_insee not in geoms:
+            geoms[r.code_insee] = shp_transform(lambda x, y, z=None: (y, x), shp_shape(json.loads(r.g))).buffer(0)
+    profil = data.get('acces_profil', 'tous')
+    communes, active_deps = [], set()
+    for c in cand:
+        g = geoms.get(c['code'])
+        if g is None or g.is_empty: continue
+        all_cells = commune_cells(g, dlat)
+        if not all_cells or not (all_cells & cells_y): continue
+        active_deps.add(c['dep'])
+        hors = acces.filtre_inaccessibles(acces.keys_of_cells(all_cells, dlat), c['dep'], grid_m, profil)
+        hors = set(hors.tolist()) if len(hors) else set()
+        def pct(vus):
+            vus = all_cells & vus
+            n_hors_vus = sum(1 for k in acces.keys_of_cells(vus, dlat).tolist() if k in hors) if vus and hors else 0
+            total = max(len(vus), len(all_cells) - (len(hors) - n_hors_vus))
+            return min(100.0, len(vus) / max(1, total) * 100)
+        p1, p0 = pct(upto), pct(before)
+        communes.append({"name": c['name'], "code": c['code'], "percent": round(p1), "points": round(p1 - p0),
+                         "new": not (all_cells & before)})
+    communes.sort(key=lambda x: (x['points'], x['percent']), reverse=True)
+    res["communes"] = [c for c in communes if c['points'] > 0][:5] or communes[:5]
+    totals = dep_totals()
+    deps = []
+    for dep in active_deps:
+        cs = [c for c in cities if c.get('dep') == dep and c['stats'].get('first')]
+        n1 = sum(1 for c in cs if c['stats']['first'] <= ye)
+        n0 = sum(1 for c in cs if c['stats']['first'] < ys)
+        total = max(totals.get(dep, 0), n1, 1)
+        deps.append({"code": dep, "name": DEPARTEMENTS.get(dep, dep), "percent": round(n1 / total * 100, 1),
+                     "points": round((n1 - n0) / total * 100, 1), "communes": n1})
+    deps.sort(key=lambda d: (d['percent'], d['communes']), reverse=True)
+    res["departements_total"] = len(deps)
+    res["departements"] = deps[:4]
+
+@app.route('/annee')
+def annee_page():
+    if not session.get('access_token'): return redirect(url_for('login_page'))
+    st = annee_context()
+    if not st: abort(404)
+    return render_template('annee.html', active=None, annee=st)
+
+@app.route('/annee/apercu', methods=['POST'])
+def annee_apercu():
+    """Admin : choisir la période simulée du bilan (pour vérifier la carte, le menu et les textes)."""
+    if not is_admin() or request.form.get('csrf') != session.get('csrf'): abort(404)
+    ph = request.form.get('phase')
+    if ph in ANNEE_PHASES: session['annee_apercu'] = ph
+    else: session.pop('annee_apercu', None)
+    nxt = request.form.get('next', '/annee')
+    return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//') else '/annee')
+
+@app.route('/api/annee')
+def api_annee():
+    if not session.get('access_token'): return jsonify({"error": "Login required"}), 401
+    st = annee_state()
+    if not st: return jsonify({"error": "Introuvable"}), 404
+    activities = get_strava_activities_cached()
+    as_of = _today_paris()
+    key = f"annee_{st['year']}_{as_of}_{_data_version(activities)}"
+    cache = _result_cache(_user_key())
+    if key not in cache:
+        cache[key] = compute_annee(st['year'], as_of)
+    return jsonify(cache[key])
+
 
 @app.errorhandler(404)
 def not_found(e):
