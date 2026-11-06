@@ -99,6 +99,8 @@
   .row--dep .row__s { grid-column: 1 / -1; font-size: 12px; color: rgba(255,255,255,.52); margin-top: 2px; }
 
   .mosaic { display: block; margin: 0 auto; }
+  .zone { display: block; margin-top: 12px; font-size: 13.5px; font-weight: 650; color: rgba(255,255,255,.82); }
+  .zone small { display: block; margin-top: 2px; font-size: 12px; font-weight: 500; color: rgba(255,255,255,.5); }
   .route { display: block; margin: 0 auto; overflow: visible; }
 
   /* Écran final : carte à partager (aperçu exact de l'image téléchargée) */
@@ -256,6 +258,17 @@
   function fit() { const k = mqPC.matches ? Math.min(1, (innerHeight - 120) / 844, (innerWidth - 200) / 390) : 1; story.style.setProperty('--k', k.toFixed(4)); }
   addEventListener('resize', fit); fit();
 
+  /* ---------- Zone de la mosaïque : « Autour de Vannes », « Autour d'Arradon », « Autour du Faouët » ---------- */
+  function autour(name) {
+    if (!name) return '';
+    const n = name.replace(/\s*\(\d[\dAB]?\)$/, '');
+    if (/^Les /.test(n)) return `Autour des ${n.slice(4)}`;
+    if (/^Le /.test(n)) return `Autour du ${n.slice(3)}`;
+    if (/^L'/.test(n)) return `Autour de ${n}`;
+    if (/^[AEIOUYÂÊÎÔÛÉÈÀ]/i.test(n)) return `Autour d'${n}`;
+    return `Autour de ${n}`;
+  }
+  const autresZones = (m) => m && m.other_zones ? `+\u00a0${m.other_zones}\u00a0autre${m.other_zones > 1 ? 's' : ''} zone${m.other_zones > 1 ? 's' : ''} explorée${m.other_zones > 1 ? 's' : ''}` : '';
   /* ---------- Dessins ---------- */
   function mosaicSVG(m, size, maxDelay = 1100) {
     if (!m || !m.cells.length) return '';
@@ -313,7 +326,8 @@
       <div class="y-num y-num--xl pop" style="--d:250ms">${YEAR}</div>
       <p class="t an" style="--d:500ms">Votre année en blocs</p>
       ${asOf ? `<span class="sub an" style="--d:650ms">${asOf}</span>` : ''}${until}
-      <div class="an" style="--d:300ms;margin-top:${small ? 18 : 28}px">${mosaicSVG(d.mosaique, small ? 170 : 220)}</div>`, 5600);
+      <div class="an" style="--d:300ms;margin-top:${small ? 18 : 28}px">${mosaicSVG(d.mosaique, small ? 170 : 220)}</div>
+      ${d.mosaique && d.mosaique.name ? `<span class="zone an" style="--d:900ms">${esc(autour(d.mosaique.name))}${autresZones(d.mosaique) ? `<small>${autresZones(d.mosaique)}</small>` : ''}</span>` : ''}`, 5600);
 
     // 2. Chiffres clés
     const ev = c.new_blocks_evol;
@@ -375,12 +389,12 @@
 
     // 7. Départements
     if (d.departements.length) {
-      const top = Math.max(...d.departements.map((x) => x.percent), .1), n = d.departements_total || d.departements.length;
+      const n = d.departements_total || d.departements.length;
       add(`<span class="k an" style="--d:100ms">Vos départements en ${YEAR}</span>
         <p class="t t--m an" style="--d:200ms">${n > 1 ? `${n} départements explorés` : `Un département exploré`}</p>
         <div class="list">${d.departements.map((dp, i) => `<div class="row row--dep an" style="--d:${250 + i * 140}ms">
           <span class="row__n"><b>${esc(dp.name)} <small style="display:inline;font-weight:600">(${esc(dp.code)})</small></b></span><span class="row__p">${pct(dp.percent, 1)}</span>
-          <span class="y-bar"><span class="gx" style="--w:${Math.max(dp.percent / top * 100, 2).toFixed(0)}%;--d:${450 + i * 140}ms"></span></span>
+          <span class="y-bar"><span class="gx" style="--w:${Math.max(dp.percent, 1).toFixed(1)}%;--d:${450 + i * 140}ms"></span></span>
           <span class="row__s">${dp.points > 0 ? `${pts(dp.points)} en ${YEAR} · ` : ''}${plural(dp.communes, 'commune explorée', 'communes explorées')}</span></div>`).join('')}</div>
         <p class="s an" style="--d:900ms;font-size:12.5px">Part des communes du département où vous êtes passé.</p>`, 6000);
     }
@@ -415,16 +429,21 @@
       m.cells.forEach(([r, k, n]) => { ctx.fillStyle = n ? A : B; const s = cell - gp; const x = x0 + k * cell + gp / 2, y = y0 + r * cell + gp / 2;
         if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(x, y, s, s, s * .15); ctx.fill(); } else ctx.fillRect(x, y, s, s); });
     }
+    // Zone
+    if (m && m.name) {
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; let fs = 38; ctx.font = `650 ${fs}px Sora, sans-serif`; while (ctx.measureText(autour(m.name)).width > W - 160 && fs > 24) { fs -= 2; ctx.font = `650 ${fs}px Sora, sans-serif`; } ctx.fillText(autour(m.name), W / 2, 1100);
+      if (m.other_zones) { ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.font = '500 30px Sora, sans-serif'; ctx.fillText(autresZones(m).replace(/\u00a0/g, ' '), W / 2, 1150); }
+    }
     // Chiffres
     const stats = [[c.new_blocks, c.new_blocks > 1 ? 'nouveaux blocs' : 'nouveau bloc'], [c.km, 'km'], [c.outings, c.outings > 1 ? 'sorties' : 'sortie']];
     stats.forEach(([v, l], i) => {
       const x = W / 2 + (i - 1) * 330;
-      ctx.fillStyle = A; ctx.font = '800 92px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText(fmt(v).replace(/\s/g, ' '), x, 1235); ctx.letterSpacing = '0px';
-      ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '500 34px Sora, sans-serif'; ctx.fillText(l, x, 1290);
+      ctx.fillStyle = A; ctx.font = '800 92px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText(fmt(v).replace(/\s/g, ' '), x, 1275); ctx.letterSpacing = '0px';
+      ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '500 34px Sora, sans-serif'; ctx.fillText(l, x, 1330);
     });
-    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(140, 1400, W - 280, 2);
-    ctx.fillStyle = '#fff'; ctx.font = '800 84px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText('unlock', W / 2, 1560); ctx.letterSpacing = '0px';
-    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '500 36px Sora, sans-serif'; ctx.fillText('unlock-app.fr', W / 2, 1625);
+    ctx.fillStyle = 'rgba(255,255,255,.1)'; ctx.fillRect(140, 1435, W - 280, 2);
+    ctx.fillStyle = '#fff'; ctx.font = '800 84px Sora, sans-serif'; ctx.letterSpacing = '-3px'; ctx.fillText('unlock', W / 2, 1585); ctx.letterSpacing = '0px';
+    ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '500 36px Sora, sans-serif'; ctx.fillText('unlock-app.fr', W / 2, 1650);
   }
   async function exportStory() {
     const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; drawStory(cv);
