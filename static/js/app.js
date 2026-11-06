@@ -192,6 +192,36 @@
   window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; refreshInstallButtons(); });
   window.addEventListener('appinstalled', () => { deferredPrompt = null; refreshInstallButtons(); U.toast('Unlock est installée sur votre appareil'); });
 
+  /* Télécharger mes chiffres : zip de fichiers CSV et GeoJSON, calculé à la demande (Menu) */
+  let exporting = false;
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-export]'); if (!btn) return;
+    e.preventDefault();
+    if (exporting) return;
+    exporting = true; btn.setAttribute('aria-busy', 'true');
+    U.closeSheet('sheet-menu');
+    const hasLoader = !!document.getElementById('loader');
+    if (hasLoader) U.loader.show(['Préparation de vos chiffres…', 'Calcul de vos communes mois par mois…', 'Création du fichier…']);
+    else U.toast('Préparation de vos chiffres…', 'download');
+    try {
+      const r = await fetch('/api/export', { credentials: 'same-origin' });
+      if (r.status === 401) { location.href = '/login?error=expired'; return; }
+      if (!r.ok) throw new Error(r.status);
+      const blob = await r.blob();
+      const m = /filename="([^"]+)"/.exec(r.headers.get('Content-Disposition') || '');
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'unlock-chiffres.zip';
+      document.body.appendChild(a); a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      U.toast('Vos chiffres sont téléchargés', 'check');
+    } catch (err) {
+      U.toast("Le téléchargement n'a pas abouti. Réessayez dans un instant.", 'alert');
+    } finally {
+      if (hasLoader) U.loader.hide();
+      exporting = false; btn.removeAttribute('aria-busy');
+    }
+  });
+
   document.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-install]'); if (!btn) return;
     e.preventDefault();
