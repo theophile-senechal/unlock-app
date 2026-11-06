@@ -900,4 +900,5 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 }
 .menu-item--annee > .i:first-child { background: var(--brand); color: #fff; box-shadow: none; }
 .badge-new { display: inline-block; margin-left: 8px; padding: 2px 7px; border-radius: 999px; background: var(--brand-100); color: var(--brand); font-size: .6875rem; font-weight: 700; line-height: 1.4; vertical-align: 1px; white-space: nowrap; }
+.dot-new { display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--brand); vertical-align: 2px; }
 .badge-new--admin { background: var(--canvas); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-2); }
