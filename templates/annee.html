@@ -452,16 +452,21 @@
     try {
       const file = new File([blob], name, { type: 'image/png' });
       if (navigator.canShare && matchMedia('(pointer: coarse)').matches && navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: `Mon année ${YEAR} sur Unlock` }); return;
+        await navigator.share({ files: [file], title: `Mon année ${YEAR} sur Unlock` }); Unlock.track('annee_partage'); return;
       }
-    } catch (e) { if (e && e.name === 'AbortError') return; }
+    } catch (e) { if (e && e.name === 'AbortError') { Unlock.track('annee_partage', { d: 'annule' }); return; } }
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+    Unlock.track('annee_telecharge');
     Unlock.toast('Story enregistrée', 'check');
   }
 
   /* ---------- Navigation ---------- */
   let cur = -1, timer = null, left = 0, startedAt = 0, paused = false;
+  const seen = new Set();   // écrans déjà vus (mesure : jusqu'où le bilan est regardé)
+  // Écran qui défile tout seul : le temps passé compte comme actif, même sans toucher l'écran
+  let watched = false;
+  const setWatch = (on) => { if (on !== watched) { watched = on; Unlock.track.watching(on); } };
   function count(el) {
     const to = +el.dataset.to, d = 1100, delay = parseFloat(getComputedStyle(el.closest('.an,.pop') || el).getPropertyValue('--d')) || 0, t0 = performance.now();
     if (matchMedia('(prefers-reduced-motion: reduce)').matches || !to) { el.textContent = nb(fmt(to)); return; }
@@ -469,7 +474,7 @@
     const step = (t) => { const k = Math.min(1, Math.max(0, (t - t0 - delay) / d)); el.textContent = nb(fmt(Math.round(to * (1 - Math.pow(1 - k, 3))))); if (k < 1) requestAnimationFrame(step); };
     requestAnimationFrame(step);
   }
-  function schedule(ms) { clearTimeout(timer); left = ms; startedAt = Date.now(); if (ms > 0) timer = setTimeout(() => go(cur + 1), ms); }
+  function schedule(ms) { setWatch(ms > 0); clearTimeout(timer); left = ms; startedAt = Date.now(); if (ms > 0) timer = setTimeout(() => go(cur + 1), ms); }
   function go(i) {
     const els = screensEl.children;
     if (i < 0 || i >= els.length) return;
@@ -480,10 +485,11 @@
     if (els[i].querySelector('#share-canvas')) drawStory($('share-canvas'));
     $('prev').disabled = i === 0; $('next').disabled = i === els.length - 1;
     paused = false; story.classList.remove('is-paused');
+    if (!seen.has(i)) { seen.add(i); Unlock.track('annee_ecran', { v: i + 1 }); }
     schedule(SCREENS[i].dur);
     els[i].setAttribute('aria-hidden', 'false');
   }
-  function pause() { if (paused || !SCREENS[cur] || !SCREENS[cur].dur) return; paused = true; story.classList.add('is-paused'); clearTimeout(timer); left -= Date.now() - startedAt; }
+  function pause() { if (paused || !SCREENS[cur] || !SCREENS[cur].dur) return; setWatch(false); paused = true; story.classList.add('is-paused'); clearTimeout(timer); left -= Date.now() - startedAt; }
   function resume() { if (!paused) return; paused = false; story.classList.remove('is-paused'); schedule(Math.max(300, left)); }
 
   // Toucher : à gauche, écran précédent ; ailleurs, suivant. Appui long : pause.
@@ -506,7 +512,7 @@
   document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
   screensEl.addEventListener('click', (e) => {
     const sw = e.target.closest('.swatch');
-    if (sw) { theme = sw.dataset.theme; $('yr').dataset.theme = theme; document.querySelectorAll('.swatch').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); drawStory($('share-canvas')); }
+    if (sw) { if (sw.dataset.theme !== theme) Unlock.track('annee_theme', { d: sw.dataset.theme }); theme = sw.dataset.theme; $('yr').dataset.theme = theme; document.querySelectorAll('.swatch').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); drawStory($('share-canvas')); }
     if (e.target.closest('#dl')) exportStory();
   });
 

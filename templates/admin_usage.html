@@ -1,0 +1,392 @@
+{% extends "base.html" %}
+{% import '_ui.html' as ui with context %}
+{% block title %}Comportement · Unlock{% endblock %}
+{% block head %}
+<style>
+  .ux { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .ux-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+  @media (min-width: 1024px) { .ux-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .ux .chart { margin-bottom: 0; }
+  .ux-head__links { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .updated { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
+  .kpis4 { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 1024px) { .kpis4 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; } }
+  .note { font-size: var(--fs-xs); color: var(--muted); margin-top: 10px; line-height: 1.45; }
+  .callout { padding: 14px 16px; border-radius: var(--r-md); background: var(--canvas); font-size: var(--fs-sm); color: var(--ink-2); display: flex; gap: 10px; }
+  .callout b { color: var(--ink); }
+  .callout .i { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--muted); }
+  .callout--warn { background: #FDF3E6; } .callout--warn .i { color: #B26A00; }
+
+  /* Barres horizontales : libellé, barre, valeur */
+  /* Libellé et valeur sur une ligne, barre pleine largeur dessous : aucun libellé coupé */
+  .hb { display: grid; gap: 12px; }
+  .hb__row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px 12px; align-items: baseline; font-size: var(--fs-sm); }
+  .hb__lbl { min-width: 0; color: var(--ink-2); overflow-wrap: anywhere; line-height: 1.3; }
+  .hb__track { grid-column: 1 / -1; grid-row: 2; height: 8px; border-radius: 99px; background: var(--canvas); overflow: hidden; }
+  .hb__fill { height: 100%; border-radius: 99px; background: #9E2A3F; }
+  .hb__fill--b { background: #2A86B8; }
+  .hb__val { grid-column: 2; grid-row: 1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .hb__val small { font-weight: 500; color: var(--muted); margin-left: 4px; }
+  .hb__empty { color: var(--muted); font-size: var(--fs-sm); }
+
+  /* Petits blocs de barres (supports) */
+  .dims { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .dims { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .dims h3, .sub-t { font-size: var(--fs-xs); font-weight: 650; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+
+  /* Rétention : trois chiffres puis le tableau des cohortes */
+  .ret3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .ret3 > div { padding: 12px; border-radius: var(--r-md); background: var(--canvas); min-width: 0; }
+  .ret3 b { display: block; font-family: var(--font-display); font-size: var(--fs-xl); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .ret3 span { display: block; font-size: var(--fs-xs); color: var(--ink-2); line-height: 1.3; margin-top: 4px; overflow-wrap: break-word; }
+  .ret3 span + span { color: var(--muted); margin-top: 2px; }
+  @media (max-width: 479px) {
+    .ret3 { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+    .ret3 > div { display: grid; grid-template-columns: 64px minmax(0, 1fr); column-gap: 12px; align-items: center; padding: 10px 12px; }
+    .ret3 b { grid-row: 1 / span 2; }
+    .ret3 span { margin-top: 0; }
+  }
+  .coh { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; table-layout: fixed; }
+  .coh th { font-weight: 650; color: var(--muted); padding: 4px 2px; text-align: center; }
+  .coh th:first-child, .coh td:first-child { text-align: left; width: 76px; }
+  .coh th.coh-n, .coh td.coh-n { width: 34px; text-align: right; padding-right: 6px; color: var(--ink-2); }
+  .coh td { padding: 0; height: 30px; text-align: center; border-radius: 6px; color: var(--ink); }
+  .coh td.c { font-weight: 650; }
+  .coh td.c--dark { color: #fff; }
+  .coh td.c--none { background: transparent; color: var(--line-2); }
+  .coh td:first-child { white-space: nowrap; color: var(--ink-2); padding-right: 4px; }
+  @media (max-width: 479px) { .coh .w6, .coh .w7, .coh .w8 { display: none; } .coh th:first-child, .coh td:first-child { width: 58px; } .coh th.coh-n, .coh td.coh-n { width: 28px; } }
+
+  /* Tableau simple */
+  .tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); table-layout: fixed; }
+  .tbl th { text-align: right; font-size: var(--fs-xs); font-weight: 650; color: var(--muted); padding: 8px 4px; border-bottom: 1px solid var(--line); }
+  .tbl th:first-child, .tbl td:first-child { text-align: left; }
+  .tbl td { padding: 9px 4px; border-bottom: 1px solid var(--line); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tbl td:first-child { white-space: normal; overflow-wrap: anywhere; line-height: 1.3; padding-right: 10px; }
+  .tbl th:first-child { width: 40%; }
+  .tbl tr:last-child td { border-bottom: 0; }
+  .tbl td:first-child { color: var(--ink); font-weight: 600; }
+  .tbl td small { color: var(--muted); font-weight: 500; }
+  @media (max-width: 479px) { .tbl .hide-s { display: none; } }
+
+  /* Entonnoir de la story */
+  .funnel { display: grid; gap: 8px; }
+  .funnel__step { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; font-size: var(--fs-sm); }
+  .funnel__bar { grid-column: 1 / -1; height: 26px; border-radius: 8px; background: var(--canvas); overflow: hidden; }
+  .funnel__bar span { display: block; height: 100%; background: #9E2A3F; border-radius: 8px; min-width: 4px; }
+  .funnel__step:nth-child(2) .funnel__bar span { background: #C2475C; } .funnel__step:nth-child(3) .funnel__bar span { background: #2A86B8; }
+  .funnel__val { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .funnel__val small { font-weight: 500; color: var(--muted); }
+  .facts { display: grid; gap: 8px; margin-top: 14px; }
+  .facts p { margin: 0; font-size: var(--fs-sm); color: var(--ink-2); }
+  .facts b { color: var(--ink); }
+
+  .two { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .two { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="app">
+  {{ ui.topbar(active) }}
+  <main class="scrollmain">
+    <div class="page">
+      <div class="page__head">
+        <div>
+          <h1 class="page__title">Comportement des utilisateurs</h1>
+          <p class="page__lead">Comment Unlock est utilisée, sans aucune donnée Strava. Votre compte n'est jamais mesuré.</p>
+          <div class="ux-head__links"><a class="btn btn--outline btn--sm" href="/admin">{{ icon('chev-l') }}Tableau de bord</a></div>
+        </div>
+        <div class="updated"><span id="updated">Chargement…</span>
+          <button type="button" class="iconbtn" id="refresh" aria-label="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
+        </div>
+      </div>
+
+      <div class="ux" id="ux">
+        <div id="state" hidden></div>
+        <div id="content" hidden>
+          <div class="ux">
+            <div class="kpis4">
+              <div class="surface kpi"><span class="kpi__label">Actifs sur 30 jours</span><span class="kpi__val" id="k-mau">–</span><span class="kpi__sub" id="k-mau-sub"></span><span class="kpi__help">Au moins un jour d'usage mesuré</span></div>
+              <div class="surface kpi"><span class="kpi__label">Fidélité (DAU / MAU)</span><span class="kpi__val" id="k-stick">–</span><span class="kpi__sub" id="k-stick-sub"></span><span class="kpi__help">Part des actifs du mois qui viennent un jour donné</span></div>
+              <div class="surface kpi"><span class="kpi__label">Sessions sur 30 jours</span><span class="kpi__val" id="k-ses">–</span><span class="kpi__sub" id="k-ses-sub"></span><span class="kpi__help">Une session s'arrête après 30 min sans activité</span></div>
+              <div class="surface kpi"><span class="kpi__label">Temps actif par session</span><span class="kpi__val" id="k-act">–</span><span class="kpi__sub" id="k-act-sub"></span><span class="kpi__help">Médiane, écran allumé et utilisé</span></div>
+            </div>
+
+            <section class="surface chart" aria-labelledby="t-daily">
+              <div class="chart__head"><h2 class="chart__title" id="t-daily">Utilisateurs actifs par jour</h2>
+                <span class="legend-inline"><span><i style="background:#9E2A3F"></i>Actifs</span><span><i style="background:#2A86B8"></i>Sessions</span></span></div>
+              <div class="chart__box"><canvas id="c-daily" role="img" aria-label="Utilisateurs actifs et sessions par jour, 60 derniers jours"></canvas></div>
+              <p class="note" id="n-daily"></p>
+            </section>
+
+            <section class="surface chart" aria-labelledby="t-ret">
+              <div class="chart__head"><h2 class="chart__title" id="t-ret">Rétention</h2><span class="chart__note">Inscrits depuis le début de la mesure</span></div>
+              <div class="ret3" id="ret3"></div>
+              <h3 class="sub-t">Cohortes par semaine d'inscription</h3>
+              <table class="coh" id="coh"></table>
+              <p class="note">Chaque ligne regroupe les personnes inscrites la même semaine. S0 est la semaine d'inscription, S1 la suivante, etc. La case donne la part de la cohorte revenue au moins une fois cette semaine-là. Les comptes partis restent comptés, sans lien avec la personne.</p>
+            </section>
+
+            <div class="ux-grid">
+              <section class="surface chart" aria-labelledby="t-pages">
+                <div class="chart__head"><h2 class="chart__title" id="t-pages">Onglets</h2><span class="chart__note">30 derniers jours</span></div>
+                <table class="tbl"><thead><tr><th>Page</th><th>Utilisateurs</th><th>Vues</th><th class="hide-s">Temps / vue</th></tr></thead><tbody id="pages"></tbody></table>
+                <p class="note">« Temps / vue » donne le temps actif moyen passé sur la page à chaque visite.</p>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-story">
+                <div class="chart__head"><h2 class="chart__title" id="t-story">Story</h2><span class="chart__note">30 derniers jours, en personnes</span></div>
+                <div class="funnel" id="funnel"></div>
+                <div class="facts" id="story-facts"></div>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-act">
+                <div class="chart__head"><h2 class="chart__title" id="t-act">Actions clés</h2><span class="chart__note">Personnes sur 30 jours</span></div>
+                <div class="hb" id="actions"></div>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-first">
+                <div class="chart__head"><h2 class="chart__title" id="t-first">Première fois</h2><span class="chart__note">Depuis le début de la mesure</span></div>
+                <table class="tbl"><thead><tr><th>Action</th><th>Personnes</th><th>Jours après</th><th class="hide-s">Session n°</th></tr></thead><tbody id="firsts"></tbody></table>
+                <p class="note">Médianes. « Jours après » compte les jours entre l'inscription et la première fois. « Session n° » dit à quelle session de la personne ça arrive.</p>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-sup">
+                <div class="chart__head"><h2 class="chart__title" id="t-sup">Supports</h2><span class="chart__note">Sessions sur 30 jours</span></div>
+                <div class="dims" id="supports"></div>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-when">
+                <div class="chart__head"><h2 class="chart__title" id="t-when">Moments de visite</h2><span class="chart__note">Sessions sur 30 jours, heure de Paris</span></div>
+                <div class="chart__box chart__box--sm"><canvas id="c-hours" role="img" aria-label="Sessions par heure de la journée"></canvas></div>
+                <div class="chart__box chart__box--sm" style="margin-top:14px"><canvas id="c-days" role="img" aria-label="Sessions par jour de la semaine"></canvas></div>
+                <p class="note">Utile plus tard pour choisir l'heure des notifications.</p>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-path">
+                <div class="chart__head"><h2 class="chart__title" id="t-path">Parcours</h2><span class="chart__note">Sessions sur 30 jours</span></div>
+                <div class="two"><div><h3 class="sub-t">Page d'arrivée</h3><div class="hb" id="entrees"></div></div><div><h3 class="sub-t">Page de sortie</h3><div class="hb" id="sorties"></div></div></div>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-churn">
+                <div class="chart__head"><h2 class="chart__title" id="t-churn">Départs</h2><span class="chart__note">Comptes fermés sur 90 jours</span></div>
+                <table class="tbl"><thead><tr><th>Raison</th><th>Comptes</th><th>Durée de vie</th><th class="hide-s">Jours d'usage</th></tr></thead><tbody id="departs"></tbody></table>
+                <h3 class="sub-t" style="margin-top:18px">Comptes actuels selon la dernière visite</h3>
+                <div class="hb" id="risque"></div>
+                <p class="note">Durée de vie et jours d'usage en médiane. Un compte sans visite pendant 31 jours est fermé automatiquement.</p>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-ref">
+                <div class="chart__head"><h2 class="chart__title" id="t-ref">Origine</h2><span class="chart__note">Site de la première visite</span></div>
+                <div class="hb" id="referents"></div>
+                <p class="note">« direct » regroupe les liens tapés, les favoris, les applis qui masquent leur origine (Instagram, WhatsApp…) et les comptes ouverts avant la mesure.</p>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-q">
+                <div class="chart__head"><h2 class="chart__title" id="t-q">Qualité</h2><span class="chart__note">7 derniers jours</span></div>
+                <table class="tbl"><thead><tr><th>Page</th><th>Vues</th><th>Affichage</th><th class="hide-s">9 sur 10 sous</th></tr></thead><tbody id="qualite"></tbody></table>
+                <p class="note">Temps médian jusqu'à la page affichée, hors images de la carte. « 9 sur 10 sous » veut dire que 90 % des vues sont plus rapides.</p>
+                <h3 class="sub-t" style="margin-top:18px">Erreurs et appels lents</h3>
+                <div class="hb" id="erreurs"></div>
+              </section>
+
+              <section class="surface chart" aria-labelledby="t-st">
+                <div class="chart__head"><h2 class="chart__title" id="t-st">Stockage de la mesure</h2></div>
+                <table class="tbl"><thead><tr><th>Table</th><th>Lignes</th><th>Taille</th></tr></thead><tbody id="stockage"></tbody></table>
+                <p class="note" id="n-st"></p>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+  {{ ui.bottomnav(active) }}
+</div>
+{{ ui.loader("Chargement du comportement…") }}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/chart.umd.js') }}"></script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const C1 = '#9E2A3F', C2 = '#2A86B8';
+  const fmt = Unlock.fmt, esc = Unlock.esc;
+  const charts = {}; let first = true;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  Chart.defaults.font.size = 12; Chart.defaults.color = '#7C7883';
+  const grid = { color: '#EFEDF0', drawTicks: false };
+  const tooltip = { backgroundColor: '#18161B', padding: 10, cornerRadius: 10, titleFont: { weight: '700' } };
+  const d = (s) => new Date(String(s).length <= 10 ? s + 'T12:00:00' : s);
+  const dayLbl = (s) => d(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }).replace('.', '');
+  const pct = (a, b) => (b ? a / b * 100 : 0);
+  const pctTxt = (a, b) => (b ? fmt(pct(a, b), pct(a, b) < 10 && pct(a, b) > 0 ? 1 : 0) + ' %' : '–');
+  const dur = (sec) => { sec = Math.round(+sec || 0); if (sec < 60) return sec + ' s'; const m = Math.floor(sec / 60), s = sec % 60; return m < 60 ? `${m} min${s ? ' ' + String(s).padStart(2, '0') : ''}` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}`; };
+  const size = (o) => (o > 1048576 ? fmt(o / 1048576, 1) + ' Mo' : fmt(o / 1024) + ' ko');
+  function draw(id, cfg) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($(id), cfg); }
+
+  const PAGES = { carte: 'Carte', lieux: 'Lieux', timelapse: 'Timelapse', story: 'Story', stats: 'Stats', devine: 'Devine la commune', annee: 'Bilan de l’année',
+    cgu: 'CGU', confidentialite: 'Confidentialité', mentions: 'Mentions légales', autre: 'Autre' };
+  const ACTIONS = { vue_story: 'Ouvrir la story', story_telecharge: 'Télécharger la story', story_partage: 'Partager la story', story_partage_annule: 'Partage annulé',
+    export_csv: 'Télécharger ses chiffres', pwa_clic: 'Bouton « Installer l’app »', pwa_installee: 'App installée (Android, PC)', pwa_refusee: 'Installation refusée',
+    pwa_guide_ios: 'Guide d’installation iPhone', timelapse_lance: 'Lancer le timelapse', carte_commune: 'Ouvrir une commune (carte)', lieux_fiche: 'Ouvrir un lieu',
+    lieux_recherche: 'Chercher une commune (lieux)', devine_reponse: 'Jouer à Devine la commune', devine_indice: 'Demander l’indice', annee_telecharge: 'Télécharger le bilan',
+    annee_partage: 'Partager le bilan', soutenir_clic: 'Clic « Faire un don »', contact_clic: 'Contacter le créateur', stats_progression: 'Progression d’une commune' };
+  const DIMS = { appareil: 'Appareil', os: 'Système', navigateur: 'Navigateur', mode: 'Appli ou site' };
+  const VALS = { telephone: 'Téléphone', tablette: 'Tablette', ordinateur: 'Ordinateur', ios: 'iOS', android: 'Android', windows: 'Windows', macos: 'macOS', linux: 'Linux',
+    chromeos: 'ChromeOS', safari: 'Safari', chrome: 'Chrome', firefox: 'Firefox', edge: 'Edge', samsung: 'Samsung Internet', opera: 'Opera', instagram: 'Instagram (intégré)',
+    facebook: 'Facebook (intégré)', pwa: 'Appli installée', site: 'Site dans le navigateur', autre: 'Autre', inconnu: 'Inconnu' };
+  const REASONS = { deconnexion: 'Déconnexion', suppression: 'Suppression des données', inactivite: 'Inactivité (31 jours)' };
+  const ERRS = { erreur_js: 'Erreur JavaScript', erreur_api: 'Erreur serveur', api_lente: 'Appel lent (plus de 3 s)' };
+
+  function bars(el, rows, opt = {}) {
+    if (!rows.length) { el.innerHTML = `<p class="hb__empty">${opt.empty || 'Pas encore de données.'}</p>`; return; }
+    const max = Math.max(1, ...rows.map((r) => r.n)), tot = opt.total || rows.reduce((a, r) => a + r.n, 0);
+    el.innerHTML = rows.map((r) => `<div class="hb__row"><span class="hb__lbl" title="${esc(r.label)}">${esc(r.label)}</span>
+      <div class="hb__track"><div class="hb__fill${opt.blue ? ' hb__fill--b' : ''}" style="width:${r.n / max * 100}%"></div></div>
+      <span class="hb__val">${fmt(r.n)}${opt.share === false ? '' : `<small>${pctTxt(r.n, tot)}</small>`}${r.extra ? `<small>${esc(r.extra)}</small>` : ''}</span></div>`).join('');
+  }
+
+  async function load() {
+    if (first) Unlock.loader.show(['Chargement du comportement…']); else Unlock.busy.on('Actualisation');
+    try {
+      const s = await Unlock.getJSON('/api/admin/usage');
+      render(s);
+      $('updated').textContent = 'Actualisé à ' + new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { Unlock.toast('Impossible de charger le comportement des utilisateurs.', 'alert'); }
+    finally { if (first) { Unlock.loader.hide(); first = false; } Unlock.busy.off(); }
+  }
+
+  function message(html) { $('state').innerHTML = html; $('state').hidden = false; $('content').hidden = true; }
+
+  function render(s) {
+    if (s.error) { message(`<div class="callout callout--warn">${Unlock.icon('alert')}<span><b>${esc(s.error)}</b>${s.migration ? ' Le fichier est dans le dossier migrations. Sans lui, rien n’est enregistré et l’appli fonctionne normalement.' : ''}</span></div>`); return; }
+    if (s.empty) { message(`<div class="callout">${Unlock.icon('clock')}<span><b>La mesure est prête.</b> Les premiers chiffres apparaîtront dès qu’une personne (autre que vous) utilisera l’appli.</span></div>`); return; }
+    $('state').hidden = true; $('content').hidden = false;
+    const R = s.resume;
+
+    /* KPI */
+    $('k-mau').textContent = fmt(R.mau);
+    $('k-mau-sub').innerHTML = `<span class="delta__ref">${fmt(R.wau)} sur 7 jours · ${fmt(R.dau)} aujourd'hui</span>`;
+    const stick = R.mau ? R.dau_moyen / R.mau * 100 : 0;
+    $('k-stick').textContent = R.mau ? fmt(stick, stick < 10 ? 1 : 0) + ' %' : '–';
+    $('k-stick-sub').innerHTML = `<span class="delta__ref">${fmt(R.dau_moyen, 1)} actifs par jour en moyenne</span>`;
+    $('k-ses').textContent = fmt(R.sessions);
+    $('k-ses-sub').innerHTML = `<span class="delta__ref">${R.mau ? fmt(R.sessions / R.mau, 1) : '–'} par personne · ${pctTxt(R.sessions_pwa, R.sessions)} dans l'appli installée</span>`;
+    $('k-act').textContent = R.actif_median == null ? '–' : dur(R.actif_median);
+    $('k-act-sub').innerHTML = `<span class="delta__ref">Durée totale ${R.duree_mediane == null ? '–' : dur(R.duree_mediane)} · ${fmt(R.pages_moy, 1)} page${R.pages_moy >= 2 ? 's' : ''} par session</span>`;
+
+    /* Actifs par jour */
+    const dl = s.daily || [];
+    draw('c-daily', { data: { labels: dl.map((r) => dayLbl(r.jour)), datasets: [
+        { type: 'bar', label: 'Actifs', data: dl.map((r) => +r.actifs), backgroundColor: C1, borderRadius: 4, maxBarThickness: 16, order: 2 },
+        { type: 'line', label: 'Sessions', data: dl.map((r) => +r.sessions), borderColor: C2, backgroundColor: C2, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, tension: .25, order: 1 }] },
+      options: { responsive: true, maintainAspectRatio: false, interaction: { mode: 'index', intersect: false },
+        plugins: { legend: { display: false }, tooltip: { ...tooltip, callbacks: { afterBody: (it) => { const r = dl[it[0].dataIndex]; return +r.actif_s ? `Temps actif : ${dur(r.actif_s)}` : ''; } } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 16 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8 } } } } });
+    $('n-daily').textContent = `Mesure depuis le ${d(s.since).toLocaleDateString('fr-FR')}. Un jour d'usage = au moins une page ouverte ce jour-là.`;
+
+    /* Rétention */
+    const RL = { 1: 'revenus le lendemain', 7: 'revenus dans les 7 jours', 30: 'revenus dans les 30 jours' };
+    $('ret3').innerHTML = (s.retour || []).map((r) => `<div><b>${r.eligibles ? pctTxt(r.revenus, r.eligibles) : '–'}</b><span>${RL[r.n]}</span><span>${r.eligibles ? `${fmt(r.revenus)} sur ${fmt(r.eligibles)}` : 'pas encore assez de recul'}</span></div>`).join('');
+    const co = s.cohortes || [];
+    const today = new Date();
+    if (!co.length) $('coh').innerHTML = '<tbody><tr><td style="color:var(--muted)">Les cohortes apparaîtront avec les premières inscriptions.</td></tr></tbody>';
+    else {
+      const head = '<thead><tr><th>Semaine</th><th class="coh-n" title="Inscrits">N</th>' + [...Array(9).keys()].map((k) => `<th class="w${k}">S${k}</th>`).join('') + '</tr></thead>';
+      const body = co.map((c) => {
+        const weeks = Math.floor((today - d(c.sem)) / (7 * 86400000));
+        const cells = (c.semaines || []).map((v, k) => {
+          if (k > weeks) return `<td class="w${k} c--none">·</td>`;
+          const p = pct(v, c.n), a = .08 + p / 100 * .92;
+          return `<td class="w${k} c${p >= 55 ? ' c--dark' : ''}" style="background:rgba(158,42,63,${a.toFixed(2)})" title="${fmt(v)} sur ${fmt(c.n)}">${fmt(p)}</td>`;
+        }).join('');
+        return `<tr><td>${dayLbl(c.sem)}</td><td class="coh-n">${fmt(c.n)}</td>${cells}</tr>`;
+      }).join('');
+      $('coh').innerHTML = head + '<tbody>' + body + '</tbody>';
+    }
+
+    /* Onglets */
+    const pg = (s.pages || []).filter((p) => +p.vues > 0);
+    $('pages').innerHTML = pg.length ? pg.map((p) => `<tr><td>${esc(PAGES[p.page] || p.page)}</td><td>${fmt(p.utilisateurs)} <small>${pctTxt(p.utilisateurs, R.mau)}</small></td><td>${fmt(p.vues)}</td><td class="hide-s">${dur(p.temps_s / Math.max(1, p.vues))}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted)">Pas encore de pages vues.</td></tr>';
+
+    /* Story */
+    const A = {}; (s.actions || []).forEach((a) => { A[a.ev] = a; });
+    const u = (k) => +(A[k] && A[k].utilisateurs) || 0, n = (k) => +(A[k] && A[k].fois) || 0;
+    const steps = [['Ont ouvert la story', u('vue_story'), n('vue_story') + ' visites'], ['Ont téléchargé une image', u('story_telecharge'), n('story_telecharge') + ' images'], ['Ont partagé une image', u('story_partage'), n('story_partage') + ' partages']];
+    const top = Math.max(1, steps[0][1]);
+    $('funnel').innerHTML = steps.map(([l, v, x], i) => `<div class="funnel__step"><span>${l}</span><span class="funnel__val">${fmt(v)} <small>${i ? pctTxt(v, steps[0][1]) : ''}</small></span>
+      <div class="funnel__bar"><span style="width:${v / top * 100}%"></span></div></div>`).join('');
+    const F = {}; (s.premieres || []).forEach((f) => { F[f.ev] = f; });
+    const facts = [];
+    const dl1 = F.story_telecharge;
+    if (dl1 && +dl1.n) {
+      facts.push(`<p>Premier téléchargement à la <b>${fmt(dl1.vues_med)}<sup>${+dl1.vues_med === 1 ? 're' : 'e'}</sup> visite</b> de la story en médiane. <b>${pctTxt(dl1.des_la_premiere, dl1.n)}</b> téléchargent dès la première visite.</p>`);
+    }
+    const sh1 = F.story_partage;
+    if (sh1 && +sh1.n) facts.push(`<p>Premier partage à la <b>${fmt(sh1.vues_med)}<sup>${+sh1.vues_med === 1 ? 're' : 'e'}</sup> visite</b> en médiane (${fmt(sh1.n)} personne${sh1.n > 1 ? 's' : ''}).</p>`);
+    if (n('story_partage_annule')) facts.push(`<p>${fmt(n('story_partage_annule'))} partage${n('story_partage_annule') > 1 ? 's' : ''} annulé${n('story_partage_annule') > 1 ? 's' : ''} dans la feuille de partage.</p>`);
+    $('story-facts').innerHTML = facts.join('') || '<p>Le délai avant le premier téléchargement s’affichera ici.</p>';
+
+    /* Actions clés */
+    const keys = ['story_telecharge', 'story_partage', 'export_csv', 'timelapse_lance', 'carte_commune', 'lieux_fiche', 'devine_reponse', 'devine_indice', 'annee_telecharge', 'annee_partage', 'pwa_clic', 'pwa_installee', 'pwa_guide_ios', 'soutenir_clic', 'contact_clic', 'stats_progression'];
+    bars($('actions'), keys.filter((k) => u(k)).map((k) => ({ label: ACTIONS[k], n: u(k), extra: `${fmt(n(k))} fois` })).sort((a, b) => b.n - a.n), { total: R.mau, empty: 'Aucune action clé ces 30 derniers jours.' });
+
+    /* Premières fois */
+    const FL = ['story_telecharge', 'story_partage', 'export_csv', 'timelapse_lance', 'devine_reponse', 'pwa_installee', 'annee_telecharge', 'annee_partage'];
+    const fr = FL.filter((k) => F[k] && +F[k].n);
+    $('firsts').innerHTML = fr.length ? fr.map((k) => `<tr><td title="${esc(ACTIONS[k])}">${esc(ACTIONS[k])}</td><td>${fmt(F[k].n)}</td><td>${fmt(F[k].jours_med, 1)}</td><td class="hide-s">${fmt(F[k].sessions_med)}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted)">Pas encore de premières fois.</td></tr>';
+
+    /* Supports */
+    const byDim = {}; (s.supports || []).forEach((r) => { (byDim[r.dim] = byDim[r.dim] || []).push(r); });
+    $('supports').innerHTML = Object.keys(DIMS).map((k) => `<div><h3>${DIMS[k]}</h3><div class="hb" data-dim="${k}"></div></div>`).join('');
+    Object.keys(DIMS).forEach((k) => bars(document.querySelector(`[data-dim="${k}"]`), (byDim[k] || []).map((r) => ({ label: VALS[r.val] || r.val, n: +r.n })), { blue: k === 'mode' }));
+
+    /* Moments */
+    const H = Array(24).fill(0); (s.heures || []).forEach((r) => { H[r.h] = +r.n; });
+    const barCfg = (labels, data, title) => ({ type: 'bar', data: { labels, datasets: [{ data, backgroundColor: C1, borderRadius: 4, maxBarThickness: 22 }] },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { ...tooltip, displayColors: false, callbacks: { title, label: (c) => `${fmt(c.parsed.y)} session${c.parsed.y > 1 ? 's' : ''}` } } },
+        scales: { x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, autoSkipPadding: 8 } }, y: { beginAtZero: true, grid, border: { display: false }, ticks: { precision: 0, padding: 8 } } } } });
+    draw('c-hours', barCfg(H.map((_, h) => h + 'h'), H, (it) => `De ${it[0].dataIndex} h à ${it[0].dataIndex + 1} h`));
+    const J = Array(7).fill(0); (s.jours_semaine || []).forEach((r) => { J[r.d - 1] = +r.n; });
+    const JN = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+    draw('c-days', barCfg(JN.map((x) => x.slice(0, 3) + '.'), J, (it) => JN[it[0].dataIndex]));
+
+    /* Parcours */
+    bars($('entrees'), (s.entrees || []).map((r) => ({ label: PAGES[r.page] || r.page, n: +r.n })));
+    bars($('sorties'), (s.sorties || []).map((r) => ({ label: PAGES[r.page] || r.page, n: +r.n })), { blue: true });
+
+    /* Départs */
+    const dp = s.departs || [];
+    $('departs').innerHTML = dp.length ? dp.map((r) => `<tr><td>${esc(REASONS[r.raison] || r.raison || 'Autre')}</td><td>${fmt(r.n)}</td><td>${r.vie_jours == null ? '–' : fmt(r.vie_jours, r.vie_jours < 10 ? 1 : 0) + ' j'}</td><td class="hide-s">${r.jours_actifs == null ? '–' : fmt(r.jours_actifs, 1)}</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted)">Aucun départ mesuré sur 90 jours.</td></tr>';
+    const rk = s.risque || {};
+    bars($('risque'), [{ label: 'Venus cette semaine', n: +rk.actifs_7 || 0 }, { label: 'Calmes (7 à 14 j)', n: +rk.calmes || 0 }, { label: 'À risque (14 j et plus)', n: +rk.a_risque || 0 }].filter((r) => r.n || true));
+    if (+rk.refus) $('risque').insertAdjacentHTML('beforeend', `<p class="note" style="margin-top:2px">${fmt(rk.refus)} personne${rk.refus > 1 ? 's ont' : ' a'} désactivé la mesure.</p>`);
+
+    /* Origine */
+    bars($('referents'), (s.referents || []).map((r) => ({ label: r.ref, n: +r.n })), { blue: true });
+
+    /* Qualité */
+    const ql = s.qualite || [];
+    $('qualite').innerHTML = ql.length ? ql.map((r) => `<tr><td>${esc(PAGES[r.page] || r.page)}</td><td>${fmt(r.vues)}</td><td>${fmt(r.chargement_med / 1000, 1)} s</td><td class="hide-s">${fmt(r.chargement_p90 / 1000, 1)} s</td></tr>`).join('')
+      : '<tr><td colspan="4" style="color:var(--muted)">Pas encore de mesure de chargement.</td></tr>';
+    bars($('erreurs'), (s.erreurs || []).map((r) => ({ label: `${ERRS[r.ev] || r.ev} · ${r.d}`, n: +r.n, extra: `${fmt(r.utilisateurs)} pers.` })), { share: false, empty: 'Aucune erreur ces 7 derniers jours.' });
+
+    /* Stockage */
+    const st = s.stockage || [];
+    const tot = st.reduce((a, r) => a + (+r.octets || 0), 0);
+    $('stockage').innerHTML = st.map((r) => `<tr><td>${esc(r.t)}</td><td>${fmt(r.lignes)}</td><td>${size(+r.octets)}</td></tr>`).join('');
+    $('n-st').textContent = `${size(tot)} au total, index compris. Les événements détaillés sont effacés après ${s.raw_days} jours, le reste après 25 mois.`;
+  }
+
+  $('refresh').addEventListener('click', load);
+  setInterval(() => { if (!document.hidden) load(); }, 120000);
+  load();
+})();
+</script>
+{% endblock %}

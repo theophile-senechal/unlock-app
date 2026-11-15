@@ -417,10 +417,11 @@
     T.dir = toggle && T.sort === k ? -T.dir : defaultDir(k);
     T.sort = k; renderCommunes();
   }
-  document.querySelectorAll('.ctable__table th button').forEach((b) => b.addEventListener('click', () => setSort(b.dataset.sort, true)));
-  $('t-sort').addEventListener('change', (e) => setSort(e.target.value, false));
+  document.querySelectorAll('.ctable__table th button').forEach((b) => b.addEventListener('click', () => { Unlock.track('stats_tri', { d: b.dataset.sort }); setSort(b.dataset.sort, true); }));
+  $('t-sort').addEventListener('change', (e) => { Unlock.track('stats_tri', { d: e.target.value }); setSort(e.target.value, false); });
   $('t-search').addEventListener('input', (e) => { T.q = e.target.value.trim(); renderCommunes(); });
   $('t-more').addEventListener('click', () => {
+    if (!T.open) Unlock.track('stats_plus');
     T.open = !T.open; renderCommunes();
     if (!T.open) $('communes').scrollIntoView({ block: 'start', behavior: 'smooth' });
   });
@@ -493,6 +494,7 @@
   }
   $('p-select').addEventListener('change', () => {
     try { localStorage.setItem('unlock.progCommune', $('p-select').value); } catch (e) {}
+    Unlock.track('stats_progression');
     loadProg();
   });
 
@@ -551,12 +553,15 @@
   }, 200); });
 
   document.querySelectorAll('[data-unit]').forEach((b) => b.addEventListener('click', () => {
+    if (unit !== b.dataset.unit) Unlock.track('stats_unite', { d: b.dataset.unit });
     unit = b.dataset.unit;
     document.querySelectorAll('[data-unit]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     if (lastData) draw(lastData);
   }));
 
-  ['grid-select', 'year-select', 'sport-select'].forEach((id) => $(id).addEventListener('change', load));
+  ['grid-select', 'year-select', 'sport-select'].forEach((id) => $(id).addEventListener('change', () => {
+    Unlock.track('stats_filtre', { d: { 'grid-select': 'blocs', 'year-select': 'annee', 'sport-select': 'sport' }[id] }); load();
+  }));
   load();
 })();
 </script>

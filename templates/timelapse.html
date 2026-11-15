@@ -197,19 +197,33 @@
     $('when-count').textContent = `${Unlock.fmt(cum[i])} blocs (+${Unlock.fmt(byMonth[i].length)})`;
   }
 
-  function stop() { clearInterval(timer); timer = null; $('play').innerHTML = PLAY; $('play').setAttribute('aria-label', "Lancer l'animation"); if (shown >= 0 && byMonth[shown]) byMonth[shown].forEach((r) => r.setStyle({ fillColor: BRAND })); }
+  let marks = new Set();   // paliers déjà mesurés pendant cette lecture (25, 50, 75, 100 %)
+  function stop() { if (timer) Unlock.track.watching(false); clearInterval(timer); timer = null; $('play').innerHTML = PLAY; $('play').setAttribute('aria-label', "Lancer l'animation"); if (shown >= 0 && byMonth[shown]) byMonth[shown].forEach((r) => r.setStyle({ fillColor: BRAND })); }
   function start() {
     if (!months.length) return;
     if (shown >= months.length - 1) { gridLayer.clearLayers(); shown = -1; goTo(0); }
     $('play').innerHTML = PAUSE; $('play').setAttribute('aria-label', "Mettre l'animation en pause");
-    timer = setInterval(() => { if (shown < months.length - 1) goTo(shown + 1); else stop(); }, speed);
+    if (!timer) Unlock.track.watching(true);
+    timer = setInterval(() => {
+      if (shown < months.length - 1) {
+        goTo(shown + 1);
+        const pct = (shown + 1) / months.length * 100;
+        [25, 50, 75, 100].forEach((m) => { if (pct >= m && !marks.has(m)) { marks.add(m); Unlock.track('timelapse_progression', { v: m }); } });
+      } else stop();
+    }, speed);
   }
-  $('play').addEventListener('click', () => (timer ? stop() : start()));
+  $('play').addEventListener('click', () => {
+    if (timer) { stop(); return; }
+    if (shown <= 0 || shown >= months.length - 1) marks = new Set();
+    Unlock.track('timelapse_lance', { d: outline ? 'commune' : 'tout', v: speed });
+    start();
+  });
   $('slider').addEventListener('input', (e) => { if (timer) stop(); goTo(+e.target.value); });
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => {
+    if (speed !== +b.dataset.speed) Unlock.track('timelapse_vitesse', { v: +b.dataset.speed });
     speed = +b.dataset.speed;
     document.querySelectorAll('[data-speed]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
-    if (timer) { clearInterval(timer); timer = null; start(); }
+    if (timer) { Unlock.track.watching(false); clearInterval(timer); timer = null; start(); }
   }));
   $('grid-select').addEventListener('change', load);
   // Choisir une commune (ou null = toutes) ; fit = recadrer la carte
@@ -226,6 +240,7 @@
     const v = e.target.value.trim().toLowerCase();
     const c = v && (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v) || v && (data.top_municipalities || []).find((x) => x.name.toLowerCase().includes(v));
     if (v && !(c && c.outline)) { Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`); setCity(outline ? (data.top_municipalities || []).find((x) => x.name === cityName) : null); return; }
+    if (c) Unlock.track('timelapse_commune');
     setCity(c || null);
     stop(); build();
   });

@@ -4,6 +4,20 @@
 
   const U = (window.Unlock = window.Unlock || {});
 
+  /* ---------------- Mesure d'usage ----------------
+     Unlock.track(nom, {d, v}) : remplacé par static/js/track.js quand la mesure est active.
+     Sinon (admin, refus, page de connexion) : ne fait rien. */
+  const TRACKING = !!window.UNLOCK_TRACK;
+  U.track = function (ev, opt) { if (TRACKING) (U._trackQueue = U._trackQueue || []).push([ev, opt]); };
+  U.track.watching = function () {};
+  // Site d'où vient la personne, gardé pour l'onglet avant le passage par Strava (jamais l'adresse complète)
+  try {
+    if (!sessionStorage.getItem('u.ref') && document.referrer) {
+      const h = new URL(document.referrer).hostname.replace(/^www\./, '').toLowerCase();
+      if (h && h !== location.hostname && !/(^|\.)strava\.com$/.test(h)) sessionStorage.setItem('u.ref', h.slice(0, 80));
+    }
+  } catch (e) {}
+
   /* ---------------- Sports ---------------- */
   U.SPORTS = {
     // Sports suivis : à pied ou à vélo (ski, natation et sports virtuels ne débloquent rien)
@@ -169,6 +183,7 @@
     const b = e.target.closest('[data-copy]'); if (!b) return;
     try {
       await navigator.clipboard.writeText(b.dataset.copy);
+      U.track('copier_id');
       U.toast('Identifiant copié');
       b.classList.add('is-done'); setTimeout(() => b.classList.remove('is-done'), 1500);
     } catch (err) {
@@ -189,8 +204,12 @@
     document.querySelectorAll('[data-install]').forEach((b) => { b.hidden = !canShow; });
   }
 
-  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; refreshInstallButtons(); });
-  window.addEventListener('appinstalled', () => { deferredPrompt = null; refreshInstallButtons(); U.toast('Unlock est installée sur votre appareil'); });
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault(); deferredPrompt = e; refreshInstallButtons();
+    // Une fois par onglet : le navigateur propose l'installation (bouton visible dans le menu)
+    try { if (!sessionStorage.getItem('u.pp')) { sessionStorage.setItem('u.pp', '1'); U.track('pwa_propose'); } } catch (err) {}
+  });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; refreshInstallButtons(); U.track('pwa_installee', { d: 'android_pc' }); U.toast('Unlock est installée sur votre appareil'); });
 
   /* Télécharger mes chiffres : zip de fichiers CSV et GeoJSON, calculé à la demande (Menu) */
   let exporting = false;
@@ -213,8 +232,10 @@
       a.href = URL.createObjectURL(blob); a.download = m ? m[1] : 'unlock-chiffres.zip';
       document.body.appendChild(a); a.click();
       setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      U.track('export_csv');
       U.toast('Vos chiffres sont téléchargés', 'check');
     } catch (err) {
+      U.track('export_echec');
       U.toast("Le téléchargement n'a pas abouti. Réessayez dans un instant.", 'alert');
     } finally {
       if (hasLoader) U.loader.hide();
@@ -226,12 +247,14 @@
     const btn = e.target.closest('[data-install]'); if (!btn) return;
     e.preventDefault();
     U.closeSheet('sheet-menu');
+    U.track('pwa_clic', { d: isIOS ? 'ios' : 'invite' });
     if (deferredPrompt) {
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       deferredPrompt = null; refreshInstallButtons();
-      if (outcome === 'dismissed') U.toast('Installation annulée. Le bouton reste dans le menu.');
+      if (outcome === 'dismissed') { U.track('pwa_refusee'); U.toast('Installation annulée. Le bouton reste dans le menu.'); }
     } else if (isIOS) {
+      U.track('pwa_guide_ios');
       setTimeout(() => U.openSheet('sheet-ios'), 50);
     }
   });

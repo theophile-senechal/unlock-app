@@ -401,7 +401,7 @@
       const m = l[DATE]
         ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1, bubblingMouseEvents: false })
         : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1, bubblingMouseEvents: false });
-      m.on('click', (e) => { L.DomEvent.stop(e); select(l, false); });
+      m.on('click', (e) => { L.DomEvent.stop(e); Unlock.track('lieux_fiche', { d: 'carte' }); select(l, false); });
       (l[DATE] ? layerOn : layerOff).addLayer(m);
       S.markers[l[ID]] = m;
     }
@@ -437,6 +437,7 @@
     sugg.hidden = false; inp.setAttribute('aria-expanded', 'true');
   }
   function pick(c) {
+    Unlock.track('lieux_recherche');
     closeSugg(); inp.value = c.name; inp.blur();
     try { localStorage.setItem('unlock.lieuxDep', c.dep); } catch (e) {}
     load({ commune: c.code });
@@ -466,14 +467,15 @@
   function renderAfterScope() { S.cat = 'all'; S.limit = 40; layerOutline.clearLayers(); drawMarkers(true); renderAll(); }
 
   /* ---------- Événements ---------- */
-  $('dep-select').addEventListener('change', (e) => { try { localStorage.setItem('unlock.lieuxDep', e.target.value); } catch (err) {} load({ dep: e.target.value }); });
+  $('dep-select').addEventListener('change', (e) => { Unlock.track('lieux_departement'); try { localStorage.setItem('unlock.lieuxDep', e.target.value); } catch (err) {} load({ dep: e.target.value }); });
   $('scope').addEventListener('click', (e) => { if (e.target.closest('#scope-clear')) { S.com = null; inp.value = ''; renderAfterScope(); } });
   $('levels').addEventListener('click', (e) => { if (e.target.closest('[data-level="dep"]')) { S.com = null; inp.value = ''; renderAfterScope(); } });
   $('chips').addEventListener('click', (e) => {
     const b = e.target.closest('[data-cat]'); if (!b) return;
+    if (S.cat !== b.dataset.cat) Unlock.track('lieux_filtre', { d: b.dataset.cat });
     S.cat = b.dataset.cat; S.limit = 40; drawMarkers(false); renderAll();
   });
-  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { S.tab = b.dataset.tab; S.limit = 40; renderList(); }));
+  document.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', () => { if (S.tab !== b.dataset.tab) Unlock.track('lieux_onglet', { d: b.dataset.tab }); S.tab = b.dataset.tab; S.limit = 40; renderList(); }));
   $('lx-search').addEventListener('input', (e) => { S.q = e.target.value.trim(); S.limit = 40; renderList(); });
   $('items').addEventListener('click', (e) => {
     if (e.target.closest('#lx-more')) { S.limit += 40; renderList(); return; }
@@ -481,7 +483,7 @@
     const m = S.markers[b.dataset.id]; if (!m) return;
     if (window.matchMedia('(max-width: 1023px)').matches) document.querySelector('.lx-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
     const l = S.data.dep.lieux.find((x) => x[ID] === b.dataset.id);
-    if (l) select(l, true);
+    if (l) { Unlock.track('lieux_fiche', { d: 'liste' }); select(l, true); }
   });
 
   load(S.dep ? { dep: S.dep } : null);

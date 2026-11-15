@@ -52,7 +52,30 @@
   @media (min-width: 900px) { .stage-zoom { right: 24px; } }
   .studio__actions { position: absolute; left: 16px; right: 16px; bottom: 16px; display: flex; gap: 10px; justify-content: center; }
   .studio__actions .btn { box-shadow: var(--shadow-float); flex: 0 1 auto; min-width: 0; }
+  .studio__actions .btn span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (max-width: 359px) { .studio__actions { left: 10px; right: 10px; gap: 8px; } .studio__actions .btn { flex: 1 1 0; padding-inline: 10px; } }
+  /* Trois boutons (partage possible) : « Personnaliser » devient une icône sur les écrans étroits */
+  .studio__actions.has-share .btn { flex: 1 1 0; padding-inline: 12px; }
+  .studio__actions.has-share .sa-custom { flex: 1.25 1 0; }
+  @media (max-width: 519px) {
+    .studio__actions.has-share { left: 12px; right: 12px; gap: 8px; }
+    .studio__actions.has-share .sa-custom { flex: 0 0 48px; padding: 0; }
+    .studio__actions.has-share .sa-custom span { display: none; }
+  }
+  /* Téléphone étroit : textes entiers, sans icône dans Télécharger et Partager */
+  @media (max-width: 389px) {
+    .studio__actions.has-share .btn:not(.sa-custom) { padding-inline: 10px; }
+    .studio__actions.has-share .btn:not(.sa-custom) .i { display: none; }
+    .studio__actions:not(.has-share) .btn { padding-inline: 14px; gap: 6px; }
+  }
+  @media (max-width: 359px) { .studio__actions:not(.has-share) .btn { padding-inline: 8px; font-size: 14px; } }
+  @media (min-width: 520px) and (max-width: 899px) { .studio__actions.has-share { max-width: 560px; margin-inline: auto; } }
+  /* Barre latérale (ordinateur) : Télécharger et Partager côte à côte */
+  .set-dl { margin-top: auto; display: grid; gap: 10px; }
+  .set-dl[hidden] { display: none; }
+  .set-dl.has-share { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .set-dl .dl-short, .set-dl.has-share .dl-long { display: none; }
+  .set-dl.has-share .dl-short { display: inline; }
   @media (min-width: 900px) {
     .studio { grid-template-columns: 360px 1fr; }
     .studio__side { display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
@@ -185,8 +208,9 @@
         </div>
       </div>
       <div class="studio__actions">
-        <button type="button" class="btn btn--outline" data-sheet-open="sheet-studio">{{ icon('sliders') }}Personnaliser</button>
-        <button type="button" class="btn btn--primary" data-download>{{ icon('download') }}Télécharger</button>
+        <button type="button" class="btn btn--outline sa-custom" data-sheet-open="sheet-studio" aria-label="Personnaliser" title="Personnaliser">{{ icon('sliders') }}<span>Personnaliser</span></button>
+        <button type="button" class="btn btn--primary" data-download>{{ icon('download') }}<span>Télécharger</span></button>
+        <button type="button" class="btn btn--primary" data-share hidden>{{ icon('share') }}<span>Partager</span></button>
       </div>
     </div>
   </main>
@@ -249,7 +273,29 @@
       <select class="select" id="grid-select"><option value="100" selected>100 m</option><option value="250">250 m</option></select></div>
   </div>
   <p class="set-tip" style="font-size:var(--fs-sm); color:var(--muted)">Déplacez et zoomez la carte dans l'aperçu pour cadrer votre story.</p>
-  <button type="button" class="btn btn--primary btn--block set-dl" data-download style="margin-top:auto">{{ icon('download') }}Télécharger l'image</button>
+  <div class="set-dl">
+    <button type="button" class="btn btn--primary btn--block" data-download>{{ icon('download') }}<span class="dl-long">Télécharger l'image</span><span class="dl-short">Télécharger</span></button>
+    <button type="button" class="btn btn--primary btn--block" data-share hidden>{{ icon('share') }}Partager</button>
+  </div>
+</div>
+
+<!-- Partage différé : certains navigateurs refusent d'ouvrir le partage après la création de l'image -->
+<div class="sheet" id="sheet-share" aria-hidden="true">
+  <div class="sheet__backdrop" data-sheet-close></div>
+  <div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <div class="sheet__grip"></div>
+    <div class="sheet__head">
+      <h2 class="sheet__title" id="share-title">Votre image est prête</h2>
+      <button type="button" class="iconbtn" data-sheet-close aria-label="Fermer">{{ icon('x') }}</button>
+    </div>
+    <div class="sheet__body">
+      <p style="color:var(--ink-2)">Touchez « Partager » pour choisir l'application, par exemple Instagram.</p>
+      <div style="display:grid; gap:10px; margin-top:14px">
+        <button type="button" class="btn btn--primary btn--block" id="share-go">{{ icon('share') }}Partager</button>
+        <button type="button" class="btn btn--ghost btn--block" data-sheet-close>Annuler</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <div class="sheet" id="sheet-studio" aria-hidden="true">
@@ -407,7 +453,10 @@
     $('sc-city').hidden = !city; $('sc-stats').hidden = !kpi;
     $('story-card').classList.toggle('map-only', !city && !kpi);
   }
-  ['show-city', 'show-kpi'].forEach((id) => $(id).addEventListener('change', () => { applyContent(); draw(true); }));
+  ['show-city', 'show-kpi'].forEach((id) => $(id).addEventListener('change', () => {
+    Unlock.track('story_affichage', { d: (id === 'show-city' ? 'nom_' : 'chiffres_') + ($(id).checked ? 'oui' : 'non') });
+    applyContent(); draw(true);
+  }));
 
   function draw(center) {
     const [light, dark, bg] = THEMES[theme];
@@ -496,41 +545,88 @@
       vis.map((c) => `<path d="${path(c.shape)}" fill="${light}" fill-opacity="${alpha(byCode[c.code])}" stroke="rgba(18,16,20,.55)" stroke-width="1" stroke-linejoin="round"/>`).join('') +
       (geo.outline || []).map((poly) => `<path d="${'M' + poly[0].map(([la, lo]) => P(la, lo)).join('L') + 'Z'}" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.6" stroke-linejoin="round"/>`).join('');
   }
-  document.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.kind !== kind) setKind(b.dataset.kind); }));
+  document.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.kind !== kind) { Unlock.track('story_format', { d: b.dataset.kind }); setKind(b.dataset.kind); } }));
   $('dep-select').addEventListener('change', (e) => { depCode = e.target.value; draw(true); if (!mq.matches) setTimeout(() => Unlock.closeSheet('sheet-studio'), 150); });
 
-  async function download() {
+  function fileName() {
+    const label = kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
+    return `unlock-story-${label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
+  }
+  /* Image 900 × 1600 px de l'aperçu : 'png' (adresse data:) pour le téléchargement, 'blob' pour le partage */
+  let rendering = false;
+  async function render(as) {
+    if (rendering) return null;
+    rendering = true;
     const card = $('story-card'), prev = card.style.transform;
     document.body.classList.add('exporting');
     stageBusy(true, 'Création de votre image', 'Image haute définition, 900 × 1600 px');
     try {
       await new Promise((r) => setTimeout(r, 120));
-      const url = await domtoimage.toPng(card, {
-        width: 900, height: 1600, cacheBust: true,
-        style: { transform: 'scale(2)', transformOrigin: 'top left', width: '450px', height: '800px' }
-      });
+      const opts = { width: 900, height: 1600, cacheBust: true,
+        style: { transform: 'scale(2)', transformOrigin: 'top left', width: '450px', height: '800px' } };
+      return await (as === 'blob' ? domtoimage.toBlob(card, opts) : domtoimage.toPng(card, opts));
+    } finally { card.style.transform = prev; document.body.classList.remove('exporting'); stageBusy(false); rendering = false; }
+  }
+  async function download() {
+    try {
+      const url = await render('png'); if (!url) return;
       const a = document.createElement('a');
-      const label = kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
-      a.download = `unlock-story-${label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
-      a.href = url; a.click();
+      a.download = fileName(); a.href = url; a.click();
+      Unlock.track('story_telecharge', { d: kind });
       Unlock.toast('Image enregistrée, à vous de poster !');
     } catch (e) { console.error(e); Unlock.toast("L'export a échoué. Réessayez, ou faites une capture d'écran de l'aperçu."); }
-    finally { card.style.transform = prev; document.body.classList.remove('exporting'); stageBusy(false); }
   }
+
+  /* Partager : feuille de partage du téléphone ou de l'ordinateur (Instagram, WhatsApp, Messages…) */
+  const canShare = (() => {
+    try { return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [new File([new Blob(['x'], { type: 'image/png' })], 'x.png', { type: 'image/png' })] })); }
+    catch (e) { return false; }
+  })();
+  if (canShare) {
+    document.querySelectorAll('[data-share]').forEach((b) => (b.hidden = false));
+    document.querySelectorAll('.studio__actions, .set-dl').forEach((w) => w.classList.add('has-share'));
+    // Partager devient l'action principale, Télécharger passe en contour
+    document.querySelectorAll('[data-download]').forEach((b) => b.classList.replace('btn--primary', 'btn--outline'));
+  }
+  let pendingFile = null;
+  async function doShare(file) {
+    try {
+      await navigator.share({ files: [file] });
+      Unlock.track('story_partage', { d: kind });
+    } catch (e) {
+      if (e && e.name === 'AbortError') { Unlock.track('story_partage_annule', { d: kind }); return; }
+      if (e && e.name === 'NotAllowedError' && !pendingFile) { pendingFile = file; Unlock.openSheet('sheet-share'); return; }
+      Unlock.track('story_partage_echec', { d: e && e.name ? e.name : 'autre' });
+      Unlock.toast("Le partage n'a pas abouti. Téléchargez l'image puis postez-la depuis votre galerie.");
+    }
+  }
+  async function share() {
+    pendingFile = null;
+    let blob = null;
+    try { blob = await render('blob'); } catch (e) { console.error(e); }
+    if (!blob) { if (!rendering) Unlock.toast("L'image n'a pas pu être créée. Réessayez dans un instant."); return; }
+    await doShare(new File([blob], fileName(), { type: 'image/png' }));
+  }
+  $('share-go').addEventListener('click', () => {
+    const f = pendingFile; Unlock.closeSheet('sheet-share');
+    if (f) doShare(f).finally(() => { pendingFile = null; });
+  });
 
   document.addEventListener('click', (e) => {
     const z = e.target.closest('[data-z]');
     if (z) {
+      Unlock.track('story_zoom', { d: z.dataset.z });
       if (z.dataset.z === 'in') map.zoomIn(0.25);
       else if (z.dataset.z === 'out') map.zoomOut(0.25);
       else draw(true);   // recentre la commune
       return;
     }
     if (e.target.closest('[data-download]')) { Unlock.closeSheet('sheet-studio'); download(); }
+    if (e.target.closest('[data-share]')) { Unlock.closeSheet('sheet-studio'); share(); }
     const sw = e.target.closest('[data-theme]');
-    if (sw) { theme = sw.dataset.theme; document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); draw(false); }
+    if (sw) { if (sw.dataset.theme !== theme) Unlock.track('story_theme', { d: sw.dataset.theme }); theme = sw.dataset.theme; document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(b === sw))); draw(false); }
     const bg = e.target.closest('[data-bg]');
-    if (bg) { document.querySelectorAll('[data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b === bg))); $('story-card').classList.toggle('solid', bg.dataset.bg === 'solid'); if (kind !== 'dep') draw(false); }
+    if (bg) { if (bg.getAttribute('aria-pressed') !== 'true') Unlock.track('story_fond', { d: bg.dataset.bg }); document.querySelectorAll('[data-bg]').forEach((b) => b.setAttribute('aria-pressed', String(b === bg))); $('story-card').classList.toggle('solid', bg.dataset.bg === 'solid'); if (kind !== 'dep') draw(false); }
   });
   /* ---------- Recherche de commune ---------- */
   let cities = [], active = -1, shown = [];
@@ -538,7 +634,7 @@
   const input = $('city-input'), list = $('city-options');
   function setCity(name, redraw = true) {
     $('city-select').value = name; input.value = name; $('city-clear').hidden = !name;
-    if (redraw) { draw(true); if (!mq.matches) setTimeout(() => Unlock.closeSheet('sheet-studio'), 150); }
+    if (redraw) { Unlock.track('story_commune'); draw(true); if (!mq.matches) setTimeout(() => Unlock.closeSheet('sheet-studio'), 150); }
   }
   function highlight(name, q) {
     if (!q) return Unlock.esc(name);
@@ -591,8 +687,8 @@
     if (on) { $('stage-busy-title').textContent = title; $('stage-busy-sub').textContent = sub || ''; el.hidden = false; requestAnimationFrame(() => { if (busyOn) el.classList.add('is-on'); }); }
     else { el.classList.remove('is-on'); setTimeout(() => { if (!busyOn) el.hidden = true; }, 250); }
   }
-  $('grid-select').addEventListener('change', load);
-  $('sport-select').addEventListener('change', load);
+  $('grid-select').addEventListener('change', () => { Unlock.track('story_blocs', { v: +$('grid-select').value }); load(); });
+  $('sport-select').addEventListener('change', () => { Unlock.track('story_sport'); load(); });
   /* Sports pratiqués (liste complète renvoyée par le serveur, quel que soit le filtre) */
   function fillSports() {
     const sel = $('sport-select'), cur = sel.value || 'all';

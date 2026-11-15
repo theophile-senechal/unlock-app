@@ -809,6 +809,13 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .prose h3 { color: var(--ink); font-size: var(--fs-lg); margin: 24px 0 8px; }
 .prose p, .prose ul { margin: 0 0 12px; }
 .prose ul { padding-left: 1.2em; }
+/* Confidentialité : désactiver ou réactiver la mesure d'usage */
+.optout { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; margin: 4px 0 12px; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); }
+.optout__text { display: grid; gap: 2px; min-width: 0; flex: 1 1 240px; }
+.optout__text b { color: var(--ink); }
+.optout__text span { font-size: var(--fs-sm); }
+.optout form { flex: none; margin: 0; }
+.optout__done { padding: 10px 14px; border-radius: var(--r-md); background: var(--brand-50); color: var(--ink); font-size: var(--fs-sm); }
 .prose li { margin-bottom: 6px; }
 .prose a { color: var(--brand); font-weight: 600; text-underline-offset: 2px; }
 .prose strong { color: var(--ink); }

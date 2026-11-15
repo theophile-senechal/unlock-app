@@ -9,7 +9,8 @@
   <li>Vos activités Strava sont lues uniquement pour dessiner <strong>votre</strong> carte, et ne sont visibles que par vous.</li>
   <li>Elles sont gardées au plus <strong>48 heures</strong> pour accélérer l'affichage, puis effacées et relues depuis Strava.</li>
   <li>Votre nom et prénom Strava ne sont visibles que par l'éditeur, pour l'assistance, et effacés 7 jours après votre dernière visite.</li>
-  <li>Aucune revente, aucune publicité, aucun outil de mesure d'audience, aucune utilisation pour entraîner une intelligence artificielle.</li>
+  <li>Aucune revente, aucune publicité, aucun outil de mesure d'un tiers, aucune utilisation pour entraîner une intelligence artificielle.</li>
+  <li>Unlock mesure comment l'appli est utilisée (pages vues, temps passé, type d'appareil) pour l'améliorer. Cette mesure n'utilise aucune donnée Strava. Vous pouvez la désactiver en un clic, <a href="#mesure">plus bas</a>.</li>
   <li>« Supprimer mes données » efface tout immédiatement et révoque l'accès à Strava.</li>
 </ul>
 
@@ -26,6 +27,7 @@
     <tr><td data-label="Données">Version des CGU acceptée et date de l'accord</td><td data-label="Pourquoi">Prouver que vous avez accepté les conditions d'utilisation et la présente politique</td><td data-label="Base légale">Intérêt légitime (preuve du consentement)</td><td data-label="Durée">Jusqu'à la suppression de votre compte</td></tr>
     <tr><td data-label="Données">Parties de « Devine la commune » : commune du jour, réponse donnée, résultat, usage de l'indice</td><td data-label="Pourquoi">Afficher votre série et vos communes trouvées, et choisir les communes des jours suivants. Visibles par vous seul</td><td data-label="Base légale">Exécution du service que vous demandez</td><td data-label="Durée">Jusqu'à la suppression de votre compte, et au plus {{ inactive_days }} jours sans connexion</td></tr>
     <tr><td data-label="Données">Dates et nombre de connexions</td><td data-label="Pourquoi">Détecter les comptes inactifs pour les supprimer, et afficher le nombre total d'utilisateurs actifs (un simple compteur, sans aucune donnée personnelle)</td><td data-label="Base légale">Intérêt légitime (sécurité, minimisation)</td><td data-label="Durée">Même durée que <span class="nobr">ci-dessus</span></td></tr>
+    <tr><td data-label="Données">Mesure d'usage (pages vues, temps passé, actions dans l'appli comme télécharger ou partager une story ou installer l'app, type d'appareil, système, navigateur, appli installée ou site, temps de chargement, site d'où vous venez à la première visite). Aucune donnée Strava, aucune adresse IP</td><td data-label="Pourquoi">Comprendre ce qui est utile, ce qui ne marche pas, et pourquoi certaines personnes reviennent ou arrêtent, pour améliorer Unlock. Visible uniquement par l'éditeur, dans un tableau de bord privé</td><td data-label="Base légale">Intérêt légitime (amélioration du service). Vous pouvez vous y opposer à tout moment</td><td data-label="Durée">Détail des actions 90 jours. Résumés par session et par jour 25 mois. À la fin du compte, ces résumés sont détachés de votre identifiant et ne peuvent plus être reliés à vous</td></tr>
     <tr><td data-label="Données">Statistiques d'usage anonymes (nombre de visites, d'inscriptions et de départs par jour)</td><td data-label="Pourquoi">Suivre la fréquentation et la capacité du service</td><td data-label="Base légale">Intérêt légitime</td><td data-label="Durée">13 mois ; aucun identifiant n'y est associé</td></tr>
     <tr><td data-label="Données">Cookie de session</td><td data-label="Pourquoi">Maintenir votre connexion (cookie strictement nécessaire, sans consentement requis)</td><td data-label="Base légale">Intérêt légitime</td><td data-label="Durée">30 jours après votre dernière visite, ou jusqu'à votre déconnexion</td></tr>
   </tbody>
@@ -43,6 +45,26 @@
   {% if donations_enabled %}<li><strong>Ko-fi</strong> (Royaume-Uni) : uniquement si vous choisissez de faire un don. Vous quittez alors Unlock pour le site de Ko-fi, dont la politique de confidentialité s'applique au paiement. Unlock compte seulement le nombre de clics sur « Faire un don », sans savoir qui a cliqué.</li>{% endif %}
 </ul>
 <p>Certains de ces prestataires sont situés hors de l'Union européenne. Les transferts reposent sur les garanties prévues par le RGPD (décision d'adéquation EU-US Data Privacy Framework ou clauses contractuelles types de la Commission européenne).</p>
+
+<h2 id="mesure">Mesure d'usage</h2>
+<p>Unlock enregistre comment l'appli est utilisée, sans outil d'un tiers. Les données restent sur la base d'Unlock. Elles ne servent qu'à améliorer l'appli et ne sont jamais vendues ni partagées. La mesure ne contient aucune donnée Strava et n'est jamais faite sur le compte de l'éditeur. Pour relier les pages d'une même visite, un numéro aléatoire est gardé dans votre navigateur le temps de l'onglet (stockage de session, effacé à sa fermeture). Aucun cookie supplémentaire n'est déposé.</p>
+{% if session_user %}
+<div class="optout" role="group" aria-labelledby="optout-t">
+  <div class="optout__text">
+    <b id="optout-t">{% if suivi_off %}Mesure d'usage désactivée{% else %}Mesure d'usage activée{% endif %}</b>
+    <span>{% if suivi_off %}Rien n'est enregistré sur votre utilisation de l'appli.{% else %}Vous pouvez la désactiver. Ce qui a déjà été mesuré pour votre compte est alors effacé.{% endif %}</span>
+  </div>
+  <form method="post" action="/mes-donnees/mesure">
+    <input type="hidden" name="csrf" value="{{ csrf_token }}">
+    <input type="hidden" name="mesure" value="{{ 'on' if suivi_off else 'off' }}">
+    <button type="submit" class="btn {{ 'btn--primary' if suivi_off else 'btn--outline' }} btn--sm">{{ 'Réactiver' if suivi_off else 'Désactiver' }}</button>
+  </form>
+</div>
+{% if request.args.get('mesure') in ('on', 'off') %}<p class="optout__done" role="status">{% if request.args.get('mesure') == 'off' %}C'est fait. La mesure est désactivée et vos données d'usage sont effacées.{% else %}C'est fait. La mesure est de nouveau active.{% endif %}</p>{% endif %}
+<p class="meta">Ce choix est gardé avec votre compte. Une déconnexion efface votre compte Unlock, il faudra donc refaire ce choix si vous revenez.</p>
+{% else %}
+<p>Une fois connecté, vous pouvez la désactiver depuis cette page.</p>
+{% endif %}
 
 <h2>Vos droits</h2>
 <p>Vous disposez d'un droit d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité. Le droit à l'effacement s'exerce directement dans l'app (« Supprimer mes données »). Les droits d'accès et de portabilité aussi, avec Menu › « Télécharger mes chiffres » : un fichier zip avec ce qu'Unlock enregistre sur vous et tous vos chiffres calculés (communes, lieux, évolution, records), en CSV et en cartes GeoJSON. Il est calculé à la demande, rien n'est conservé. Pour les autres droits, envoyez un <a href="{{ linkedin_url }}" target="_blank" rel="noopener">message LinkedIn</a> en précisant votre demande ; une réponse vous sera apportée sous un mois. Vous pouvez aussi introduire une réclamation auprès de la <a href="https://www.cnil.fr/fr/plaintes" target="_blank" rel="noopener">CNIL</a>.</p>

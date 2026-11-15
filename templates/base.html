@@ -104,12 +104,12 @@
       {% if devine %}<li><a class="menu-item menu-item--devine" href="/devine">{{ icon('lock' if devine.lock else 'compass') }}<span>Devine la commune{% if devine.ready %}<span class="dot-new" role="img" aria-label="À jouer aujourd'hui"></span>{% endif %}<small>{{ devine.sub }}</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>{% endif %}
       <li><a class="menu-item" href="/confidentialite">{{ icon('shield') }}<span>Mes données<small>Ce que nous utilisons et comment le supprimer</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
       <li><button type="button" class="menu-item" data-export>{{ icon('download') }}<span>Télécharger mes chiffres<small>Communes, lieux, évolution, records (CSV)</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
-      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener">{{ icon('msg') }}<span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
+      <li><a class="menu-item" href="{{ linkedin_url }}" target="_blank" rel="noopener" data-track="contact_clic">{{ icon('msg') }}<span>Contacter le créateur<small>Théophile Sénéchal sur LinkedIn</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
     </ul>
     </div>
     <div class="menu-col">
     <ul class="menu-group">
-      <li><a class="menu-item" href="/logout">{{ icon('logout') }}<span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
+      <li><a class="menu-item" href="/logout" data-track="deconnexion_clic">{{ icon('logout') }}<span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
       <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete">{{ icon('trash') }}<span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
     </ul>
     <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
@@ -179,7 +179,7 @@
       <p>L'hébergement et la base de données ne coûtent rien pour l'instant. Au-delà de ces frais, votre don peut aussi m'offrir un gel pour ma prochaine sortie.</p>
       <p class="support__muted">Les dons passent par Ko-fi, une plateforme de soutien aux créateurs. Le montant minimum est de 2&nbsp;€. Unlock ne voit jamais vos informations de paiement.</p>
       <div class="support__foot">
-      <a class="btn btn--primary btn--block support__cta" href="/soutenir/go" target="_blank" rel="noopener">Faire un don sur Ko-fi
+      <a class="btn btn--primary btn--block support__cta" href="/soutenir/go" target="_blank" rel="noopener" data-track="soutenir_clic">Faire un don sur Ko-fi
           {{ icon('external') }}</a>
         <p class="support__thanks">Un don ne débloque aucune fonctionnalité. Merci pour votre soutien !</p>
       </div>
@@ -216,7 +216,9 @@
 
 <script>window.UNLOCK_ICONS = {{ icons_json | safe }};</script>
 <script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key, 'sync': sync_state} | tojson }};</script>
+{% if suivi %}<script>window.UNLOCK_TRACK = {{ {'csrf': csrf_token} | tojson }};</script>{% endif %}
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
+{% if suivi %}<script src="{{ url_for('static', filename='js/track.js') }}?v={{ asset_v }}"></script>{% endif %}
 {% if cgu_needed %}<script>document.addEventListener('DOMContentLoaded', () => Unlock.openSheet('sheet-cgu'));</script>{% endif %}
 {% block scripts %}{% endblock %}
 </body>

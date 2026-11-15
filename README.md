@@ -19,6 +19,7 @@ templates/
   offline.html, error.html
   lieux.html            Lieux à collectionner
   annee.html            Bilan de l'année (« Votre année Unlock »)
+  admin_usage.html      Comportement des utilisateurs (admin, /admin/usage)
   leaderboard.html      Classement (DÉSACTIVÉ, voir plus bas)
 acces.py               Grille des blocs, marge GPS de 20 m, blocs sans chemin
 lieux.py               Lieux historiques et culturels : déblocage à moins de 60 m (page /lieux)
@@ -28,6 +29,7 @@ tools/acces/           Calcul OpenStreetMap + .github/workflows/blocs-inaccessib
 static/
   css/app.css           Design system
   js/app.js             Chargement, menus, installation PWA, toasts
+  js/track.js           Mesure d'usage (jamais chargée pour l'admin ni après un refus)
   img/logo.svg          Logo (+ variantes maskable / carrée)
   icons/                Icônes PNG de l'app
   manifest.webmanifest, sw.js
@@ -63,6 +65,7 @@ Dans Supabase (SQL Editor), **avant** de déployer :
 - utilisateurs depuis le lancement : `migrations/2026-10-30_utilisateurs_uniques.sql` (une colonne, sans risque, relançable) ;
 - si `tout_en_un.sql` a déjà été lancé avant le tableau de bord : `migrations/2026-10-29_admin.sql`.
 - « Devine la commune » : `migrations/2026-11-06_devine.sql` (une table, sans risque, relançable).
+- Mesure d'usage : `migrations/2026-11-14_usage.sql` (cinq tables `usage_*`, sans risque, relançable). Sans elle, rien n'est enregistré et l'appli marche normalement.
 
 Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_events`, `app_daily_stats`, `app_kv`, `devine_parties`.
 
@@ -82,6 +85,9 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Mesure d'usage** (section 21 de `app.py`, `static/js/track.js`, page `/admin/usage`) : pages vues, temps actif (onglet visible, interaction dans la dernière minute), sessions (30 min sans activité), appareil, système, navigateur, PWA ou site, temps d'affichage, erreurs, site d'origine à la première visite, actions clés (story téléchargée ou partagée, installation, export, timelapse, jeu…). Aucune donnée Strava. L'admin (`ADMIN_ATHLETE_IDS`) n'est jamais mesuré et il est aussi retiré des chiffres du tableau de bord existant (sauf des places Strava occupées). Envoi groupé toutes les 15 s, au clic sur un lien interne et à la fermeture (`/api/u`). Stockage : événements bruts 90 jours, résumés par session, par jour et par personne 25 mois, premières fois. À la déconnexion, la suppression ou l'inactivité, l'historique est détaché du compte (identifiant aléatoire négatif) pour garder les courbes de rétention. Refus possible sur la page Confidentialité (tout est effacé). Inclus dans « Télécharger mes chiffres » (`mon_usage.csv`). Désactivable en entier avec `USAGE_TRACKING=false`.
+- **Story : bouton « Partager »** (feuille de partage du téléphone ou de l'ordinateur, avec l'image), affiché seulement si le navigateur sait partager un fichier. « Télécharger » reste à côté.
+- **Navigation PC refaite** (≥ 1024 px, `app.css`) : onglets soulignés centrés dans la barre du haut, page active en bordeaux avec un trait en bas, logo à gauche et menu à droite sans chevauchement. Téléphone et tablette inchangés.
 - **Devine la commune** (Menu, `/devine`, section 20 de `app.py`) : une commune par jour (heure de Paris), choisie parmi les communes explorées à 5 % ou plus (`DEVINE_PCT`), à reconnaître à sa forme, un seul essai. Contour seul au départ, bouton « Indice, voir mes blocs » qui affiche ses blocs sur la forme (le résultat précise « Avec l'indice » ou « Sans indice », la série compte pareil). Suggestions limitées aux communes du joueur (à 5 % ou plus), calculées dans le navigateur, sans tenir compte des majuscules, accents, tirets et apostrophes, « st » = « saint ». Toutes les communes explorées passent une fois avant de revenir, puis les ratées reviennent en premier (« Seconde chance »), une commune explorée après la 1re partie passe en priorité (« Nouvelle commune »). Série, communes trouvées, semaine, meilleure série et réussite. Bloqué sous 5 communes à 5 %. Réponse immédiate : la page reçoit d'avance les chiffres de chaque commune possible, « Valider » ne fait qu'une mise à jour en base qui renvoie la bonne commune. Point dans le menu tant que le défi du jour n'est pas joué. Parties enregistrées dans `devine_parties` (migration `2026-11-06_devine.sql`), effacées avec le compte. Page Confidentialité mise à jour.
 - **Télécharger mes chiffres** (Menu, `/api/export`, section 19 de `app.py`) : un zip daté avec `mon_compte.csv` (droit d'accès RGPD), communes, départements, lieux, sports, records, évolution mensuelle (globale, par sport, par département, % par commune à partir de 5 %), résumé annuel avec écarts, habitudes, détail par sortie, cartes `blocs.geojson` et `communes.geojson`, et un `lisez-moi.txt`. CSV au format Excel français (point-virgule, virgule décimale, UTF-8 avec BOM). Calculé à la demande, rien n'est stocké. Pas de traces GPS (Strava a son propre export).
 - **Bilan de l'année** (`/annee`, `/api/annee`, section 18 de `app.py`) : 8 écrans animés façon story (ouverture, chiffres clés, sortie la plus marquante, habitudes horaires, sports et mois record, top 5 des communes, départements, story à télécharger ou partager en PNG 1080 × 1920, trois couleurs). Calendrier (heure de Paris) : 1er-15 décembre carte d'annonce sur la carte + menu avec « Nouveau », 16-31 décembre carte + menu, janvier menu seul (« Votre bilan AAAA complet »), retiré au 1er février. L'admin le voit toute l'année (badge « Aperçu ») et choisit la période simulée avec le bouton « Aperçu admin » de la page. Tout est calculé à la demande pour l'utilisateur seul, rien n'est enregistré.

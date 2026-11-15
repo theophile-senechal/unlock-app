@@ -6,7 +6,7 @@ import requests
 from urllib.parse import urlencode
 import polyline
 import json
-from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response
+from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response, has_request_context
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import math
@@ -55,7 +55,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.10'
+ASSET_VERSION = '2026.11.14'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -70,6 +70,10 @@ ADMIN_ATHLETE_IDS = {x.strip() for x in os.getenv('ADMIN_ATHLETE_IDS', '').split
 
 def is_admin():
     return bool(ADMIN_ATHLETE_IDS) and str(session.get('athlete_id')) in ADMIN_ATHLETE_IDS
+
+def _admin_ids():
+    """Identifiants des admins, exclus de toutes les statistiques."""
+    return [int(x) for x in ADMIN_ATHLETE_IDS if x.isdigit()]
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 
 ALLOWED_GRID_SIZES = (100, 250)
@@ -148,7 +152,7 @@ def inject_globals():
         'session_user': 'access_token' in session,
         'csrf_token': session['csrf'],
         'site_owner': SITE_OWNER,
-        'legal_updated': '2 novembre 2026',
+        'legal_updated': '14 novembre 2026',
         'inactive_days': INACTIVE_DAYS,
         'is_admin': is_admin(),
         'carto_key': os.getenv('CARTO_API_KEY', ''),
@@ -162,6 +166,9 @@ def inject_globals():
         'annee': annee_context(),
         # Devine la commune : ligne du menu (prêt, fait ou bloqué), sans requête à la base
         'devine': devine_menu(),
+        # Mesure d'usage : chargée pour les personnes connectées, jamais pour l'admin ni après un refus
+        'suivi': _usage_on(),
+        'suivi_off': bool(session.get('suivi_off')),
     }
 
 def sync_state():
@@ -373,8 +380,11 @@ def _engine():
 # Aucun identifiant d'utilisateur : seulement un type d'événement et une date.
 EVENT_KINDS = ('signup', 'login', 'visit', 'logout', 'delete', 'revoke_inactive')
 
-def log_event(kind):
+def log_event(kind, athlete_id=None):
     if not DB_URL: return
+    # L'administrateur n'est jamais compté dans les statistiques
+    aid = athlete_id if athlete_id is not None else (session.get('athlete_id') if has_request_context() else None)
+    if aid is not None and str(aid) in ADMIN_ATHLETE_IDS: return
     try:
         with _engine().begin() as conn:
             conn.execute(text("INSERT INTO app_events (kind) VALUES (:k)"), {"k": kind})
@@ -559,12 +569,16 @@ def active_users_count():
     return _ACTIVE_CACHE['n']
 
 # Tables contenant des données d'un utilisateur (ordre : dépendances d'abord)
-USER_TABLES = (('devine_parties', 'athlete_id'), ('city_scores', 'athlete_id'), ('activities', 'athlete_id'), ('api_cache', 'athlete_id'),
+USER_TABLES = (('usage_events', 'athlete_id'), ('usage_premieres', 'athlete_id'), ('usage_jours', 'athlete_id'),
+               ('usage_sessions', 'athlete_id'), ('usage_profils', 'athlete_id'),
+               ('devine_parties', 'athlete_id'), ('city_scores', 'athlete_id'), ('activities', 'athlete_id'), ('api_cache', 'athlete_id'),
                ('profiles', 'id'), ('strava_users', 'athlete_id'))
 
-def _delete_user_rows(athlete_id):
+def _delete_user_rows(athlete_id, raison='suppression'):
     """Supprime l'utilisateur de chaque table, chaque suppression dans sa propre transaction.
-    Renvoie False si une table existante n'a pas pu être vidée."""
+    Renvoie False si une table existante n'a pas pu être vidée.
+    Avant : l'historique d'usage est détaché du compte (_usage_close), puis tout ce qui porte encore l'identifiant est effacé."""
+    _usage_close(athlete_id, raison)
     ok = True
     for table, col in USER_TABLES:
         try:
@@ -576,7 +590,7 @@ def _delete_user_rows(athlete_id):
                 ok = False
     return ok
 
-def _purge_user(token, athlete_id):
+def _purge_user(token, athlete_id, raison='suppression'):
     """Efface toutes les données d'un utilisateur (caches + base). Strava API Policy §2.5 / §7.4."""
     for key in (str(athlete_id) if athlete_id else None, token):
         if key:
@@ -589,7 +603,7 @@ def _purge_user(token, athlete_id):
             with _engine().begin() as conn:
                 row = conn.execute(text("SELECT athlete_id FROM strava_users WHERE access_token = :t"), {"t": token}).fetchone()
             athlete_id = row[0] if row else None
-        return _delete_user_rows(athlete_id) if athlete_id else True
+        return _delete_user_rows(athlete_id, raison) if athlete_id else True
     except Exception as e:
         print(f"Erreur purge utilisateur : {e}")
         return False
@@ -637,8 +651,8 @@ def logout():
     # Se déconnecter révoque l'accès Strava : on efface donc aussi les données (Policy §7.4).
     token = session.get('access_token')
     _deauthorize(token)
-    _purge_user(token, session.get('athlete_id'))
     if token: log_event('logout')
+    _purge_user(token, session.get('athlete_id'), 'deconnexion')
     session.clear()
     return redirect(url_for('login_page', bye=1))
 
@@ -648,8 +662,8 @@ def delete_account():
         abort(400)
     token = session.get('access_token')
     _deauthorize(token)
-    ok = _purge_user(token, session.get('athlete_id'))
     log_event('delete')
+    ok = _purge_user(token, session.get('athlete_id'), 'suppression')
     session.clear()
     # Confirmation écrite de la suppression (Policy §2.5)
     return render_template('deleted.html', ok=ok, deleted_at=datetime.now().strftime('%d/%m/%Y à %H:%M'))
@@ -715,9 +729,11 @@ def callback():
                     conn.commit()
                 log_event('login' if prev else 'signup')
                 _touch_visit(prev[0] if prev else None)
+                if not prev: _usage_signup(athlete_id)
             except Exception as e:
                 print(f"Erreur d'enregistrement utilisateur: {e}")
             _save_name(athlete_id, athlete_info)
+            session['suivi_off'] = _usage_refus(athlete_id)
             if session.get('cgu') == CGU_VERSION: _save_cgu(athlete_id)
             session['name_at'] = time.time()
             try:
@@ -1470,8 +1486,8 @@ def cleanup_users():
             """), {"d": INACTIVE_DAYS}).fetchall()
         for row in inactive_users:
             _deauthorize_stored(row.access_token, row.refresh_token)
-            _delete_user_rows(row.athlete_id)
-            log_event('revoke_inactive')
+            _delete_user_rows(row.athlete_id, 'inactivite')
+            log_event('revoke_inactive', row.athlete_id)
             revoked_count += 1
 
         # Cache d'activités expiré (> 47 h) : effacé (Strava API Policy §6.2 / §6.3)
@@ -1495,6 +1511,7 @@ def cleanup_users():
         except Exception:
             pass
 
+        _usage_purge()
         _daily_snapshot()
         result = {"status": "Nettoyage terminé", "comptes_supprimes": revoked_count, "activites_expirees": expired}
         kv_set('last_cron', {**result, 'at': datetime.utcnow().isoformat() + 'Z'})
@@ -1658,11 +1675,11 @@ def _daily_snapshot():
             conn.execute(text("""
                 INSERT INTO app_daily_stats (day, connected, active_7, active_31)
                 SELECT CURRENT_DATE, COUNT(*),
-                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '7 days'),
-                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days')
+                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '7 days' AND NOT (athlete_id = ANY(CAST(:adm AS bigint[])))),
+                       COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days' AND NOT (athlete_id = ANY(CAST(:adm AS bigint[]))))
                 FROM strava_users
                 ON CONFLICT (day) DO UPDATE SET connected = EXCLUDED.connected,
-                    active_7 = EXCLUDED.active_7, active_31 = EXCLUDED.active_31"""))
+                    active_7 = EXCLUDED.active_7, active_31 = EXCLUDED.active_31"""), {"adm": _admin_ids()})
             conn.execute(text("DELETE FROM app_events WHERE created_at < NOW() - INTERVAL '400 days'"))
     except Exception as e:
         print(f"Relevé quotidien : {e}")
@@ -1693,22 +1710,24 @@ def admin_stats():
     with _engine().begin() as conn:
         u = conn.execute(text("""
             SELECT COUNT(*) AS connected,
-              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '1 day')   AS active_1,
-              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '7 days')  AS active_7,
-              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days') AS active_31,
-              COUNT(*) FILTER (WHERE first_login_date > NOW() - INTERVAL '7 days') AS new_7,
-              COUNT(*) FILTER (WHERE first_login_date <= NOW() - INTERVAL '7 days'
+              COUNT(*) FILTER (WHERE last_login_date > NOW() - INTERVAL '31 days') AS active_31_all,
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date > NOW() - INTERVAL '1 day')   AS active_1,
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date > NOW() - INTERVAL '7 days')  AS active_7,
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date > NOW() - INTERVAL '31 days') AS active_31,
+              COUNT(*) FILTER (WHERE NOT adm AND first_login_date > NOW() - INTERVAL '7 days') AS new_7,
+              COUNT(*) FILTER (WHERE NOT adm AND first_login_date <= NOW() - INTERVAL '7 days'
                                AND first_login_date > NOW() - INTERVAL '14 days')  AS new_prev_7,
-              COUNT(*) FILTER (WHERE first_login_date < NOW() - INTERVAL '1 day')  AS older_than_1d,
-              COUNT(*) FILTER (WHERE first_login_date < NOW() - INTERVAL '1 day'
+              COUNT(*) FILTER (WHERE NOT adm AND first_login_date < NOW() - INTERVAL '1 day')  AS older_than_1d,
+              COUNT(*) FILTER (WHERE NOT adm AND first_login_date < NOW() - INTERVAL '1 day'
                                AND last_login_date::date > first_login_date::date) AS returned,
-              COUNT(*) FILTER (WHERE last_login_date::date = CURRENT_DATE)                         AS seen_today,
-              COUNT(*) FILTER (WHERE last_login_date::date < CURRENT_DATE
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date::date = CURRENT_DATE)                         AS seen_today,
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date::date < CURRENT_DATE
                                AND last_login_date > NOW() - INTERVAL '7 days')                    AS seen_week,
-              COUNT(*) FILTER (WHERE last_login_date <= NOW() - INTERVAL '7 days'
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date <= NOW() - INTERVAL '7 days'
                                AND last_login_date > NOW() - make_interval(days => :d - 7))         AS seen_month,
-              COUNT(*) FILTER (WHERE last_login_date <= NOW() - make_interval(days => :d - 7))      AS at_risk
-            FROM strava_users"""), {"d": INACTIVE_DAYS}).mappings().one()
+              COUNT(*) FILTER (WHERE NOT adm AND last_login_date <= NOW() - make_interval(days => :d - 7))      AS at_risk
+            FROM (SELECT *, athlete_id = ANY(CAST(:adm AS bigint[])) AS adm FROM strava_users) su"""),
+                         {"d": INACTIVE_DAYS, "adm": _admin_ids()}).mappings().one()
         out["users"] = {k: int(v or 0) for k, v in u.items()}
 
         def series(sql, **kw):
@@ -2392,7 +2411,34 @@ def compute_export():
         except Exception as e:
             print(f"Export : compte indisponible ({e})")
     rows.append(["Jetons d'accès Strava", 'Enregistrés pour la connexion, non exportés (ce sont des secrets)'])
+    # Mesure d'usage (droit d'accès) : le résumé du compte et une ligne par jour d'usage
+    usage_rows = []
+    if DB_URL and session.get('athlete_id'):
+        try:
+            with _engine().connect() as conn:
+                pu = conn.execute(text("""SELECT refus, premiere_visite, sessions, jours_actifs, actif_s, referent, appareil, os, pwa
+                                          FROM usage_profils WHERE athlete_id = :a"""), {"a": session['athlete_id']}).mappings().first()
+                jd = conn.execute(text("""SELECT jour, sessions, actif_s, pages, compteurs FROM usage_jours
+                                          WHERE athlete_id = :a ORDER BY jour"""), {"a": session['athlete_id']}).mappings().all()
+            if (pu and pu['refus']) or session.get('suivi_off'):
+                rows.append(["Mesure d'usage", 'Désactivée'])
+            else:
+                rows.append(["Mesure d'usage", 'Activée (désactivable sur la page Confidentialité)'])
+                if pu:
+                    rows += [["Première visite mesurée", _dt_fr(pu['premiere_visite'])], ['Sessions mesurées', pu['sessions'] or 0],
+                             ["Jours d'usage", pu['jours_actifs'] or 0], ['Temps actif total (minutes)', round((pu['actif_s'] or 0) / 60)],
+                             ["Site d'où vous venez (première visite)", pu['referent'] or 'direct ou inconnu'],
+                             ['Dernier appareil', ' · '.join(_USAGE_LBL.get(x, x) for x in (pu['appareil'], pu['os']) if x)],
+                             ["Appli installée utilisée", 'oui' if pu['pwa'] else 'non']]
+            for r in jd:
+                c = r['compteurs'] or {}
+                usage_rows.append([r['jour'].strftime('%d/%m/%Y'), r['sessions'], str(round((r['actif_s'] or 0) / 60, 1)).replace('.', ','), r['pages'],
+                                   ', '.join(f"{k} {v}" for k, v in sorted(c.items()) if not k.startswith('temps_'))])
+        except Exception as e:
+            if 'does not exist' not in str(e): print(f"Export : mesure d'usage indisponible ({e})")
     files['mon_compte.csv'] = _csv(rows, ['Information', 'Valeur'])
+    if usage_rows:
+        files['mon_usage.csv'] = _csv(usage_rows, ['Jour', 'Sessions', 'Temps actif (minutes)', 'Pages vues', 'Actions du jour'])
 
     files['lisez-moi.txt'] = EXPORT_LISEZ_MOI.format(date=today.strftime('%d/%m/%Y'), pct=EXPORT_MIN_PCT, maxc=MAX_COMMUNES)
     return files
@@ -2409,6 +2455,7 @@ LibreOffice ou Numbers. Blocs de 250 m, comme la carte par défaut.
 
 À la date du téléchargement
 - mon_compte.csv : ce qu'Unlock enregistre sur vous (droit d'accès RGPD).
+- mon_usage.csv : votre utilisation de l'appli jour par jour (mesure d'usage, si elle est activée).
 - communes.csv : chaque commune visitée, % exploré, blocs, km dans la commune, première et dernière sortie
   ({maxc} communes au plus).
 - departements.csv : part des communes visitées par département.
@@ -2729,6 +2776,347 @@ def devine_menu():
     if session.get('devine_fait') == today:
         return {"done": True, "sub": "Défi du jour terminé, à demain"}
     return {"ready": True, "sub": "Le défi du jour est prêt"}
+
+
+# ============================================================
+# 21. MESURE D'USAGE (comportement dans l'appli)
+# ============================================================
+# Ce que les gens font dans Unlock : pages vues, temps actif, appareil, PWA ou site, actions clés.
+# Jamais de donnée Strava (ni km, ni commune, ni activité) : les analyses entre utilisateurs
+# ne portent que sur l'usage de l'appli. L'administrateur n'est jamais enregistré.
+# Migration : migrations/2026-11-14_usage.sql. Sans elle, rien n'est enregistré et l'appli marche normalement.
+USAGE_ENABLED = os.getenv('USAGE_TRACKING', 'true').lower() != 'false'
+USAGE_RAW_DAYS = 90        # événements bruts
+USAGE_KEEP_DAYS = 760      # sessions, jours et profils détachés : 25 mois (recommandation CNIL)
+USAGE_PAGES = {'carte', 'lieux', 'timelapse', 'story', 'stats', 'devine', 'annee', 'cgu', 'confidentialite', 'mentions', 'autre'}
+USAGE_EVENTS = {
+    'vue', 'fenetre', 'synchro',
+    'pwa_propose', 'pwa_clic', 'pwa_installee', 'pwa_refusee', 'pwa_guide_ios',
+    'export_csv', 'export_echec', 'soutenir_clic', 'contact_clic', 'copier_id', 'deconnexion_clic',
+    'story_format', 'story_theme', 'story_fond', 'story_affichage', 'story_sport', 'story_blocs', 'story_commune', 'story_zoom',
+    'story_telecharge', 'story_partage', 'story_partage_annule', 'story_partage_echec',
+    'carte_commune', 'carte_departement', 'carte_filtre', 'carte_mode', 'carte_recherche', 'carte_tri', 'carte_panneau',
+    'timelapse_lance', 'timelapse_progression', 'timelapse_vitesse', 'timelapse_commune',
+    'stats_filtre', 'stats_tri', 'stats_progression', 'stats_plus', 'stats_unite',
+    'lieux_recherche', 'lieux_fiche', 'lieux_onglet', 'lieux_departement', 'lieux_filtre',
+    'annee_ecran', 'annee_telecharge', 'annee_partage', 'annee_theme',
+    'devine_indice', 'devine_reponse',
+    'erreur_js', 'erreur_api', 'api_lente',
+}
+# Pas de « première fois » pour ces événements (bruit technique)
+USAGE_NO_FIRST = {'fenetre', 'synchro', 'story_zoom', 'erreur_js', 'erreur_api', 'api_lente', 'timelapse_progression', 'annee_ecran'}
+USAGE_DEVICES = {'telephone', 'tablette', 'ordinateur'}
+USAGE_OS = {'ios', 'android', 'windows', 'macos', 'linux', 'chromeos', 'autre'}
+USAGE_BROWSERS = {'safari', 'chrome', 'firefox', 'edge', 'samsung', 'opera', 'instagram', 'facebook', 'autre'}
+_USAGE_LBL = {'telephone': 'Téléphone', 'tablette': 'Tablette', 'ordinateur': 'Ordinateur', 'ios': 'iOS', 'android': 'Android',
+              'windows': 'Windows', 'macos': 'macOS', 'linux': 'Linux', 'chromeos': 'ChromeOS', 'autre': 'Autre'}
+_RE_USAGE_D = re.compile(r'^[a-z0-9_-]{1,24}$')
+_RE_HOST = re.compile(r'^[a-z0-9.-]{3,80}$')
+_USAGE_DOWN = {'until': 0}   # table absente : on réessaie dans 10 minutes, sans saturer les journaux
+
+def _usage_on():
+    """Mesure active pour la personne connectée (jamais pour l'admin, jamais après un refus)."""
+    return (USAGE_ENABLED and bool(DB_URL) and 'access_token' in session and bool(session.get('athlete_id'))
+            and not is_admin() and not session.get('suivi_off') and time.time() > _USAGE_DOWN['until'])
+
+def _usage_fail(where, e):
+    print(f"Mesure d'usage, {where} (migration 2026-11-14_usage.sql lancée ?) : {e}")
+    if 'does not exist' in str(e): _USAGE_DOWN['until'] = time.time() + 600
+
+_SQL_MERGE = lambda t: f"""(SELECT COALESCE(jsonb_object_agg(k, s), '{{}}'::jsonb) FROM (
+    SELECT k, SUM(v::bigint) AS s FROM (
+      SELECT key AS k, value AS v FROM jsonb_each_text({t}.compteurs)
+      UNION ALL SELECT key, value FROM jsonb_each_text(EXCLUDED.compteurs)) x GROUP BY k) y)"""
+
+def _clip(v, lo, hi, default=None):
+    try: v = int(v)
+    except (TypeError, ValueError): return default
+    return max(lo, min(hi, v))
+
+@app.route('/api/u', methods=['POST'])
+def usage_ingest():
+    """Lot d'événements envoyé par static/js/track.js (toutes les 15 s, au clic sur un lien interne et à la fermeture de la page)."""
+    if not _usage_on() or (request.content_length or 0) > 24000: return ('', 204)
+    j = request.get_json(force=True, silent=True)
+    if not isinstance(j, dict): return ('', 204)
+    # Anti-CSRF : jeton de la page, ou à défaut en-tête Origin de ce site (le jeton peut changer entre deux onglets)
+    origin = request.headers.get('Origin') or ''
+    origin_ok = bool(origin) and origin.split('://', 1)[-1].rstrip('/') == request.host
+    if not ((session.get('csrf') and j.get('c') == session.get('csrf')) or origin_ok): return ('', 204)
+    sid = _clip(j.get('s'), 1, 2 ** 53)
+    if not sid: return ('', 204)
+    aid = int(session['athlete_id'])
+    page = j.get('p') if j.get('p') in USAGE_PAGES else 'autre'
+    act = _clip(j.get('a'), 0, 900, 0)
+    evs = []
+    for e in (j.get('e') or [])[:80]:
+        if not (isinstance(e, list) and len(e) == 4 and e[0] in USAGE_EVENTS): continue
+        d = e[1] if isinstance(e[1], str) and _RE_USAGE_D.match(e[1]) else None
+        evs.append({"ev": e[0], "d": d, "v": _clip(e[2], -1, 2 ** 31 - 1), "ago": _clip(e[3], 0, 3_600_000, 0)})
+    x = j.get('x') if isinstance(j.get('x'), dict) else {}
+    ref = str(x.get('ref') or '').lower()[:80]
+    ctx = {"dev": x.get('dev') if x.get('dev') in USAGE_DEVICES else None,
+           "os": x.get('os') if x.get('os') in USAGE_OS else None,
+           "nav": x.get('nav') if x.get('nav') in USAGE_BROWSERS else None,
+           "pwa": x.get('pwa') if isinstance(x.get('pwa'), bool) else None,
+           "w": _clip(x.get('w'), 200, 8000), "ref": ref if _RE_HOST.match(ref) else None}
+    if not evs and not act: return ('', 204)
+    pv = sum(1 for e in evs if e['ev'] == 'vue')
+    load = next((e['v'] for e in evs if e['ev'] == 'vue' and e['v'] and e['v'] > 0), None)
+    counts = defaultdict(int)
+    for e in evs: counts[f"vue_{page}" if e['ev'] == 'vue' else e['ev']] += 1
+    if act: counts[f"temps_{page}"] += act
+    cj = json.dumps(counts)
+    try:
+        with _engine().begin() as conn:
+            if conn.execute(text("SELECT refus FROM usage_profils WHERE athlete_id = :a"), {"a": aid}).scalar():
+                session['suivi_off'] = True; return ('', 204)
+            s = conn.execute(text("""
+                INSERT INTO usage_sessions (sid, athlete_id, debut, fin, actif_s, pages, nb_events, entree, sortie,
+                                            appareil, os, navigateur, pwa, largeur, chargement_ms)
+                VALUES (:sid, :a, NOW(), NOW(), :act, :pv, :n, :page, :page, :dev, :os, :nav, :pwa, :w, :load)
+                ON CONFLICT (sid) DO UPDATE SET fin = NOW(),
+                  actif_s = usage_sessions.actif_s + EXCLUDED.actif_s,
+                  pages = LEAST(32000, usage_sessions.pages + EXCLUDED.pages),
+                  nb_events = LEAST(32000, usage_sessions.nb_events + EXCLUDED.nb_events),
+                  sortie = CASE WHEN EXCLUDED.pages > 0 THEN EXCLUDED.sortie ELSE usage_sessions.sortie END,
+                  appareil = COALESCE(usage_sessions.appareil, EXCLUDED.appareil), os = COALESCE(usage_sessions.os, EXCLUDED.os),
+                  navigateur = COALESCE(usage_sessions.navigateur, EXCLUDED.navigateur), pwa = COALESCE(usage_sessions.pwa, EXCLUDED.pwa),
+                  largeur = COALESCE(usage_sessions.largeur, EXCLUDED.largeur),
+                  chargement_ms = COALESCE(usage_sessions.chargement_ms, EXCLUDED.chargement_ms)
+                WHERE usage_sessions.athlete_id = EXCLUDED.athlete_id
+                RETURNING (xmax = 0) AS nouvelle"""),
+                {"sid": sid, "a": aid, "act": act, "pv": pv, "n": len(evs), "page": page, "dev": ctx['dev'], "os": ctx['os'],
+                 "nav": ctx['nav'], "pwa": ctx['pwa'], "w": ctx['w'], "load": load}).fetchone()
+            if s is None: return ('', 204)            # identifiant de session d'un autre compte : ignoré
+            new_s = 1 if s.nouvelle else 0
+            if evs:
+                conn.execute(text("""INSERT INTO usage_events (athlete_id, sid, ts, ev, page, d, v)
+                                     VALUES (:a, :sid, NOW() - (:ago * INTERVAL '1 millisecond'), :ev, :page, :d, :v)"""),
+                             [{**e, "a": aid, "sid": sid, "page": page} for e in evs])
+            dj = conn.execute(text(f"""
+                INSERT INTO usage_jours (athlete_id, jour, sessions, actif_s, pages, compteurs)
+                VALUES (:a, :jour, :ns, :act, :pv, CAST(:c AS jsonb))
+                ON CONFLICT (athlete_id, jour) DO UPDATE SET
+                  sessions = LEAST(32000, usage_jours.sessions + EXCLUDED.sessions), actif_s = usage_jours.actif_s + EXCLUDED.actif_s,
+                  pages = LEAST(32000, usage_jours.pages + EXCLUDED.pages), compteurs = {_SQL_MERGE('usage_jours')}
+                RETURNING (xmax = 0) AS nouveau"""),
+                {"a": aid, "jour": _today_paris(), "ns": new_s, "act": act, "pv": pv, "c": cj}).fetchone()
+            p = conn.execute(text(f"""
+                INSERT INTO usage_profils (athlete_id, inscription, premiere_visite, derniere_visite, sessions, jours_actifs,
+                                           actif_s, compteurs, referent, appareil, os, pwa)
+                VALUES (:a, (SELECT first_login_date FROM strava_users WHERE athlete_id = :a), NOW(), NOW(), :ns, :nj,
+                        :act, CAST(:c AS jsonb), :ref, :dev, :os, COALESCE(:pwa, false))
+                ON CONFLICT (athlete_id) DO UPDATE SET derniere_visite = NOW(),
+                  inscription = COALESCE(usage_profils.inscription, EXCLUDED.inscription),
+                  premiere_visite = COALESCE(usage_profils.premiere_visite, EXCLUDED.premiere_visite),
+                  sessions = usage_profils.sessions + EXCLUDED.sessions, jours_actifs = usage_profils.jours_actifs + EXCLUDED.jours_actifs,
+                  actif_s = usage_profils.actif_s + EXCLUDED.actif_s, compteurs = {_SQL_MERGE('usage_profils')},
+                  referent = COALESCE(usage_profils.referent, EXCLUDED.referent),
+                  appareil = COALESCE(EXCLUDED.appareil, usage_profils.appareil), os = COALESCE(EXCLUDED.os, usage_profils.os),
+                  pwa = usage_profils.pwa OR EXCLUDED.pwa
+                RETURNING compteurs, sessions,
+                  GREATEST(0, (CURRENT_DATE - COALESCE(inscription, premiere_visite)::date)) AS jours"""),
+                {"a": aid, "ns": new_s, "nj": 1 if dj.nouveau else 0, "act": act, "c": cj, "ref": ctx['ref'],
+                 "dev": ctx['dev'], "os": ctx['os'], "pwa": ctx['pwa']}).fetchone()
+            firsts = {f"vue_{page}" if e['ev'] == 'vue' else e['ev'] for e in evs if e['ev'] not in USAGE_NO_FIRST}
+            if firsts:
+                cp = p.compteurs or {}
+                conn.execute(text("""INSERT INTO usage_premieres (athlete_id, ev, ts, jours_inscrit, sessions_avant, vues_page)
+                                     VALUES (:a, :ev, NOW(), :j, :s, :vp) ON CONFLICT DO NOTHING"""),
+                             [{"a": aid, "ev": k, "j": p.jours, "s": p.sessions, "vp": int(cp.get(f"vue_{page}", 0) or 0)} for k in sorted(firsts)])
+    except Exception as e:
+        _usage_fail('envoi', e)
+    return ('', 204)
+
+def _usage_signup(aid):
+    """Première connexion : date d'inscription exacte (pour les cohortes)."""
+    if not (USAGE_ENABLED and DB_URL and aid) or str(aid) in ADMIN_ATHLETE_IDS: return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("""INSERT INTO usage_profils (athlete_id, inscription) VALUES (:a, NOW())
+                                 ON CONFLICT (athlete_id) DO UPDATE SET inscription = COALESCE(usage_profils.inscription, NOW())"""), {"a": aid})
+    except Exception as e:
+        _usage_fail('inscription', e)
+
+def _usage_refus(aid):
+    """True si la personne a désactivé la mesure (relu à la connexion)."""
+    if not (DB_URL and aid): return False
+    try:
+        with _engine().connect() as conn:
+            return bool(conn.execute(text("SELECT refus FROM usage_profils WHERE athlete_id = :a"), {"a": aid}).scalar())
+    except Exception:
+        return False
+
+def _usage_close(aid, raison):
+    """Fin du compte (déconnexion, suppression, inactivité) : l'historique d'usage est détaché du compte
+    (identifiant remplacé par un numéro aléatoire, sans lien possible), les événements bruts sont effacés.
+    Il sert encore aux courbes de rétention, sans pouvoir être relié à la personne."""
+    if not (DB_URL and aid): return
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("DELETE FROM usage_events WHERE athlete_id = :a"), {"a": aid})
+            r = conn.execute(text("SELECT refus FROM usage_profils WHERE athlete_id = :a"), {"a": aid}).fetchone()
+            if r is None or r.refus:
+                for t in ('usage_premieres', 'usage_jours', 'usage_sessions', 'usage_profils'):
+                    conn.execute(text(f"DELETE FROM {t} WHERE athlete_id = :a"), {"a": aid})
+                return
+            anon = -(secrets.randbelow(2 ** 62) + 1)
+            conn.execute(text("UPDATE usage_profils SET athlete_id = :n, fin = NOW(), fin_raison = :r WHERE athlete_id = :a"),
+                         {"n": anon, "r": raison, "a": aid})
+            for t in ('usage_premieres', 'usage_jours', 'usage_sessions'):
+                conn.execute(text(f"UPDATE {t} SET athlete_id = :n WHERE athlete_id = :a"), {"n": anon, "a": aid})
+    except Exception as e:
+        if 'does not exist' not in str(e): print(f"Mesure d'usage, fin du compte : {e}")
+
+def _usage_purge():
+    """Cron quotidien : événements bruts > 90 jours, le reste > 25 mois."""
+    try:
+        with _engine().begin() as conn:
+            conn.execute(text("DELETE FROM usage_events WHERE ts < NOW() - make_interval(days => :d)"), {"d": USAGE_RAW_DAYS})
+            conn.execute(text("DELETE FROM usage_sessions WHERE debut < NOW() - make_interval(days => :d)"), {"d": USAGE_KEEP_DAYS})
+            conn.execute(text("DELETE FROM usage_jours WHERE jour < CURRENT_DATE - :d"), {"d": USAGE_KEEP_DAYS})
+            old = "SELECT athlete_id FROM usage_profils WHERE athlete_id < 0 AND fin < NOW() - make_interval(days => :d)"
+            conn.execute(text(f"DELETE FROM usage_premieres WHERE athlete_id IN ({old})"), {"d": USAGE_KEEP_DAYS})
+            conn.execute(text(f"DELETE FROM usage_profils WHERE athlete_id IN ({old})"), {"d": USAGE_KEEP_DAYS})
+    except Exception as e:
+        if 'does not exist' not in str(e): print(f"Mesure d'usage, purge : {e}")
+
+@app.route('/mes-donnees/mesure', methods=['POST'])
+def usage_choice():
+    """Désactiver ou réactiver la mesure d'usage (page Confidentialité)."""
+    if 'access_token' not in session: return redirect(url_for('login_page'))
+    if not session.get('csrf') or request.form.get('csrf') != session.get('csrf'): abort(400)
+    aid, off = session.get('athlete_id'), request.form.get('mesure') == 'off'
+    session['suivi_off'] = off
+    if DB_URL and aid:
+        try:
+            with _engine().begin() as conn:
+                for t in ('usage_events', 'usage_premieres', 'usage_jours', 'usage_sessions', 'usage_profils'):
+                    conn.execute(text(f"DELETE FROM {t} WHERE athlete_id = :a"), {"a": aid})
+                if off:
+                    conn.execute(text("INSERT INTO usage_profils (athlete_id, refus) VALUES (:a, true)"), {"a": aid})
+        except Exception as e:
+            _usage_fail('choix', e)
+    return redirect('/confidentialite?mesure=' + ('off' if off else 'on') + '#mesure')
+
+@app.route('/admin/usage')
+def admin_usage_page():
+    if not is_admin(): abort(404)
+    return render_template('admin_usage.html', active='admin')
+
+@app.route('/api/admin/usage')
+def admin_usage():
+    if not is_admin(): return jsonify({"error": "Introuvable"}), 404
+    if not DB_URL: return jsonify({"error": "Base de données non configurée"}), 500
+    out = {"generated_at": datetime.utcnow().isoformat() + 'Z', "raw_days": USAGE_RAW_DAYS}
+    try:
+        with _engine().connect() as conn:
+            def q(sql, **kw):
+                return [dict(r) for r in conn.execute(text(sql), kw).mappings().all()]
+            since = conn.execute(text("SELECT MIN(jour) FROM usage_jours")).scalar()
+            out["since"] = since
+            if not since:
+                out["empty"] = True
+                return app.response_class(json.dumps(out, default=str), mimetype='application/json')
+            out["resume"] = q("""
+                WITH j AS (SELECT * FROM usage_jours WHERE jour > CURRENT_DATE - 30),
+                     s AS (SELECT * FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days')
+                SELECT (SELECT COUNT(DISTINCT athlete_id) FROM j) AS mau,
+                       (SELECT COUNT(DISTINCT athlete_id) FROM usage_jours WHERE jour > CURRENT_DATE - 7) AS wau,
+                       (SELECT COUNT(*) FROM usage_jours WHERE jour = CURRENT_DATE) AS dau,
+                       (SELECT COALESCE(AVG(n), 0) FROM (SELECT COUNT(*) AS n FROM j GROUP BY jour) x) AS dau_moyen,
+                       (SELECT COUNT(*) FROM s) AS sessions,
+                       (SELECT percentile_cont(.5) WITHIN GROUP (ORDER BY actif_s) FROM s) AS actif_median,
+                       (SELECT percentile_cont(.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fin - debut)) FROM s) AS duree_mediane,
+                       (SELECT COALESCE(AVG(pages), 0) FROM s) AS pages_moy,
+                       (SELECT COUNT(*) FILTER (WHERE pwa) FROM s) AS sessions_pwa""")[0]
+            out["daily"] = q("""
+                SELECT d::date AS jour, COUNT(j.athlete_id) AS actifs, COALESCE(SUM(j.sessions), 0) AS sessions,
+                       COALESCE(SUM(j.actif_s), 0) AS actif_s
+                FROM generate_series(CURRENT_DATE - 59, CURRENT_DATE, INTERVAL '1 day') d
+                LEFT JOIN usage_jours j ON j.jour = d::date GROUP BY d ORDER BY d""")
+            # Cohortes par semaine d'inscription (inscrits depuis le début de la mesure) : % revenus chaque semaine
+            out["cohortes"] = q("""
+                WITH c AS (SELECT athlete_id, date_trunc('week', COALESCE(inscription, premiere_visite))::date AS sem
+                           FROM usage_profils WHERE NOT refus AND COALESCE(inscription, premiere_visite) >= CAST(:since AS date)),
+                     a AS (SELECT DISTINCT c.athlete_id, c.sem, ((date_trunc('week', j.jour)::date - c.sem) / 7) AS k
+                           FROM c JOIN usage_jours j ON j.athlete_id = c.athlete_id)
+                SELECT c.sem, COUNT(DISTINCT c.athlete_id) AS n,
+                       ARRAY(SELECT COUNT(DISTINCT a.athlete_id) FROM generate_series(0, 8) g LEFT JOIN a ON a.sem = c.sem AND a.k = g
+                             GROUP BY g ORDER BY g) AS semaines
+                FROM c WHERE c.sem > CURRENT_DATE - 84 GROUP BY c.sem ORDER BY c.sem""", since=since)
+            # Rétention « revenu dans les N jours » (un autre jour que l'inscription)
+            out["retour"] = q("""
+                WITH c AS (SELECT athlete_id, COALESCE(inscription, premiere_visite)::date AS j0 FROM usage_profils
+                           WHERE NOT refus AND COALESCE(inscription, premiere_visite) >= CAST(:since AS date))
+                SELECT n, COUNT(*) FILTER (WHERE c.j0 <= CURRENT_DATE - n) AS eligibles,
+                       COUNT(*) FILTER (WHERE c.j0 <= CURRENT_DATE - n AND EXISTS (SELECT 1 FROM usage_jours j
+                           WHERE j.athlete_id = c.athlete_id AND j.jour > c.j0 AND j.jour <= c.j0 + n)) AS revenus
+                FROM c CROSS JOIN (VALUES (1), (7), (30)) v(n) GROUP BY n ORDER BY n""", since=since)
+            out["pages"] = q("""
+                SELECT p AS page, COUNT(DISTINCT j.athlete_id) FILTER (WHERE (j.compteurs ->> ('vue_' || p)) IS NOT NULL) AS utilisateurs,
+                       COALESCE(SUM((j.compteurs ->> ('vue_' || p))::bigint), 0) AS vues,
+                       COALESCE(SUM((j.compteurs ->> ('temps_' || p))::bigint), 0) AS temps_s
+                FROM usage_jours j CROSS JOIN unnest(ARRAY['carte','lieux','timelapse','story','stats','devine','annee']) p
+                WHERE j.jour > CURRENT_DATE - 30 GROUP BY p ORDER BY vues DESC""")
+            keys = ['vue_story', 'story_telecharge', 'story_partage', 'story_partage_annule', 'export_csv', 'pwa_installee', 'pwa_clic',
+                    'pwa_refusee', 'pwa_guide_ios', 'timelapse_lance', 'carte_commune', 'lieux_fiche', 'devine_reponse', 'devine_indice',
+                    'annee_telecharge', 'annee_partage', 'soutenir_clic', 'contact_clic', 'stats_progression', 'lieux_recherche']
+            out["actions"] = q("""
+                SELECT k AS ev, COUNT(DISTINCT j.athlete_id) FILTER (WHERE j.compteurs ? k) AS utilisateurs,
+                       COALESCE(SUM((j.compteurs ->> k)::bigint), 0) AS fois
+                FROM usage_jours j CROSS JOIN unnest(CAST(:keys AS text[])) k WHERE j.jour > CURRENT_DATE - 30 GROUP BY k""", keys=keys)
+            out["premieres"] = q("""
+                SELECT ev, COUNT(*) AS n,
+                       percentile_cont(.5) WITHIN GROUP (ORDER BY vues_page) AS vues_med,
+                       percentile_cont(.5) WITHIN GROUP (ORDER BY sessions_avant) AS sessions_med,
+                       percentile_cont(.5) WITHIN GROUP (ORDER BY jours_inscrit) AS jours_med,
+                       COUNT(*) FILTER (WHERE vues_page <= 1) AS des_la_premiere
+                FROM usage_premieres WHERE ev IN ('story_telecharge', 'story_partage', 'export_csv', 'pwa_installee', 'timelapse_lance', 'devine_reponse', 'annee_partage', 'annee_telecharge')
+                GROUP BY ev""")
+            out["supports"] = q("""
+                SELECT 'appareil' AS dim, COALESCE(appareil, 'inconnu') AS val, COUNT(*) AS n FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 2
+                UNION ALL SELECT 'os', COALESCE(os, 'inconnu'), COUNT(*) FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 2
+                UNION ALL SELECT 'navigateur', COALESCE(navigateur, 'inconnu'), COUNT(*) FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 2
+                UNION ALL SELECT 'mode', CASE WHEN pwa THEN 'pwa' ELSE 'site' END, COUNT(*) FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 2
+                ORDER BY 1, 3 DESC""")
+            out["entrees"] = q("""SELECT entree AS page, COUNT(*) AS n FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' AND entree IS NOT NULL
+                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 8""")
+            out["sorties"] = q("""SELECT sortie AS page, COUNT(*) AS n FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' AND sortie IS NOT NULL
+                                  GROUP BY 1 ORDER BY 2 DESC LIMIT 8""")
+            out["heures"] = q("""SELECT EXTRACT(HOUR FROM debut AT TIME ZONE 'Europe/Paris')::int AS h, COUNT(*) AS n
+                                 FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1""")
+            out["jours_semaine"] = q("""SELECT EXTRACT(ISODOW FROM debut AT TIME ZONE 'Europe/Paris')::int AS d, COUNT(*) AS n
+                                        FROM usage_sessions WHERE debut > NOW() - INTERVAL '30 days' GROUP BY 1 ORDER BY 1""")
+            out["departs"] = q("""
+                SELECT fin_raison AS raison, COUNT(*) AS n,
+                       percentile_cont(.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM fin - COALESCE(inscription, premiere_visite)) / 86400) AS vie_jours,
+                       percentile_cont(.5) WITHIN GROUP (ORDER BY jours_actifs) AS jours_actifs
+                FROM usage_profils WHERE fin > NOW() - INTERVAL '90 days' GROUP BY 1 ORDER BY 2 DESC""")
+            out["risque"] = q("""
+                SELECT COUNT(*) FILTER (WHERE derniere_visite > NOW() - INTERVAL '7 days') AS actifs_7,
+                       COUNT(*) FILTER (WHERE derniere_visite <= NOW() - INTERVAL '7 days' AND derniere_visite > NOW() - INTERVAL '14 days') AS calmes,
+                       COUNT(*) FILTER (WHERE derniere_visite <= NOW() - INTERVAL '14 days') AS a_risque,
+                       COUNT(*) FILTER (WHERE refus) AS refus
+                FROM usage_profils WHERE athlete_id > 0""")[0]
+            out["referents"] = q("""SELECT COALESCE(referent, 'direct') AS ref, COUNT(*) AS n FROM usage_profils
+                                    WHERE NOT refus GROUP BY 1 ORDER BY 2 DESC LIMIT 8""")
+            out["qualite"] = q("""
+                SELECT page, COUNT(*) AS vues, percentile_cont(.5) WITHIN GROUP (ORDER BY v) AS chargement_med,
+                       percentile_cont(.9) WITHIN GROUP (ORDER BY v) AS chargement_p90
+                FROM usage_events WHERE ev = 'vue' AND v > 0 AND ts > NOW() - INTERVAL '7 days' GROUP BY page ORDER BY vues DESC""")
+            out["erreurs"] = q("""SELECT ev, COALESCE(d, '-') AS d, COUNT(*) AS n, COUNT(DISTINCT athlete_id) AS utilisateurs
+                                  FROM usage_events WHERE ev IN ('erreur_js', 'erreur_api', 'api_lente') AND ts > NOW() - INTERVAL '7 days'
+                                  GROUP BY 1, 2 ORDER BY 3 DESC LIMIT 10""")
+            out["stockage"] = q("""SELECT relname AS t, pg_total_relation_size(relid) AS octets, n_live_tup AS lignes
+                                   FROM pg_stat_user_tables WHERE relname LIKE 'usage\\_%' ORDER BY 1""")
+    except Exception as e:
+        print(f"Admin usage : {e}")
+        missing = 'does not exist' in str(e)
+        return jsonify({"error": "Lancez la migration 2026-11-14_usage.sql dans Supabase." if missing else "Calcul impossible pour le moment.",
+                        "migration": missing}), 200 if missing else 500
+    return app.response_class(json.dumps(out, default=str), mimetype='application/json')
 
 
 @app.errorhandler(404)

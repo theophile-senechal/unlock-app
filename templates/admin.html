@@ -6,6 +6,7 @@
   .dash { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   .dash-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 1024px) { .dash-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .admin-switch { margin-top: 12px; }
   .updated { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: var(--fs-sm); }
 
   /* Capacity */
@@ -105,7 +106,8 @@
       <div class="page__head">
         <div>
           <h1 class="page__title">Tableau de bord</h1>
-          <p class="page__lead">Unlock en un coup d'œil. Chiffres anonymes, plus la liste des personnes venues ces 7 derniers jours.</p>
+          <p class="page__lead">Unlock en un coup d'œil. Chiffres anonymes sans votre propre compte, plus la liste des personnes venues ces 7 derniers jours.</p>
+          <a class="btn btn--outline btn--sm admin-switch" href="/admin/usage">{{ icon('trend') }}Comportement des utilisateurs</a>
         </div>
         <div class="updated"><span id="updated">Chargement…</span>
           <button type="button" class="iconbtn" id="refresh" aria-label="Actualiser"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg></button>
@@ -248,14 +250,15 @@
 
   function render(s) {
     const u = s.users, cap = s.capacity;
-    const dormant = Math.max(0, u.connected - u.active_31), free = Math.max(0, cap - u.connected), pct = u.connected / cap * 100;
+    const act31 = u.active_31_all ?? u.active_31;   // places : l'admin occupe aussi une place Strava
+    const dormant = Math.max(0, u.connected - act31), free = Math.max(0, cap - u.connected), pct = u.connected / cap * 100;
 
     /* Capacité */
     $('c-used').textContent = fmt(u.connected); $('c-cap').textContent = fmt(cap);
-    $('b-active').style.width = (u.active_31 / cap * 100) + '%';
+    $('b-active').style.width = (act31 / cap * 100) + '%';
     $('b-dormant').style.width = (dormant / cap * 100) + '%';
-    $('capbar').setAttribute('aria-label', `${u.connected} places occupées sur ${cap} : ${u.active_31} actifs, ${dormant} en sommeil, ${free} libres`);
-    $('l-active').textContent = fmt(u.active_31); $('l-dormant').textContent = fmt(dormant); $('l-free').textContent = fmt(free);
+    $('capbar').setAttribute('aria-label', `${u.connected} places occupées sur ${cap} : ${act31} actifs, ${dormant} en sommeil, ${free} libres`);
+    $('l-active').textContent = fmt(act31); $('l-dormant').textContent = fmt(dormant); $('l-free').textContent = fmt(free);
     const net = (+s.flow_30.arrivals || 0) - (+s.flow_30.departures || 0);
     const side = [];
     const level = pct >= 95 ? 'bad' : pct >= 80 ? 'warn' : '';

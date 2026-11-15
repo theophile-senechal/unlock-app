@@ -270,7 +270,7 @@
     $('panel-toggle').setAttribute('aria-expanded', String(expanded));
     requestAnimationFrame(syncPanelHeight);
   }
-  $('panel-toggle').addEventListener('click', () => setPanel(panel.classList.contains('is-collapsed')));
+  $('panel-toggle').addEventListener('click', () => { Unlock.track('carte_panneau', { d: panel.classList.contains('is-collapsed') ? 'ouvert' : 'ferme' }); setPanel(panel.classList.contains('is-collapsed')); });
 
   /* Swipe (phones): up to open, down to close. Only takes over the gesture when
      the content has nothing to scroll in that direction, so normal scrolling is untouched.
@@ -393,9 +393,10 @@
     renderStats(); render();
     if (m === 'communes') Dep.enter();
   }
-  document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) setMode(b.dataset.mode); });
+  document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) { if (b.dataset.mode !== mode) Unlock.track('carte_mode', { d: b.dataset.mode }); setMode(b.dataset.mode); } });
 
   document.querySelectorAll('[data-sort]').forEach((b) => b.addEventListener('click', () => {
+    if (sortKey !== b.dataset.sort) Unlock.track('carte_tri', { d: b.dataset.sort });
     sortKey = b.dataset.sort;
     document.querySelectorAll('[data-sort]').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
     renderTop();
@@ -407,8 +408,11 @@
     if (firstLoad) Unlock.loader.show((Unlock.sync === 'fast' ? ['Chargement de votre carte…'] : ['Connexion à Strava…', 'Lecture de vos activités…'])
       .concat(['Découpage des traces en blocs…', 'Repérage des communes traversées…', 'Calcul de vos pourcentages…']));
     else Unlock.busy.on('Mise à jour de la carte', filterLabel(), { veil: true });
+    const t0 = performance.now(), wasFirst = firstLoad;
     try {
       data = await Unlock.getJSON(`/api/activities?year=${encodeURIComponent(year)}&grid_size=${grid}&sport_type=${encodeURIComponent(sport)}`);
+      // Durée du premier chargement (première synchro Strava, relecture ou cache)
+      if (wasFirst) Unlock.track('synchro', { d: Unlock.sync, v: performance.now() - t0 });
       fillSelects(sport, year);
       updateSummary();
       if (selectedCity && !(data.top_municipalities || []).some((c) => c.name === selectedCity)) selectedCity = null;
@@ -459,8 +463,10 @@
     $('filter-summary').textContent = `${sp}, ${yr}`;
   }
 
-  ['sport-select', 'year-select', 'grid-select'].forEach((id) => $(id).addEventListener('change', load));
-  $('filters-reset').addEventListener('click', () => { $('sport-select').value = 'all'; $('year-select').value = 'all'; load(); });
+  ['sport-select', 'year-select', 'grid-select'].forEach((id) => $(id).addEventListener('change', () => {
+    Unlock.track('carte_filtre', { d: { 'sport-select': 'sport', 'year-select': 'annee', 'grid-select': 'blocs' }[id] }); load();
+  }));
+  $('filters-reset').addEventListener('click', () => { Unlock.track('carte_filtre', { d: 'reset' }); $('sport-select').value = 'all'; $('year-select').value = 'all'; load(); });
 
   /* ---------- Render ---------- */
   function renderStats() {
@@ -597,6 +603,7 @@
         <span class="rank__pos">${medal}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}</span>
         <span class="rank__val">${main}<small>${sub}</small></span></button>`;
       li.firstElementChild.addEventListener('click', () => {
+        Unlock.track('carte_commune', { d: 'classement' });
         showCity(c, true); $('city-search').value = '';
         if (!mqFloat.matches) setPanel(false);
       });
@@ -607,6 +614,7 @@
   $('city-search').addEventListener('change', (e) => {
     const v = e.target.value.trim().toLowerCase(); if (!v || !data) return;
     const c = (data.top_municipalities || []).find((x) => x.name.toLowerCase() === v) || (data.top_municipalities || []).find((x) => x.name.toLowerCase().includes(v));
+    Unlock.track('carte_recherche', { d: c ? 'trouvee' : 'absente' });
     if (c) { showCity(c, true); e.target.value = ''; e.target.blur(); if (!mqFloat.matches) setPanel(false); }
     else Unlock.toast(`Aucune commune « ${e.target.value} » dans vos blocs.`);
   });
@@ -701,6 +709,7 @@
       return { code, name: c ? c.name : g.name, dep: d.name || '', stats: c ? c.stats : null, rank };
     }
     function select(code, poly, keepView) {
+      if (!keepView) Unlock.track('carte_commune', { d: 'departement' });
       selected = info(code);
       if (selLayer) layer.removeLayer(selLayer);
       selLayer = L.polygon(poly.getLatLngs(), { color: '#2A030B', weight: 3, fill: false, interactive: false }).addTo(layer);
@@ -798,8 +807,8 @@
       unselect(true); setMode('grid'); showCity(c, true); $('city-search').value = '';
     };
     $('ct-go').addEventListener('click', toBlocks); $('cc-go').addEventListener('click', toBlocks);
-    $('dep-select').addEventListener('change', (e) => show(e.target.value, true));
-    $('dep-rank').addEventListener('click', (e) => { const b = e.target.closest('[data-dep]'); if (b && b.dataset.dep !== cur) show(b.dataset.dep, true); });
+    $('dep-select').addEventListener('change', (e) => { Unlock.track('carte_departement', { d: 'liste' }); show(e.target.value, true); });
+    $('dep-rank').addEventListener('click', (e) => { const b = e.target.closest('[data-dep]'); if (b && b.dataset.dep !== cur) { Unlock.track('carte_departement', { d: 'classement' }); show(b.dataset.dep, true); } });
     $('dep-communes').addEventListener('click', (e) => {
       const b = e.target.closest('[data-code]'); if (!b || !geo) return;
       const c = geo.communes.find((x) => x.code === b.dataset.code); if (!c || !c._layer) return;
