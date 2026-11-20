@@ -429,6 +429,15 @@
   /* ---------- Progression dans une commune ---------- */
   const PR = { code: null, req: 0, chart: null };
   try { PR.code = localStorage.getItem('unlock.progCommune'); } catch (e) {}
+  // La case s'élargit selon le nom choisi (220 à 520 px), au lieu de couper un nom long
+  function fitProgSelect() {
+    const sel = $('p-select'); if (!sel || !sel.options.length) return;
+    const cs = getComputedStyle(sel), c = fitProgSelect.c || (fitProgSelect.c = document.createElement('canvas').getContext('2d'));
+    c.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const txt = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+    const need = Math.ceil(c.measureText(txt).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 4);
+    sel.closest('.cprog__pick').style.setProperty('--cprog-w', Math.max(220, Math.min(520, need)) + 'px');
+  }
   function fillProg() {
     const sel = $('p-select'), rows = T.rows.filter((r) => r.code);
     $('cprog').hidden = !rows.length;
@@ -437,9 +446,11 @@
     const list = [...rows].sort((a, b) => b.km - a.km);
     sel.innerHTML = list.map((r) => `<option value="${Unlock.esc(r.code)}">${Unlock.esc(r.name)}</option>`).join('');
     sel.value = list.some((r) => r.code === PR.code) ? PR.code : list[0].code;
+    fitProgSelect();
     loadProg();
   }
   async function loadProg() {
+    fitProgSelect();
     const code = $('p-select').value, req = ++PR.req;
     PR.code = code;
     const g = $('grid-select').value, y = $('year-select').value, s = $('sport-select').value;

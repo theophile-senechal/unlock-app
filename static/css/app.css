@@ -720,7 +720,7 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 .chart__box { position: relative; height: 240px; }
 .chart__box--sm { height: 200px; }
 /* ---------- Mes communes (Stats) ---------- */
-.communes { margin-top: 28px; }
+.communes { margin-top: 28px; margin-bottom: 14px; }   /* même écart que entre les autres encarts */
 .ctable { padding: 14px; }
 .ctable__tools { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; margin-bottom: 12px; }
 .ctable__search { flex: 1 1 200px; min-width: 0; }
@@ -866,7 +866,8 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
 ::-webkit-scrollbar-corner { background: transparent; }
 
 /* Stats : progression dans une commune */
-.cprog__pick { min-width: 0; width: 220px; max-width: 100%; }
+/* Largeur suivant le nom affiché (de 220 à 520 px) : « Montrichard Val de Cher » tient en entier */
+.cprog__pick { min-width: 0; width: var(--cprog-w, 220px); max-width: 100%; }
 .cprog__pick .select { width: 100%; text-overflow: ellipsis; }
 .cprog__kpi { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: -4px 0 12px; min-height: 30px; }
 .cprog__kpi b { font-size: 26px; font-weight: 800; letter-spacing: -.02em; color: var(--brand); }
