@@ -519,7 +519,7 @@
     let geo = depGeo[d.code];
     if (!geo) {
       stageBusy(true, 'Chargement du département', name);
-      try { geo = depGeo[d.code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(d.code)}/geo`); }
+      try { geo = depGeo[d.code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(d.code)}/geo?v=2`); }
       catch (e) { if (e.message !== 'auth') Unlock.toast('Contours du département indisponibles pour le moment.'); return; }
       finally { stageBusy(false); }
       if (kind !== 'dep' || depCode !== d.code) return;

@@ -634,7 +634,7 @@
     async function getGeo(code) {
       if (geoCache[code]) return geoCache[code];
       Unlock.busy.on('Chargement du département', (deps().find((d) => d.code === code) || {}).name || code, { veil: false });
-      try { geoCache[code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(code)}/geo`); }
+      try { geoCache[code] = await Unlock.getJSON(`/api/departement/${encodeURIComponent(code)}/geo?v=2`); }
       finally { Unlock.busy.off(); }
       return geoCache[code];
     }

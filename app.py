@@ -60,7 +60,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.19'
+ASSET_VERSION = '2026.11.20b'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -1179,6 +1179,31 @@ def _rings_latlon(geojson):
     polys = g['coordinates'] if g['type'] == 'MultiPolygon' else [g['coordinates']] if g['type'] == 'Polygon' else []
     return [[[[round(y, 5), round(x, 5)] for x, y in ring] for ring in poly] for poly in polys]
 
+def _outline_safe(geojson):
+    if not geojson: return []
+    try:
+        clean = _clean_outline(geojson)
+        return _rings_latlon(clean) if clean else _rings_latlon(geojson)
+    except Exception as e:
+        print(f"Nettoyage du contour impossible : {e}")
+        return _rings_latlon(geojson)
+
+def _clean_outline(geojson):
+    """Contour du département sans les « fentes » entre communes.
+    L'union des communes laisse de minuscules trous là où deux contours ne se touchent pas parfaitement :
+    dessinés, ils faisaient des petits traits gris à l'intérieur du département. On referme ces fentes
+    (dilatation puis érosion de 30 m), puis on ne garde que les vrais trous (> 0,8 km², enclaves) et les vraies îles."""
+    g = shp_shape(json.loads(geojson) if isinstance(geojson, str) else geojson)
+    eps = 0.0003
+    g = g.buffer(eps, join_style=2).buffer(-eps, join_style=2)
+    parts = list(g.geoms) if g.geom_type == 'MultiPolygon' else [g] if g.geom_type == 'Polygon' else []
+    keep = []
+    for p in parts:
+        if p.is_empty or p.area < 1e-5: continue
+        holes = [r for r in p.interiors if Polygon(r).area >= 1e-4]
+        keep.append(Polygon(p.exterior, holes).simplify(0.0004, preserve_topology=True))
+    return shapely.geometry.mapping(shapely.geometry.MultiPolygon(keep)) if keep else None
+
 @app.route('/api/departement/<dep>/geo')
 def departement_geo(dep):
     """Contours simplifiés de toutes les communes d'un département. Donnée publique (geo.api.gouv.fr) :
@@ -1200,7 +1225,7 @@ def departement_geo(dep):
             return jsonify({"error": "Contours indisponibles"}), 500
         _DEP_GEO[dep] = {"code": dep, "name": DEPARTEMENTS[dep],
                          "communes": [{"code": r.code_insee, "name": r.nom_commune, "shape": _rings_latlon(r.g)} for r in rows if r.g],
-                         "outline": _rings_latlon(outline) if outline else []}
+                         "outline": _outline_safe(outline)}
     resp = make_response(jsonify(_DEP_GEO[dep]))
     resp.headers['Cache-Control'] = 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400'
     return resp

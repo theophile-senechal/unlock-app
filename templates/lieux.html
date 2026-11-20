@@ -7,8 +7,9 @@
   /* En-tête : recherche de commune + département */
   .lx-pick { display: grid; gap: 10px; width: 100%; grid-template-columns: minmax(0, 1fr); }
   @media (min-width: 640px) { .lx-pick { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); } }
-  @media (min-width: 1024px) { .lx-pick { width: auto; grid-template-columns: 300px 230px; } }
+  @media (min-width: 1024px) { .lx-pick { width: auto; grid-template-columns: 300px 300px; } }
   .lx-pick .field { min-width: 0; }
+  .lx-pick .select { text-overflow: ellipsis; }
   .lx-pick .input, .lx-pick .select { font-size: 16px; }
   @media (min-width: 768px) { .lx-pick .input, .lx-pick .select { font-size: var(--fs-md); } }
   .lx-combo { position: relative; }
@@ -271,7 +272,8 @@
     const byNum = (list) => [...list].sort((a, b) => depKey(a.code) - depKey(b.code));
     const opt = (r, txt) => `<option value="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)}${txt}</option>`;
     const autres = byNum((d.tous || []).filter((r) => !mine.has(r.code)));
-    $('dep-select').innerHTML = (d.departements.length ? `<optgroup label="Vos départements">${byNum(d.departements).map((r) => opt(r, ` · ${fmt(r.collected)}/${fmt(r.total)}`)).join('')}</optgroup>` : '')
+    // Sans le compteur : il est déjà affiché juste en dessous, et la case resterait trop étroite pour tout montrer
+    $('dep-select').innerHTML = (d.departements.length ? `<optgroup label="Vos départements">${byNum(d.departements).map((r) => opt(r, '')).join('')}</optgroup>` : '')
       + (autres.length ? `<optgroup label="Autres départements">${autres.map((r) => opt(r, '')).join('')}</optgroup>` : '');
     $('dep-field').hidden = (d.departements.length + autres.length) < 2;
     if (d.absent) Unlock.toast(`Les lieux de ${d.absent.name} ne sont pas encore calculés. Ils arriveront avec la mise à jour mensuelle.`);
