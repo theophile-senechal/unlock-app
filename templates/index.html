@@ -202,7 +202,7 @@
   </div>
 </div>
 
-{% if sync_state == 'first' %}{{ ui.loader("Connexion à Strava…", "La première connexion peut prendre quelques minutes, le temps de lire tout votre historique.") }}
+{% if sync_state == 'first' %}{{ ui.loader("Connexion à Strava…", "La première connexion peut prendre une minute, le temps de lire vos sorties récentes. Les plus anciennes arrivent ensuite.") }}
 {% elif sync_state == 'refresh' %}{{ ui.loader("Mise à jour de vos activités…", "Après quelques jours d'absence, on relit votre historique Strava. Ça peut prendre une minute ou deux.") }}
 {% else %}{{ ui.loader("Chargement de votre carte…") }}{% endif %}
 {% endblock %}
@@ -653,10 +653,13 @@
       $('ds-visited').textContent = Unlock.fmt(d.visited); $('ds-total').textContent = '/' + Unlock.fmt(d.total);
       $('ds-pct').textContent = pctTxt(d.percent); $('ds-100').textContent = Unlock.fmt(d.at100); $('ds-50').textContent = Unlock.fmt(d.over50);
       const sel = $('dep-select'); sel.innerHTML = '';
-      deps().forEach((x) => sel.add(new Option(`${x.name} (${x.code})`, x.code)));
+      // Liste complète rangée par numéro (2A et 2B entre 19 et 21, outre-mer à la fin), le top 5 garde l'ordre du %
+      const depKey = (c) => (c === '2A' ? 20.1 : c === '2B' ? 20.2 : parseFloat(c) || 999);
+      [...deps()].sort((a, b) => depKey(a.code) - depKey(b.code))
+        .forEach((x) => sel.add(new Option(`${x.code} · ${x.name} · ${pctTxt(x.percent)}`, x.code)));
       sel.value = cur;
       // Top 5 départements
-      $('dep-rank').innerHTML = deps().slice(0, 5).map((x, i) => `<li><button type="button" class="rank__item" data-dep="${Unlock.esc(x.code)}" aria-current="${x.code === cur}">
+      $('dep-rank').innerHTML = [...deps()].sort((a, b) => b.percent - a.percent || b.visited - a.visited).slice(0, 5).map((x, i) => `<li><button type="button" class="rank__item" data-dep="${Unlock.esc(x.code)}" aria-current="${x.code === cur}">
         <span class="rank__pos">${i + 1}</span><span class="rank__name">${Unlock.esc(x.name)}<small class="rank__sub">${Unlock.esc(x.code)} · ${Unlock.fmt(x.visited)}/${Unlock.fmt(x.total)} communes</small></span>
         <span class="rank__val rank__val--big">${pctTxt(x.percent)}</span></button></li>`).join('');
       // Top 5 communes du département
@@ -846,6 +849,8 @@
   mqFloat.addEventListener('change', () => { setPanel(mqFloat.matches); map.invalidateSize(); });
   window.addEventListener('resize', () => map.invalidateSize());
   if (mqFloat.matches) setPanel(true);
+  // Historique ancien chargé en arrière-plan : la page se recalcule avec toutes les sorties
+  Unlock.onHistory = () => load();
   load();
 })();
 </script>

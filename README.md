@@ -43,6 +43,8 @@ Les anciens fichiers HTML à la racine (versions plus récentes que celles de `t
 
 Voir `.env.example`. Nouvelles : `SITE_OWNER`, `ENABLE_LEADERBOARD` (false par défaut).
 
+`SECRET_KEY` est obligatoire en ligne : sur Vercel, l'appli refuse de démarrer si elle manque, fait moins de 16 caractères ou vaut la clé de développement. `CRON_SECRET` doit être défini, sinon le nettoyage quotidien répond 401.
+
 ## Conformité Strava (API Policy du 1er juin 2026)
 
 - **Classement désactivé** : il affichait les noms et scores d'autres athlètes (§2.3), agrégeait les données de plusieurs utilisateurs (§5.4) et stockait durablement des données géographiques dérivées (§5.7, §6.2). Les routes `/leaderboard` et `/api/*leaderboard` renvoient 404 et la table `city_scores` n'est plus alimentée. Le nom de l'athlète n'est plus enregistré.
@@ -85,6 +87,15 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Historique long, lieux en bulles, départements par numéro (v57)** :
+  - La carte s'affiche avec les 2 000 activités les plus récentes (10 pages Strava), puis le reste de l'historique est lu en arrière-plan par `POST /api/historique`, 3 pages par appel (environ 3 s, sous la limite de temps de Vercel). Progression dans un message en bas d'écran, recalcul de la carte et des stats à la fin (`Unlock.onHistory`).
+  - Le quota Strava est ménagé : pause au-delà de 60 % du quota du quart d'heure ou de 70 % de celui du jour (derniers en-têtes `X-ReadRateLimit`), reprise à la page suivante. Les synchros récentes passent toujours avant. Plafond de 10 000 activités par personne (stockage).
+  - Règle des 47 h inchangée : à chaque relecture complète, l'ancien historique est effacé puis relu de la même façon. Il n'est jamais gardé plus de 47 h.
+  - Nouvelle colonne `strava_users.hist_before` (migration `2026-11-19_historique.sql`). Sans elle, l'appli fonctionne comme avant (2 000 activités).
+  - Lieux : les lieux proches se regroupent en bulles (nombre au centre, anneau bordeaux = part débloquée). Deux bulles ou points qui se toucheraient fusionnent : aucune superposition. Chaque lieu est seul à partir du zoom 17. Un clic sur une bulle zoome dessus.
+  - Liste « Changer » des départements (carte et lieux) rangée par numéro (2A et 2B entre 19 et 21, outre-mer à la fin), avec le %. Le top 5 reste classé par %.
+  - Messages en bas d'écran : largeur adaptée au texte (ils ne se tassaient plus en colonne étroite) et jamais sous les boutons de zoom de la carte.
+- **Sécurité (v56)** : déconnexion uniquement par formulaire avec jeton CSRF (un lien vers `/logout` posé sur un autre site ne fait plus rien), `state` Strava obligatoire au retour de connexion, redirections `next=` limitées aux adresses internes (`_safe_next`, refuse `//`, `\` et les caractères de contrôle), jeton CSRF jamais vide (`_csrf_ok`, comparaison à temps constant), cron refusé si `CRON_SECRET` manque, en-têtes de sécurité sur toutes les réponses (CSP, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`, HSTS), démarrage bloqué sur Vercel sans vraie `SECRET_KEY`.
 - **Mesure d'usage** (section 21 de `app.py`, `static/js/track.js`, page `/admin/usage`) : pages vues, temps actif (onglet visible, interaction dans la dernière minute), sessions (30 min sans activité), appareil, système, navigateur, PWA ou site, temps d'affichage, erreurs, site d'origine à la première visite, actions clés (story téléchargée ou partagée, installation, export, timelapse, jeu…). Aucune donnée Strava. L'admin (`ADMIN_ATHLETE_IDS`) n'est jamais mesuré et il est aussi retiré des chiffres du tableau de bord existant (sauf des places Strava occupées). Envoi groupé toutes les 15 s, au clic sur un lien interne et à la fermeture (`/api/u`). Stockage : événements bruts 90 jours, résumés par session, par jour et par personne 25 mois, premières fois. À la déconnexion, la suppression ou l'inactivité, l'historique est détaché du compte (identifiant aléatoire négatif) pour garder les courbes de rétention. Refus possible sur la page Confidentialité (tout est effacé). Inclus dans « Télécharger mes chiffres » (`mon_usage.csv`). Désactivable en entier avec `USAGE_TRACKING=false`.
 - **Story : bouton « Partager »** (feuille de partage du téléphone ou de l'ordinateur, avec l'image), affiché seulement si le navigateur sait partager un fichier. « Télécharger » reste à côté.
 - **Navigation PC refaite** (≥ 1024 px, `app.css`) : onglets soulignés centrés dans la barre du haut, page active en bordeaux avec un trait en bas, logo à gauche et menu à droite sans chevauchement. Téléphone et tablette inchangés.

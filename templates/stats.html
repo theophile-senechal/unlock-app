@@ -562,6 +562,8 @@
   ['grid-select', 'year-select', 'sport-select'].forEach((id) => $(id).addEventListener('change', () => {
     Unlock.track('stats_filtre', { d: { 'grid-select': 'blocs', 'year-select': 'annee', 'sport-select': 'sport' }[id] }); load();
   }));
+  // Historique ancien chargé en arrière-plan : la page se recalcule avec toutes les sorties
+  Unlock.onHistory = () => load();
   load();
 })();
 </script>

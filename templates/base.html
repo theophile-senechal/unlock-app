@@ -109,7 +109,7 @@
     </div>
     <div class="menu-col">
     <ul class="menu-group">
-      <li><a class="menu-item" href="/logout" data-track="deconnexion_clic">{{ icon('logout') }}<span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span>{{ icon('chev', 'i menu-item__chev') }}</a></li>
+      <li><form class="menu-form" method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf_token }}"><button type="submit" class="menu-item" data-track="deconnexion_clic">{{ icon('logout') }}<span>Se déconnecter<small>Révoque l'accès Strava sur cet appareil</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></form></li>
       <li><button type="button" class="menu-item menu-item--danger" data-sheet-open="sheet-delete">{{ icon('trash') }}<span>Supprimer mes données<small>Déconnecte Strava et efface tout</small></span>{{ icon('chev', 'i menu-item__chev') }}</button></li>
     </ul>
     <div class="menu-foot">{{ ui.footer_links() }}{{ ui.strava_powered() }}</div>
@@ -150,7 +150,7 @@
           <span>J'ai lu et j'accepte les <a href="/cgu" target="_blank" rel="noopener">conditions d'utilisation</a> et la <a href="/confidentialite" target="_blank" rel="noopener">politique de confidentialité</a>.</span>
         </label>
         <button type="submit" class="btn btn--primary btn--block" autofocus>Accepter et continuer</button>
-        <a class="btn btn--ghost btn--block" href="/logout">Refuser et me déconnecter</a>
+        <button type="submit" class="btn btn--ghost btn--block" formaction="/logout" formnovalidate>Refuser et me déconnecter</button>
       </form>
     </div>
   </div>
@@ -215,7 +215,7 @@
 </div>
 
 <script>window.UNLOCK_ICONS = {{ icons_json | safe }};</script>
-<script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key, 'sync': sync_state} | tojson }};</script>
+<script>window.UNLOCK_CONFIG = {{ {'cartoKey': carto_key, 'sync': sync_state, 'hist': hist_pending, 'csrf': csrf_token if session_user else ''} | tojson }};</script>
 {% if suivi %}<script>window.UNLOCK_TRACK = {{ {'csrf': csrf_token} | tojson }};</script>{% endif %}
 <script src="{{ url_for('static', filename='js/app.js') }}?v={{ asset_v }}"></script>
 {% if suivi %}<script src="{{ url_for('static', filename='js/track.js') }}?v={{ asset_v }}"></script>{% endif %}

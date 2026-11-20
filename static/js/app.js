@@ -59,8 +59,52 @@
     const res = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } });
     if (res.status === 401) { window.location.href = '/login'; throw new Error('auth'); }
     if (!res.ok) throw new Error('HTTP ' + res.status);
+    // Première synchro avec un long historique : la suite se lit en arrière-plan une fois la page affichée
+    if (res.headers.get('X-Unlock-Historique') === '1') setTimeout(() => U.history.start(), 1500);
     return res.json();
   };
+
+  /* ---------------- Historique ancien, lu par morceaux ----------------
+     La carte s'affiche avec les 2 000 activités les plus récentes. Le reste arrive ensuite, quelques secondes
+     par morceau, tant que le quota Strava le permet (sinon, reprise à la page suivante).
+     Une page peut définir Unlock.onHistory() pour recharger ses données à la fin. */
+  U.history = (function () {
+    let running = false;
+    const LOCK = 'u.hist', wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const locked = () => { try { return Date.now() - (+localStorage.getItem(LOCK) || 0) < 20000; } catch (e) { return false; } };
+    const lock = (on) => { try { on ? localStorage.setItem(LOCK, String(Date.now())) : localStorage.removeItem(LOCK); } catch (e) {} };
+    async function step() {
+      const res = await fetch('/api/historique', { method: 'POST', credentials: 'same-origin',
+        headers: { Accept: 'application/json', 'X-CSRF': (window.UNLOCK_CONFIG || {}).csrf || '' } });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    }
+    async function start() {
+      if (running || locked() || !(window.UNLOCK_CONFIG || {}).csrf) return;
+      running = true; lock(true);
+      let added = 0, announced = false;
+      try {
+        for (let i = 0; i < 40; i++) {
+          const r = await step(); lock(true);
+          if (r.paused) { if (added) U.track('historique', { d: 'pause', v: added }); break; }
+          added += r.added || 0;
+          if (r.done) {
+            if (added) {
+              U.toast(r.capped ? 'Historique chargé, vos 10\u00a0000 sorties les plus récentes' : 'Tout votre historique est chargé', 'check');
+              U.track('historique', { d: r.capped ? 'plafond' : 'complet', v: added });
+              if (typeof U.onHistory === 'function') U.onHistory();
+            }
+            break;
+          }
+          U.toast(r.jusqu_a ? `Historique chargé jusqu\u2019à ${r.jusqu_a}` : 'Chargement de votre historique…', 'clock', 9000);
+          if (!announced) { announced = true; U.track('historique', { d: 'debut' }); }
+          await wait(900);
+        }
+      } catch (e) { /* réseau ou serveur : on reprendra à la prochaine page */ }
+      running = false; lock(false);
+    }
+    return { start };
+  })();
 
   /* ---------------- Full-screen loader ---------------- */
   const loader = () => document.getElementById('loader');
@@ -70,8 +114,8 @@
   U.sync = (window.UNLOCK_CONFIG || {}).sync || 'fast';
   const PATIENCE = {
     first: [
-      [15000, 'Encore un peu de patience. La première connexion lit tout votre historique Strava.'],
-      [45000, 'Ça peut prendre quelques minutes si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées.'],
+      [15000, 'Encore un peu de patience. La première connexion lit vos sorties Strava récentes.'],
+      [45000, 'Ça peut prendre un moment si vous avez beaucoup de sorties. Les prochaines ouvertures seront quasi instantanées.'],
       [120000, 'Toujours en cours… Merci pour votre patience. Ne fermez pas la page.']
     ],
     refresh: [
@@ -139,12 +183,12 @@
   /* ---------------- Toast ---------------- */
   let toastTimer = null;
   /* Message bref en bas de l'écran. `icon` (facultatif) : nom d'une icône du jeu Unlock, affichée devant le texte. */
-  U.toast = function (text, icon) {
+  U.toast = function (text, icon, ms) {
     let t = document.getElementById('toast');
     if (!t) { t = document.createElement('div'); t.id = 'toast'; t.className = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
     t.innerHTML = (icon && (window.UNLOCK_ICONS || {})[icon] ? U.icon(icon, 'i toast__i') : '') + `<span>${U.esc(text)}</span>`;
     t.classList.add('is-on');
-    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('is-on'), 3200);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('is-on'), ms || 3200);
   };
 
   /* ---------------- Sheets ---------------- */
@@ -266,5 +310,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     refreshInstallButtons();
     if (isStandalone()) document.documentElement.classList.add('is-standalone');
+    // Historique ancien encore à lire (connexion précédente interrompue, ou pause pour le quota) : on reprend
+    if ((window.UNLOCK_CONFIG || {}).hist) setTimeout(() => U.history.start(), 2500);
   });
 })();

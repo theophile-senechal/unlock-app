@@ -84,6 +84,15 @@
   .lx-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
   .lx-dot-on { background: #6D071A; border: 2px solid #fff; box-shadow: 0 0 0 1px #6D071A; }
   .lx-dot-off { background: #fff; border: 2px solid #9A95A0; }
+  .lx-dot-bub { background: #fff; border: 2px solid var(--brand-100); box-shadow: inset 0 0 0 2px var(--brand); width: 12px !important; height: 12px !important; vertical-align: -2px !important; }
+  /* Bulle de lieux : anneau bordeaux = part débloquée, nombre au centre */
+  .lx-bub-wrap { background: none; border: 0; }
+  .lx-bub { width: 100%; height: 100%; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    background: conic-gradient(var(--brand) var(--p), var(--brand-100) 0); box-shadow: 0 1px 2px rgba(24, 22, 27, .10), 0 4px 12px -4px rgba(74, 4, 18, .30); }
+  .lx-bub span { width: calc(100% - 8px); height: calc(100% - 8px); border-radius: 50%; background: #fff; display: grid; place-items: center;
+    font-family: var(--font-display); font-weight: 800; font-size: 13px; line-height: 1; letter-spacing: -.03em; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .lx-bub--xl span { font-size: 12px; letter-spacing: -.05em; }
+  .lx-bub:hover span { background: var(--brand-50); }
 
   .lx-list { display: flex; flex-direction: column; min-height: 0; padding: 14px 14px 10px; }
   .lx-tools { display: grid; gap: 10px; margin-bottom: 8px; }
@@ -181,7 +190,7 @@
           <section class="surface lx-map" aria-label="Carte des lieux">
             <div id="map"></div>
             <div class="lx-card" id="lx-card" role="dialog" aria-label="Fiche du lieu" aria-hidden="true"></div>
-            <div class="lx-legend" aria-hidden="true"><span><i class="lx-dot-on"></i>Débloqué</span><span><i class="lx-dot-off"></i>À découvrir</span></div>
+            <div class="lx-legend" aria-hidden="true"><span><i class="lx-dot-on"></i>Débloqué</span><span><i class="lx-dot-off"></i>À découvrir</span><span><i class="lx-dot-bub"></i>Groupe</span></div>
           </section>
 
           <section class="surface lx-list" aria-label="Liste des lieux">
@@ -221,7 +230,7 @@
                   vue: 'Points de vue', cascade: 'Cascades', jardin: 'Jardins', sommet: 'Sommets' };
   // Colonnes d'un lieu : [id, lat, lon, catégorie, monument historique, nom, insee, wiki, date de 1re visite]
   const ID = 0, LAT = 1, LON = 2, CAT = 3, MH = 4, NOM = 5, INSEE = 6, WIKI = 7, DATE = 8;
-  const S = { data: null, dep: null, com: null, cat: 'all', tab: 'on', q: '', limit: 40, markers: {}, first: true, outline: null };
+  const S = { data: null, dep: null, com: null, cat: 'all', tab: 'on', q: '', limit: 40, first: true, outline: null };
   try { S.dep = localStorage.getItem('unlock.lieuxDep'); } catch (e) {}
 
   const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[-'’]/g, ' ');
@@ -238,6 +247,7 @@
   L.control.zoom({ position: 'topright' }).addTo(map);
   Unlock.baseLayer(map);
   const layerOutline = L.layerGroup().addTo(map), layerOff = L.layerGroup().addTo(map), layerOn = L.layerGroup().addTo(map);
+  const layerBub = L.layerGroup().addTo(map);
   // Lieu choisi : anneau autour du point, fiche en bas de la carte
   const halo = L.circleMarker([0, 0], { renderer, radius: 13, color: BRAND, weight: 3, fill: false, interactive: false });
   map.on('click', () => closeCard());
@@ -256,9 +266,12 @@
     const d = S.data;
     // Département : les vôtres d'abord (avec vos lieux débloqués), puis tous les autres déjà calculés
     const mine = new Set(d.departements.map((r) => r.code));
-    const opt = (r, txt) => `<option value="${esc(r.code)}">${esc(r.name)} (${esc(r.code)})${txt}</option>`;
-    const autres = (d.tous || []).filter((r) => !mine.has(r.code));
-    $('dep-select').innerHTML = (d.departements.length ? `<optgroup label="Vos départements">${d.departements.map((r) => opt(r, ` · ${fmt(r.collected)}/${fmt(r.total)}`)).join('')}</optgroup>` : '')
+    // Rangés par numéro, comme sur la carte (2A et 2B entre 19 et 21, outre-mer à la fin)
+    const depKey = (c) => (c === '2A' ? 20.1 : c === '2B' ? 20.2 : parseFloat(c) || 999);
+    const byNum = (list) => [...list].sort((a, b) => depKey(a.code) - depKey(b.code));
+    const opt = (r, txt) => `<option value="${esc(r.code)}">${esc(r.code)} · ${esc(r.name)}${txt}</option>`;
+    const autres = byNum((d.tous || []).filter((r) => !mine.has(r.code)));
+    $('dep-select').innerHTML = (d.departements.length ? `<optgroup label="Vos départements">${byNum(d.departements).map((r) => opt(r, ` · ${fmt(r.collected)}/${fmt(r.total)}`)).join('')}</optgroup>` : '')
       + (autres.length ? `<optgroup label="Autres départements">${autres.map((r) => opt(r, '')).join('')}</optgroup>` : '');
     $('dep-field').hidden = (d.departements.length + autres.length) < 2;
     if (d.absent) Unlock.toast(`Les lieux de ${d.absent.name} ne sont pas encore calculés. Ils arriveront avec la mise à jour mensuelle.`);
@@ -374,7 +387,8 @@
     card.className = 'lx-card is-open ' + (l[DATE] ? 'is-on' : 'is-off');
     card.innerHTML = cardHtml(l); card.setAttribute('aria-hidden', 'false');
     halo.setLatLng([l[LAT], l[LON]]).addTo(map);
-    const z = zoomIn ? Math.max(map.getZoom(), 15) : map.getZoom();
+    // Lieu caché dans une bulle : zoom assez près pour qu'il redevienne un point seul
+    const z = zoomIn ? Math.max(map.getZoom(), S.singles.has(l[ID]) ? 15 : NOCLUSTER_Z) : map.getZoom();
     const size = map.getSize(), reserve = card.offsetHeight + 34;          // hauteur de la fiche + marge
     const pt = map.project([l[LAT], l[LON]], z);
     const visible = pt.subtract(map.project(map.getCenter(), z)).add(size.divideBy(2));
@@ -392,19 +406,80 @@
   card.addEventListener('click', (e) => { if (e.target.closest('#lx-card-close')) closeCard(); });
   L.DomEvent.disableClickPropagation(card); L.DomEvent.disableScrollPropagation(card);
 
+  /* ---------- Bulles : les lieux proches se regroupent, sans jamais se chevaucher ----------
+     Un groupe = une bulle avec le nombre de lieux ; l'anneau bordeaux montre la part déjà débloquée.
+     Deux éléments (bulle ou point) dont les cercles se toucheraient sont fusionnés, jusqu'à ce qu'il n'y en ait plus.
+     À partir du zoom 17 (échelle de la rue), chaque lieu est affiché seul. */
+  const NOCLUSTER_Z = 17, CELL = 60, GAP = 4, DOT_R = 9, MERGE = 52;
+  const bubR = (n) => (n < 10 ? 15 : n < 100 ? 18 : n < 1000 ? 21 : 24);
+  const MAX_NEED = Math.max(2 * bubR(1000) + GAP, MERGE);
+  S.items = []; S.singles = new Set();
+  function groups(items, z) {
+    if (z >= NOCLUSTER_Z) return items.map((l) => { const p = map.project([l[LAT], l[LON]], z); return { x: p.x, y: p.y, m: [l] }; });
+    const grid = new Map();
+    for (const l of items) {
+      const p = map.project([l[LAT], l[LON]], z), k = Math.floor(p.x / CELL) + ':' + Math.floor(p.y / CELL);
+      let c = grid.get(k); if (!c) grid.set(k, (c = { x: 0, y: 0, m: [] }));
+      c.x += p.x; c.y += p.y; c.m.push(l);
+    }
+    let cs = [...grid.values()].map((c) => ({ x: c.x / c.m.length, y: c.y / c.m.length, m: c.m }));
+    const rad = (c) => (c.m.length > 1 ? bubR(c.m.length) : DOT_R);
+    for (let merged = true, pass = 0; merged && pass < 500; pass++) {
+      merged = false;
+      cs.sort((a, b) => a.x - b.x);
+      for (let i = 0; i < cs.length; i++) {
+        for (let j = i + 1; j < cs.length; j++) {
+          const a = cs[i], b = cs[j];
+          if (b.x - a.x > MAX_NEED) break;               // rangés par x : au-delà, plus rien ne peut toucher
+          const need = Math.max(rad(a) + rad(b) + GAP, MERGE);   // MERGE : évite les grappes collées le long de la grille
+          if ((a.x - b.x) ** 2 + (a.y - b.y) ** 2 < need * need) {
+            const n = a.m.length + b.m.length;
+            cs[i] = { x: (a.x * a.m.length + b.x * b.m.length) / n, y: (a.y * a.m.length + b.y * b.m.length) / n, m: a.m.concat(b.m) };
+            cs.splice(j, 1); j = i; merged = true;       // le groupe a grandi : on revérifie ses voisins
+          }
+        }
+      }
+    }
+    return cs;
+  }
+  function drawGroups() {
+    layerOn.clearLayers(); layerOff.clearLayers(); layerBub.clearLayers(); S.singles = new Set();
+    const z = map.getZoom();
+    for (const g of groups(S.items, z)) {
+      if (g.m.length === 1) {
+        const l = g.m[0];
+        const m = l[DATE]
+          ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1, bubblingMouseEvents: false })
+          : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1, bubblingMouseEvents: false });
+        m.on('click', (e) => { L.DomEvent.stop(e); Unlock.track('lieux_fiche', { d: 'carte' }); select(l, false); });
+        (l[DATE] ? layerOn : layerOff).addLayer(m);
+        S.singles.add(l[ID]);
+        continue;
+      }
+      const n = g.m.length, on = g.m.filter((l) => l[DATE]).length, r = bubR(n);
+      const icon = L.divIcon({ className: 'lx-bub-wrap', iconSize: [2 * r, 2 * r],
+        html: `<div class="lx-bub${n >= 1000 ? ' lx-bub--xl' : ''}" style="--p:${Math.round(on / n * 100)}%"><span>${fmt(n)}</span></div>` });
+      const mk = L.marker(map.unproject([g.x, g.y], z), { icon, title: `${fmt(n)} lieux, dont ${fmt(on)} ${plural(on, 'débloqué', 'débloqués')}`, alt: `${fmt(n)} lieux` });
+      mk.on('click', (e) => {
+        L.DomEvent.stop(e);
+        const b = L.latLngBounds(g.m.map((l) => [l[LAT], l[LON]]));
+        const zz = Math.min(NOCLUSTER_Z, Math.max(z + 1, map.getBoundsZoom(b.pad(.2))));
+        Unlock.track('lieux_bulle', { v: n });
+        map.flyTo(b.getCenter(), zz, { duration: .5 });
+      });
+      layerBub.addLayer(mk);
+    }
+    // Lieu choisi absorbé par une bulle après un dézoom : la fiche se ferme
+    if (S.sel && !S.singles.has(S.sel)) closeCard();
+  }
+  map.on('zoomend', () => { if (S.data && S.data.dep) drawGroups(); });
+
   // Tous les lieux du département restent sur la carte ; la commune choisie est entourée
   function drawMarkers(fit) {
     closeCard();
-    layerOn.clearLayers(); layerOff.clearLayers(); S.markers = {};
-    const all = S.data.dep.lieux, xs = S.cat === 'all' ? all : all.filter((l) => l[CAT] === S.cat);
-    for (const l of xs) {
-      const m = l[DATE]
-        ? L.circleMarker([l[LAT], l[LON]], { renderer, radius: 7, color: '#fff', weight: 2, fillColor: BRAND, fillOpacity: 1, bubblingMouseEvents: false })
-        : L.circleMarker([l[LAT], l[LON]], { renderer, radius: 5, color: '#9A95A0', weight: 2, fillColor: '#fff', fillOpacity: 1, bubblingMouseEvents: false });
-      m.on('click', (e) => { L.DomEvent.stop(e); Unlock.track('lieux_fiche', { d: 'carte' }); select(l, false); });
-      (l[DATE] ? layerOn : layerOff).addLayer(m);
-      S.markers[l[ID]] = m;
-    }
+    const all = S.data.dep.lieux;
+    S.items = S.cat === 'all' ? all : all.filter((l) => l[CAT] === S.cat);
+    drawGroups();
     if (!fit) return;
     if (S.com && S.data.commune && S.data.commune.code === S.com) {
       const [s, w, n, e] = S.data.commune.bbox;
@@ -480,7 +555,7 @@
   $('items').addEventListener('click', (e) => {
     if (e.target.closest('#lx-more')) { S.limit += 40; renderList(); return; }
     const b = e.target.closest('.lx-item'); if (!b) return;
-    const m = S.markers[b.dataset.id]; if (!m) return;
+    if (!S.items.some((x) => x[ID] === b.dataset.id)) return;
     if (window.matchMedia('(max-width: 1023px)').matches) document.querySelector('.lx-map').scrollIntoView({ behavior: 'smooth', block: 'center' });
     const l = S.data.dep.lieux.find((x) => x[ID] === b.dataset.id);
     if (l) { Unlock.track('lieux_fiche', { d: 'liste' }); select(l, true); }

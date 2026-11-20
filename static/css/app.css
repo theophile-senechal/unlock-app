@@ -347,6 +347,7 @@ p { margin: 0; }
   border: 0; background: transparent; text-align: left; text-decoration: none;
   font-weight: 650; color: var(--ink); transition: background .15s;
 }
+.menu-form { margin: 0; }
 .menu-item:hover { background: var(--surface); }
 .menu-item:focus-visible { outline-offset: -2px; }
 .menu-item > span { flex: 1; min-width: 0; }
@@ -373,17 +374,19 @@ p { margin: 0; }
 /* Toast */
 .toast {
   position: fixed; left: 50%; bottom: calc(var(--bottomnav-h) + var(--safe-b) + 16px); z-index: 4000;
-  transform: translate(-50%, 20px); opacity: 0; pointer-events: none; max-width: calc(100% - 32px);
+  transform: translate(-50%, 20px); opacity: 0; pointer-events: none; width: max-content; max-width: calc(100% - 32px);
   padding: 12px 16px; border-radius: var(--r-md); background: var(--ink); color: #fff; font-weight: 600; font-size: var(--fs-sm);
   box-shadow: var(--shadow-float); transition: opacity .2s, transform .3s var(--ease);
   display: flex; align-items: center; gap: 10px;
 }
 .toast__i { width: 18px; height: 18px; opacity: .8; }
+.toast span { text-wrap: balance; }
 .toast.is-on { opacity: 1; transform: translate(-50%, 0); }
 @media (min-width: 1024px) { .toast { bottom: 24px; } }
 /* Carte sur mobile : le panneau occupe le bas, le message s'affiche sous la barre des modes */
-@media (min-width: 768px) { html:has(.mapview) .toast { left: calc(50% + 178px); max-width: calc(100% - 388px); } }
-@media (min-width: 1024px) { html:has(.mapview) .toast { left: calc(50% + 188px); max-width: calc(100% - 408px); } }
+/* Centré sur la carte, sans toucher les boutons de zoom à droite (60 px gardés de chaque côté) */
+@media (min-width: 768px) { html:has(.mapview) .toast { left: calc(50% + 178px); max-width: calc(100% - 508px); } }
+@media (min-width: 1024px) { html:has(.mapview) .toast { left: calc(50% + 188px); max-width: calc(100% - 528px); } }
 @media (max-width: 767px) { html:has(.mapview) .toast { bottom: auto; top: calc(var(--topbar-h, 60px) + var(--safe-t, 0px) + 74px); transform: translate(-50%, -12px); } html:has(.mapview) .toast.is-on { transform: translate(-50%, 0); } }
 
 /* =====================================================================

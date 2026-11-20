@@ -6,7 +6,7 @@ import requests
 from urllib.parse import urlencode
 import polyline
 import json
-from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response, has_request_context
+from flask import Flask, redirect, request, jsonify, session, render_template, url_for, send_from_directory, abort, make_response, has_request_context, g
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 import math
@@ -30,7 +30,12 @@ load_dotenv()
 app = Flask(__name__)
 app.jinja_env.globals['icon'] = icons.icon
 ICONS_JSON = json.dumps(icons.ICONS, separators=(',', ':'))
-app.secret_key = os.getenv('SECRET_KEY', 'dev_secret_key_123')
+# Clé de signature des cookies de session. En ligne (Vercel), l'appli refuse de démarrer sans une vraie clé :
+# avec la clé par défaut, n'importe qui pourrait fabriquer un cookie (et se faire passer pour l'admin).
+_SECRET = os.getenv('SECRET_KEY', '').strip()
+if os.getenv('VERCEL') and (len(_SECRET) < 16 or _SECRET == 'dev_secret_key_123'):
+    raise RuntimeError("SECRET_KEY manquante ou trop courte (16 caractères minimum) : définir dans Vercel une longue chaîne aléatoire.")
+app.secret_key = _SECRET or 'dev_secret_key_123'
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Lax',
@@ -55,7 +60,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.14'
+ASSET_VERSION = '2026.11.19'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -104,6 +109,40 @@ def _save_cgu(athlete_id):
                          {"v": CGU_VERSION, "a": athlete_id})
     except Exception as e:
         print(f"Accord CGU (migration 2026-11-02_cgu.sql faite ?) : {e}")
+
+def _safe_next(nxt, default='/'):
+    """Redirection interne seulement : refuse //site, /\\site, les schémas et les caractères de contrôle."""
+    nxt = (nxt or '').strip()
+    if (not nxt.startswith('/') or nxt.startswith('//') or '\\' in nxt
+            or any(ord(c) < 32 or ord(c) == 127 for c in nxt) or len(nxt) > 300):
+        return default
+    return nxt
+
+def _csrf_ok(value):
+    """Jeton du formulaire identique au jeton de la session (jamais vide)."""
+    t = session.get('csrf')
+    return bool(t) and isinstance(value, str) and secrets.compare_digest(value.encode(), t.encode())
+
+# En-têtes de sécurité sur toutes les réponses
+_CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: blob: https:; connect-src 'self' https:; font-src 'self' data:; "
+        "worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; "
+        "frame-ancestors 'none'; form-action 'self' https://www.strava.com")
+
+@app.after_request
+def security_headers(resp):
+    h = resp.headers
+    h.setdefault('Content-Security-Policy', _CSP)
+    h.setdefault('X-Frame-Options', 'DENY')
+    h.setdefault('X-Content-Type-Options', 'nosniff')
+    h.setdefault('Referrer-Policy', 'strict-origin-when-cross-origin')
+    h.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()')
+    h.setdefault('Cross-Origin-Opener-Policy', 'same-origin')
+    if app.config.get('SESSION_COOKIE_SECURE'):
+        h.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    if g.get('hist_more'):
+        h['X-Unlock-Historique'] = '1'
+    return resp
 
 @app.before_request
 def keep_session():
@@ -158,6 +197,7 @@ def inject_globals():
         'carto_key': os.getenv('CARTO_API_KEY', ''),
         'my_athlete_id': session.get('athlete_id'),
         'sync_state': sync_state(),
+        'hist_pending': bool(_hist_pending()) if request.endpoint not in ('static', None) else False,
         # Utilisateur connecté qui n'a pas encore accepté cette version des CGU : fenêtre d'accord (sauf pages légales)
         'cgu_needed': 'access_token' in session and session.get('cgu') != CGU_VERSION and request.path not in _LEGAL_PATHS,
         'cgu_version': CGU_VERSION,
@@ -176,7 +216,7 @@ def sync_state():
     'first' (jamais synchronisé : tout l'historique Strava est lu, quelques minutes),
     'refresh' (cache de 47 h expiré : relecture complète, une à deux minutes), 'fast' (quelques secondes)."""
     if 'access_token' not in session: return 'fast'
-    if _user_key() in RAW_DATA_CACHE: return 'fast'
+    if _raw_key() in RAW_DATA_CACHE: return 'fast'
     aid = session.get('athlete_id')
     if not (DB_URL and aid): return 'first'
     try:
@@ -224,11 +264,24 @@ DB_CACHE_MAX_AGE_HOURS = 47
 MEMORY_TTL_SECONDS = 600          # petit cache mémoire (même instance serveur)
 INCREMENTAL_OVERLAP_SECONDS = 3 * 86400   # rattrape les activités envoyées en retard
 
+# Historique long : la carte s'affiche d'abord avec les 2 000 activités les plus récentes (10 pages de 200),
+# puis le reste est lu en arrière-plan par paquets de 3 pages, seulement si le quota Strava le permet.
+FIRST_PAGES = 10
+HISTORY_PAGES_PER_CALL = 3        # environ 3 secondes par appel : bien en dessous de la limite de temps de Vercel
+HISTORY_MAX_ACTIVITIES = 10000    # au-delà, on garde les plus récentes (stockage Supabase)
+QUOTA_PAUSE_15MIN = 0.60          # pause de l'historique au-delà de 60 % du quota du quart d'heure
+QUOTA_PAUSE_DAY = 0.70            # et au-delà de 70 % du quota du jour (les synchros récentes passent avant)
+
 RAW_DATA_CACHE = {}     # user_key -> (timestamp, activities)
 API_RESULT_CACHE = {}   # user_key -> {"_ts": timestamp, cache_key: data}
 
 def _user_key():
     return str(session.get('athlete_id') or session.get('access_token'))
+
+def _raw_key():
+    """Clé du cache mémoire des activités. Elle change à chaque morceau d'historique ajouté (session['hist_v']) :
+    une autre instance du serveur ne peut donc pas resservir une ancienne liste."""
+    return _user_key() + ':' + str(session.get('hist_v', ''))
 
 def _purge_expired_caches():
     now = time.time()
@@ -339,13 +392,16 @@ def _clean_activity(act):
         'distance': act.get('distance', 0) or 0,
     }
 
-def _fetch_strava(token, after=None):
-    """Toutes les activités GPS (ou celles après `after`). None si Strava ne répond pas correctement :
-    on ne veut jamais enregistrer un historique incomplet."""
-    out, page = [], 1
-    while page <= 10:
+def _fetch_strava(token, after=None, before=None, max_pages=FIRST_PAGES, info=None):
+    """Activités GPS de Strava, des plus récentes aux plus anciennes (ou celles après `after` / avant `before`).
+    None si Strava ne répond pas correctement : on ne veut jamais enregistrer un historique incomplet.
+    `info` (dict) reçoit 'more' (le plafond de pages est atteint, il reste sans doute des activités plus anciennes)
+    et 'oldest' (date de départ, en secondes, de l'activité la plus ancienne lue, tous sports confondus)."""
+    out, page, more = [], 1, False
+    while page <= max_pages:
         params = {'per_page': 200, 'page': page}
         if after: params['after'] = int(after)
+        if before: params['before'] = int(before)
         try:
             r = requests.get("https://www.strava.com/api/v3/athlete/activities",
                              headers={'Authorization': f'Bearer {token}'}, params=params, timeout=15)
@@ -360,7 +416,17 @@ def _fetch_strava(token, after=None):
         if not data: break
         out.extend(data)
         if len(data) < 200: break
+        if page == max_pages: more = True
         page += 1
+    if info is not None:
+        info['more'] = more
+        info['oldest'] = None
+        for a in out:
+            try:
+                ep = int(datetime.fromisoformat(str(a.get('start_date', '')).replace('Z', '+00:00')).timestamp())
+            except (TypeError, ValueError):
+                continue
+            if info['oldest'] is None or ep < info['oldest']: info['oldest'] = ep
     return [_clean_activity(a) for a in out
             if a.get('type') in GPS_SPORTS and (a.get('map') or {}).get('summary_polyline')]
 
@@ -465,7 +531,8 @@ def _db_sync(token, athlete_id):
             new = _fetch_strava(token, after=max(0, last - INCREMENTAL_OVERLAP_SECONDS)) if last else _fetch_strava(token)
             new = new or []          # Strava indisponible : on sert le cache, encore valide
         else:
-            new = _fetch_strava(token)
+            info = {}
+            new = _fetch_strava(token, info=info)
             if new is None:
                 return None
             conn.execute(text("DELETE FROM activities WHERE athlete_id = :a"), {"a": athlete_id})
@@ -473,6 +540,11 @@ def _db_sync(token, athlete_id):
                                  VALUES (:a, :t, NOW())
                                  ON CONFLICT (athlete_id) DO UPDATE SET full_sync_at = NOW()"""),
                          {"a": athlete_id, "t": token})
+            # Plafond de pages atteint : le reste de l'historique sera lu en arrière-plan (/api/historique)
+            if _hist_enabled():
+                conn.execute(text("UPDATE strava_users SET hist_before = :b WHERE athlete_id = :a"),
+                             {"b": info.get('oldest') if info.get('more') else None, "a": athlete_id})
+                if info.get('more'): g.hist_more = True   # en-tête X-Unlock-Historique : la page lance la suite
         for i in range(0, len(new), 500):
             chunk = [{**{k: v for k, v in x.items() if k != 'id'}, 'activity_id': x['id'], 'athlete_id': athlete_id}
                      for x in new[i:i + 500]]
@@ -491,7 +563,7 @@ def _db_sync(token, athlete_id):
 def get_strava_activities_cached(_token=None):
     """Activités GPS de l'utilisateur connecté : mémoire (10 min) → base (47 h, + nouveautés) → Strava."""
     _purge_expired_caches()
-    key = _user_key()
+    key = _raw_key()
     if key in RAW_DATA_CACHE:
         return RAW_DATA_CACHE[key][1]
     token = _valid_token()
@@ -511,6 +583,110 @@ def get_strava_activities_cached(_token=None):
     acts = [a for a in acts if a.get('type') in SPORT_TRANSLATIONS]
     RAW_DATA_CACHE[key] = (time.time(), acts)
     return acts
+
+# ------------------------------------------------------------
+# Historique long, lu par morceaux en arrière-plan
+# ------------------------------------------------------------
+# strava_users.hist_before : NULL = historique complet ; sinon, date (secondes) avant laquelle il reste à lire.
+_HIST_COL = {'ok': None}
+def _hist_enabled():
+    """Vrai si la colonne hist_before existe (migration 2026-11-19_historique.sql lancée). Vérifié une fois."""
+    if _HIST_COL['ok'] is None:
+        if not DB_URL: _HIST_COL['ok'] = False
+        else:
+            try:
+                with _engine().connect() as conn:
+                    _HIST_COL['ok'] = bool(conn.execute(text("""SELECT 1 FROM information_schema.columns
+                        WHERE table_schema = 'public' AND table_name = 'strava_users' AND column_name = 'hist_before'""")).fetchone())
+            except Exception:
+                return False
+    return _HIST_COL['ok']
+
+def _quota_ok():
+    """Assez de marge sur le quota Strava pour lire de l'historique ancien ?
+    Lecture des derniers en-têtes connus (mémoire de l'instance, sinon app_kv). Sans information récente : oui."""
+    d = _RATE if _RATE.get('usage') else None
+    if d is None and DB_URL:
+        try:
+            with _engine().connect() as conn:
+                d = conn.execute(text("SELECT value FROM app_kv WHERE key = 'strava_rate_limit'")).scalar()
+        except Exception:
+            d = None
+    if not d: return True
+    try:
+        at = datetime.fromisoformat(str(d.get('at', '')).replace('Z', ''))
+    except ValueError:
+        return True
+    age = (datetime.utcnow() - at).total_seconds()
+    for u_key, l_key in (('read_usage', 'read_limit'), ('usage', 'limit')):
+        u, l = d.get(u_key), d.get(l_key)
+        if not (u and l and len(u) == 2 and len(l) == 2 and l[0] and l[1]): continue
+        # Quart d'heure : compte seulement si la mesure date de moins de 15 min. Jour : si c'est le même jour (UTC).
+        if age < 900 and u[0] > QUOTA_PAUSE_15MIN * l[0]: return False
+        if at.date() == datetime.utcnow().date() and u[1] > QUOTA_PAUSE_DAY * l[1]: return False
+        return True
+    return True
+
+def _hist_label(epoch):
+    try:
+        d = datetime.utcfromtimestamp(int(epoch))
+        return f"{MOIS_FR[d.month - 1]} {d.year}"
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+def _hist_pending():
+    """Date avant laquelle il reste de l'historique à lire pour la personne connectée (None si rien à faire)."""
+    aid = session.get('athlete_id')
+    if not (aid and 'access_token' in session and _hist_enabled()): return None
+    try:
+        with _engine().connect() as conn:
+            return conn.execute(text("SELECT hist_before FROM strava_users WHERE athlete_id = :a"), {"a": aid}).scalar()
+    except Exception:
+        return None
+
+@app.route('/api/historique', methods=['POST'])
+def api_historique():
+    """Lit un morceau de l'historique ancien (3 pages de 200 au plus) et l'ajoute au cache en base.
+    Réponse : done (tout est lu), paused (quota Strava à ménager : on reprendra plus tard), jusqu_a (mois atteint)."""
+    if 'access_token' not in session: return jsonify({"error": "Non connecté"}), 401
+    if not _csrf_ok(request.headers.get('X-CSRF')): abort(400)
+    aid = session.get('athlete_id')
+    before = _hist_pending()
+    if not before:
+        return jsonify({"done": True})
+    if not _quota_ok():
+        return jsonify({"done": False, "paused": True, "jusqu_a": _hist_label(before)})
+    token = _valid_token()
+    info = {}
+    acts = _fetch_strava(token, before=before, max_pages=HISTORY_PAGES_PER_CALL, info=info)
+    if acts is None:
+        return jsonify({"done": False, "paused": True, "jusqu_a": _hist_label(before)})
+    capped = False
+    with _engine().begin() as conn:
+        # Cache encore valide (47 h) : sinon, la prochaine synchro complète repartira du récent
+        fresh = conn.execute(text("""SELECT full_sync_at > NOW() - make_interval(hours => :h) FROM strava_users
+                                     WHERE athlete_id = :a"""), {"h": DB_CACHE_MAX_AGE_HOURS, "a": aid}).scalar()
+        if not fresh:
+            return jsonify({"done": False, "paused": True, "jusqu_a": _hist_label(before)})
+        have = conn.execute(text("SELECT COUNT(*) FROM activities WHERE athlete_id = :a"), {"a": aid}).scalar() or 0
+        room = max(0, HISTORY_MAX_ACTIVITIES - have)
+        if len(acts) > room:
+            acts.sort(key=lambda x: x['start_epoch'], reverse=True)
+            acts, capped = acts[:room], True
+        for i in range(0, len(acts), 500):
+            chunk = [{**{k: v for k, v in x.items() if k != 'id'}, 'activity_id': x['id'], 'athlete_id': aid}
+                     for x in acts[i:i + 500]]
+            stmt = pg_insert(_ACT_TABLE).values(chunk).on_conflict_do_nothing(index_elements=['activity_id'])
+            conn.execute(stmt)
+        nxt = None if (capped or not info.get('more') or not info.get('oldest')) else min(info['oldest'], before - 1)
+        # Comparer puis écrire : si un autre onglet a déjà avancé, on ne recule pas
+        conn.execute(text("UPDATE strava_users SET hist_before = :n WHERE athlete_id = :a AND hist_before = :b"),
+                     {"n": nxt, "a": aid, "b": before})
+    if acts:
+        session['hist_v'] = int(time.time() * 1000) % 10**9
+        API_RESULT_CACHE.pop(_user_key(), None)
+    return jsonify({"done": nxt is None, "paused": False, "added": len(acts), "capped": capped,
+                    "jusqu_a": _hist_label(info.get('oldest') or before)})
 
 @app.errorhandler(StravaAuthError)
 def strava_auth_error(e):
@@ -594,7 +770,8 @@ def _purge_user(token, athlete_id, raison='suppression'):
     """Efface toutes les données d'un utilisateur (caches + base). Strava API Policy §2.5 / §7.4."""
     for key in (str(athlete_id) if athlete_id else None, token):
         if key:
-            RAW_DATA_CACHE.pop(key, None)
+            for k in [k for k in list(RAW_DATA_CACHE) if k == key or k.startswith(key + ':')]:
+                RAW_DATA_CACHE.pop(k, None)
             API_RESULT_CACHE.pop(key, None)
     if not DB_URL or not (athlete_id or token):
         return True
@@ -639,16 +816,20 @@ def auth():
 def accepter_cgu():
     """Accord des CGU par un utilisateur déjà connecté (inscrit avant la case à cocher, ou CGU modifiées)."""
     if 'access_token' not in session: return redirect(url_for('login_page'))
-    if not session.get('csrf') or request.form.get('csrf') != session.get('csrf') or request.form.get('cgu') != '1':
+    if not _csrf_ok(request.form.get('csrf')) or request.form.get('cgu') != '1':
         abort(400)
     session['cgu'] = CGU_VERSION
     _save_cgu(session.get('athlete_id'))
-    nxt = request.form.get('next') or '/'
-    return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//') else '/')
+    return redirect(_safe_next(request.form.get('next')))
 
-@app.route('/logout')
+@app.route('/logout', methods=['GET', 'POST'])
 def logout():
     # Se déconnecter révoque l'accès Strava : on efface donc aussi les données (Policy §7.4).
+    # Seulement par le bouton du menu (formulaire avec jeton) : un lien posé sur un autre site ne déconnecte plus.
+    if request.method != 'POST':
+        return redirect('/' if 'access_token' in session else url_for('login_page'))
+    if 'access_token' in session and not _csrf_ok(request.form.get('csrf')):
+        abort(400)
     token = session.get('access_token')
     _deauthorize(token)
     if token: log_event('logout')
@@ -658,7 +839,7 @@ def logout():
 
 @app.route('/delete-account', methods=['POST'])
 def delete_account():
-    if request.form.get('csrf') != session.get('csrf'):
+    if not _csrf_ok(request.form.get('csrf')):
         abort(400)
     token = session.get('access_token')
     _deauthorize(token)
@@ -672,8 +853,10 @@ def delete_account():
 def callback():
     if request.args.get('error'):
         return redirect(url_for('login_page', error='denied'))
+    # Le state est obligatoire : sans lui, un lien piégé pourrait connecter quelqu'un au compte d'un autre
     expected_state = session.pop('oauth_state', None)
-    if expected_state and request.args.get('state') != expected_state:
+    got_state = request.args.get('state') or ''
+    if not expected_state or not secrets.compare_digest(got_state.encode(), expected_state.encode()):
         return redirect(url_for('login_page', error='state'))
     granted = request.args.get('scope', '')
     if granted and 'activity:read' not in granted:
@@ -1472,9 +1655,10 @@ def keep_alive():
 # ============================================================
 @app.route('/api/cleanup-users')
 def cleanup_users():
-    cron_secret = os.getenv('CRON_SECRET')
-    auth_header = request.headers.get('Authorization')
-    if auth_header != f"Bearer {cron_secret}": return jsonify({"error": "Non autorisé"}), 401
+    cron_secret = (os.getenv('CRON_SECRET') or '').strip()
+    auth_header = request.headers.get('Authorization') or ''
+    if not cron_secret or not secrets.compare_digest(auth_header.encode(), f"Bearer {cron_secret}".encode()):
+        return jsonify({"error": "Non autorisé"}), 401
     if not DB_URL: return jsonify({"error": "Database URL non configurée"}), 500
 
     try:
@@ -2075,12 +2259,11 @@ def annee_page():
 @app.route('/annee/apercu', methods=['POST'])
 def annee_apercu():
     """Admin : choisir la période simulée du bilan (pour vérifier la carte, le menu et les textes)."""
-    if not is_admin() or request.form.get('csrf') != session.get('csrf'): abort(404)
+    if not is_admin() or not _csrf_ok(request.form.get('csrf')): abort(404)
     ph = request.form.get('phase')
     if ph in ANNEE_PHASES: session['annee_apercu'] = ph
     else: session.pop('annee_apercu', None)
-    nxt = request.form.get('next', '/annee')
-    return redirect(nxt if nxt.startswith('/') and not nxt.startswith('//') else '/annee')
+    return redirect(_safe_next(request.form.get('next'), '/annee'))
 
 @app.route('/api/annee')
 def api_annee():
@@ -2790,7 +2973,7 @@ USAGE_RAW_DAYS = 90        # événements bruts
 USAGE_KEEP_DAYS = 760      # sessions, jours et profils détachés : 25 mois (recommandation CNIL)
 USAGE_PAGES = {'carte', 'lieux', 'timelapse', 'story', 'stats', 'devine', 'annee', 'cgu', 'confidentialite', 'mentions', 'autre'}
 USAGE_EVENTS = {
-    'vue', 'fenetre', 'synchro',
+    'vue', 'fenetre', 'synchro', 'historique',
     'pwa_propose', 'pwa_clic', 'pwa_installee', 'pwa_refusee', 'pwa_guide_ios',
     'export_csv', 'export_echec', 'soutenir_clic', 'contact_clic', 'copier_id', 'deconnexion_clic',
     'story_format', 'story_theme', 'story_fond', 'story_affichage', 'story_sport', 'story_blocs', 'story_commune', 'story_zoom',
@@ -2798,7 +2981,7 @@ USAGE_EVENTS = {
     'carte_commune', 'carte_departement', 'carte_filtre', 'carte_mode', 'carte_recherche', 'carte_tri', 'carte_panneau',
     'timelapse_lance', 'timelapse_progression', 'timelapse_vitesse', 'timelapse_commune',
     'stats_filtre', 'stats_tri', 'stats_progression', 'stats_plus', 'stats_unite',
-    'lieux_recherche', 'lieux_fiche', 'lieux_onglet', 'lieux_departement', 'lieux_filtre',
+    'lieux_recherche', 'lieux_fiche', 'lieux_onglet', 'lieux_departement', 'lieux_filtre', 'lieux_bulle',
     'annee_ecran', 'annee_telecharge', 'annee_partage', 'annee_theme',
     'devine_indice', 'devine_reponse',
     'erreur_js', 'erreur_api', 'api_lente',
@@ -2986,7 +3169,7 @@ def _usage_purge():
 def usage_choice():
     """Désactiver ou réactiver la mesure d'usage (page Confidentialité)."""
     if 'access_token' not in session: return redirect(url_for('login_page'))
-    if not session.get('csrf') or request.form.get('csrf') != session.get('csrf'): abort(400)
+    if not _csrf_ok(request.form.get('csrf')): abort(400)
     aid, off = session.get('athlete_id'), request.form.get('mesure') == 'off'
     session['suivi_off'] = off
     if DB_URL and aid:
