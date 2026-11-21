@@ -60,7 +60,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.20c'
+ASSET_VERSION = '2026.11.21'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -1188,21 +1188,63 @@ def _outline_safe(geojson):
         print(f"Nettoyage du contour impossible : {e}")
         return _rings_latlon(geojson)
 
-def _clean_outline(geojson):
+def _clean_outline(geojson, eps=0.0003, simp=0.0004):
     """Contour du département sans les « fentes » entre communes.
     L'union des communes laisse de minuscules trous là où deux contours ne se touchent pas parfaitement :
     dessinés, ils faisaient des petits traits gris à l'intérieur du département. On referme ces fentes
     (dilatation puis érosion de 30 m), puis on ne garde que les vrais trous (> 0,8 km², enclaves) et les vraies îles."""
     g = shp_shape(json.loads(geojson) if isinstance(geojson, str) else geojson)
-    eps = 0.0003
     g = g.buffer(eps, join_style=2).buffer(-eps, join_style=2)
     parts = list(g.geoms) if g.geom_type == 'MultiPolygon' else [g] if g.geom_type == 'Polygon' else []
     keep = []
     for p in parts:
         if p.is_empty or p.area < 1e-5: continue
         holes = [r for r in p.interiors if Polygon(r).area >= 1e-4]
-        keep.append(Polygon(p.exterior, holes).simplify(0.0004, preserve_topology=True))
+        keep.append(Polygon(p.exterior, holes).simplify(simp, preserve_topology=True))
     return shapely.geometry.mapping(shapely.geometry.MultiPolygon(keep)) if keep else None
+
+# ------------------------------------------------------------
+# Vue France : contours simplifiés des départements de métropole (donnée publique)
+# ------------------------------------------------------------
+# Calcul long la première fois (union des communes de chaque département) : fait par petits paquets,
+# à chaque appel, puis gardé dans app_kv (clé geo_dep:<code>). Une fois tout calculé, réponse mise en cache par le CDN.
+_FRANCE_GEO = {}
+FRANCE_GEO_BUDGET_S = 3.5   # reste sous la limite de temps de Vercel, même avec un gros département en cours
+def _france_codes():
+    return [c for c in DEPARTEMENTS if not c.startswith('97')]
+
+@app.route('/api/france/geo')
+def france_geo():
+    codes = _france_codes()
+    if len(_FRANCE_GEO) < len(codes) and DB_URL:
+        try:
+            with _engine().connect() as conn:
+                for r in conn.execute(text("SELECT key, value FROM app_kv WHERE key LIKE 'geo_dep:%'")):
+                    _FRANCE_GEO[r.key.split(':', 1)[1]] = r.value
+        except Exception as e:
+            print(f"Contours France (lecture) : {e}")
+        t0 = time.time()
+        for code in [c for c in codes if c not in _FRANCE_GEO]:
+            if time.time() - t0 > FRANCE_GEO_BUDGET_S: break
+            try:
+                with _engine().connect() as conn:
+                    g = conn.execute(text("""
+                        SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Union(ST_SimplifyPreserveTopology(geometry, 0.001)), 0.003), 4) AS g
+                        FROM communes WHERE code_insee LIKE :p"""), {"p": code + '%'}).scalar()
+                if not g: continue
+                clean = _clean_outline(g, eps=0.002, simp=0.004)
+                rings = _rings_latlon(clean or g)
+                _FRANCE_GEO[code] = rings
+                kv_set('geo_dep:' + code, rings)
+            except Exception as e:
+                print(f"Contours France ({code}) : {e}")
+                break
+    deps = [{"code": c, "name": DEPARTEMENTS[c], "shape": _FRANCE_GEO[c]} for c in codes if c in _FRANCE_GEO]
+    done = len(deps) == len(codes)
+    resp = make_response(jsonify({"departements": deps, "complete": done}))
+    resp.headers['Cache-Control'] = ('public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400' if done
+                                     else 'no-store')
+    return resp
 
 @app.route('/api/departement/<dep>/geo')
 def departement_geo(dep):
@@ -1638,6 +1680,9 @@ def _activities_data(sel_year, sel_sport, grid_meters):
             if seen_names[c['name']] > 1 and c['dep']: c['name'] = f"{c['name']} ({c['dep']})"
         data["top_municipalities"] = sorted(final_cities_list, key=lambda x: x['stats']['blocks'], reverse=True)
         data["departements"] = departements_summary(final_cities_list)
+        # Vue France : total de communes (donnée publique) et nombre de départements, pour « 87/34 935 » et « 6/101 »
+        data["france"] = {"communes": sum(dep_totals().values()), "departements": len(DEPARTEMENTS),
+                          "at100": sum(1 for c in final_cities_list if c['stats']['percent'] >= 100)}
 
         if scores_to_save and ENABLE_LEADERBOARD:
             try:

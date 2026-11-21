@@ -227,6 +227,7 @@
     <div class="seg seg--block" role="group" aria-labelledby="kind-l">
       <button type="button" class="seg__btn" data-kind="commune" aria-pressed="true">Commune</button>
       <button type="button" class="seg__btn" data-kind="dep" aria-pressed="false">Département</button>
+      <button type="button" class="seg__btn" data-kind="france" aria-pressed="false">France</button>
     </div>
   </div>
   <div class="field" id="field-dep" hidden>
@@ -463,6 +464,7 @@
     const card = $('story-card');
     card.style.setProperty('--t-light', light); card.style.setProperty('--t-dark', dark); card.style.setProperty('--t-bg', bg);
     if (kind === 'dep') { drawDep(); return; }
+    if (kind === 'france') { drawFrance(); return; }
     const city = (data && data.top_municipalities || []).find((c) => c.name === $('city-select').value);
     gridLayer.clearLayers(); borderLayer.clearLayers(); offLayer.clearLayers(); offReq++;
     if (!city) { $('sc-city').textContent = 'Votre ville'; $('sc-pct').textContent = '–'; $('sc-blocks').textContent = '–'; return; }
@@ -494,17 +496,17 @@
   function setKind(k) {
     kind = k;
     document.querySelectorAll('[data-kind]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.kind === k)));
-    const dep = k === 'dep';
-    $('field-dep').hidden = !dep; $('field-city').hidden = dep; $('field-grid').hidden = dep;
+    const fr = k === 'france', dep = k === 'dep' || fr;   // dep : dessin SVG sans fond de carte (département ou France)
+    $('field-dep').hidden = k !== 'dep'; $('field-city').hidden = dep; $('field-grid').hidden = dep;
     document.querySelectorAll('.set-tip').forEach((t) => (t.hidden = dep));
-    $('show-city-l').textContent = dep ? 'Nom du département' : 'Nom de la commune';
-    $('show-kpi-l').textContent = dep ? 'Chiffres (% et communes)' : 'Chiffres (% et blocs)';
+    $('show-city-l').textContent = fr ? 'Titre « Ma France »' : dep ? 'Nom du département' : 'Nom de la commune';
+    $('show-kpi-l').textContent = fr ? 'Chiffres (communes et départements)' : dep ? 'Chiffres (% et communes)' : 'Chiffres (% et blocs)';
     $('story-card').classList.toggle('is-dep', dep);
     $('story-dep').toggleAttribute('hidden', !dep);
     $('stage-zoom').hidden = dep;   // élément SVG : .hidden n'existe pas, on passe par l'attribut
-    $('sc-lbl1').textContent = dep ? 'du département' : 'explorés';
-    $('sc-lbl2').textContent = dep ? 'communes explorées' : 'blocs';
-    $('sc-grid').hidden = dep;
+    $('sc-lbl1').textContent = fr ? 'communes explorées' : dep ? 'du département' : 'explorés';
+    $('sc-lbl2').textContent = fr ? 'départements' : dep ? 'communes explorées' : 'blocs';
+    $('sc-grid').hidden = k === 'dep';
     if (!dep) { map.invalidateSize(); }
     draw(true);
   }
@@ -545,11 +547,51 @@
       vis.map((c) => `<path d="${path(c.shape)}" fill="${light}" fill-opacity="${alpha(byCode[c.code])}" stroke="rgba(18,16,20,.55)" stroke-width="1" stroke-linejoin="round"/>`).join('') +
       (geo.outline || []).map((poly) => `<path d="${'M' + poly[0].map(([la, lo]) => P(la, lo)).join('L') + 'Z'}" fill="none" stroke="rgba(255,255,255,.7)" stroke-width="1.6" stroke-linejoin="round"/>`).join('');
   }
+  /* ---------- Story « Ma France » : les départements de métropole, coloriés selon le % de communes explorées ---------- */
+  let frGeo = null;
+  async function drawFrance() {
+    const svg = $('story-dep'), nameEl = $('sc-city'), list = deps(), F = (data && data.france) || {};
+    nameEl.textContent = 'Ma France'; fitTitle(nameEl);
+    const visited = list.reduce((a, d) => a + d.visited, 0), at100 = F.at100 != null ? F.at100 : list.reduce((a, d) => a + d.at100, 0);
+    $('sc-pct').innerHTML = `${Unlock.fmt(visited)}<small>/${Unlock.fmt(F.communes || 34935)}</small>`;
+    $('sc-blocks').innerHTML = `${Unlock.fmt(list.length)}<small>/${Unlock.fmt(F.departements || 101)}</small>`;
+    // Sous-ligne seulement s'il y a au moins une commune à 100 %
+    $('sc-grid').textContent = at100 ? `dont ${Unlock.fmt(at100)} commune${at100 > 1 ? 's' : ''} à 100${'\u00a0'}%` : '';
+    $('sc-grid').hidden = !at100;
+    // Au plus 40 essais (environ une minute) : ensuite on dessine ce qui est déjà calculé
+    for (let tries = 0; (!frGeo || !frGeo.complete) && tries < 40; tries++) {
+      stageBusy(true, 'Chargement de la carte de France', '');
+      try { frGeo = await Unlock.getJSON('/api/france/geo?v=1'); }
+      catch (e) { stageBusy(false); if (e.message !== 'auth') Unlock.toast('Carte de France indisponible pour le moment.'); return; }
+      if (!frGeo.complete) await new Promise((r) => setTimeout(r, 1500));   // première fois : contours calculés par paquets
+      if (kind !== 'france') { stageBusy(false); return; }
+    }
+    stageBusy(false);
+    if (kind !== 'france' || !frGeo) return;
+    const [light] = THEMES[theme];
+    const byDep = {}; list.forEach((d) => { byDep[d.code] = d.percent; });
+    let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+    frGeo.departements.forEach((g) => g.shape.forEach((poly) => poly[0].forEach(([la, lo]) => {
+      if (la < minLa) minLa = la; if (la > maxLa) maxLa = la; if (lo < minLo) minLo = lo; if (lo > maxLo) maxLo = lo; })));
+    const kx = Math.cos((minLa + maxLa) / 2 * Math.PI / 180);
+    const box = { x: 20, y: 56, w: 450 - 40, h: 800 - 56 - bottomSpace() };
+    const sc = Math.min(box.w / ((maxLo - minLo) * kx || 1), box.h / ((maxLa - minLa) || 1));
+    const ox = box.x + (box.w - (maxLo - minLo) * kx * sc) / 2, oy = box.y + (box.h - (maxLa - minLa) * sc) / 2;
+    const P = (la, lo) => `${(ox + (lo - minLo) * kx * sc).toFixed(1)},${(oy + (maxLa - la) * sc).toFixed(1)}`;
+    const path = (shape) => shape.map((poly) => poly.map((ring) => 'M' + ring.map(([la, lo]) => P(la, lo)).join('L') + 'Z').join('')).join('');
+    // Paliers serrés : le % de communes explorées d'un département reste souvent faible
+    const alpha = (p) => (p < 2 ? .48 : p < 5 ? .6 : p < 15 ? .74 : p < 40 ? .87 : 1);
+    const zero = [], vis = [];
+    frGeo.departements.forEach((g) => (g.code in byDep ? vis : zero).push(g));
+    svg.innerHTML =
+      zero.map((g) => `<path class="dz" d="${path(g.shape)}" stroke-width="1" stroke-linejoin="round"/>`).join('') +
+      vis.map((g) => `<path d="${path(g.shape)}" fill="${light}" fill-opacity="${alpha(byDep[g.code])}" stroke="rgba(18,16,20,.55)" stroke-width="1" stroke-linejoin="round"/>`).join('');
+  }
   document.querySelectorAll('[data-kind]').forEach((b) => b.addEventListener('click', () => { if (b.dataset.kind !== kind) { Unlock.track('story_format', { d: b.dataset.kind }); setKind(b.dataset.kind); } }));
   $('dep-select').addEventListener('change', (e) => { depCode = e.target.value; draw(true); if (!mq.matches) setTimeout(() => Unlock.closeSheet('sheet-studio'), 150); });
 
   function fileName() {
-    const label = kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
+    const label = kind === 'france' ? 'ma-france' : kind === 'dep' ? ((deps().find((x) => x.code === depCode) || {}).name || 'departement') : ($('city-select').value || 'ville');
     return `unlock-story-${label.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/gi, '-')}.png`;
   }
   /* Image 900 × 1600 px de l'aperçu : 'png' (adresse data:) pour le téléchargement, 'blob' pour le partage */

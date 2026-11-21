@@ -87,6 +87,13 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Vue France (v58)** :
+  - Carte : 4e mode « France ». Les départements de métropole sont coloriés selon leur % de communes explorées (paliers 2, 5, 15, 40 %), la carte se cadre sur vos départements. Panneau : communes explorées sur le total national (« 87 / 34 935 »), départements touchés (« 6/101 »), communes à 100 %, top 5 des départements, top 5 des communes en France.
+  - Clic sur un département : infobulle sur PC, fiche en bas sur téléphone (comme pour une commune), bouton « Voir les communes » qui ouvre le mode Communes sur ce département. Retour par « ‹ France » (PC), le bouton France ou « Toute la France » en tête de la liste « Changer ».
+  - Story : 3e format « France » (« Ma France », « 87/34 935 communes explorées », « 6/101 départements », sous-ligne « dont N communes à 100 % » seulement si N ≥ 1), mêmes thèmes, fond transparent ou coloré.
+  - `GET /api/france/geo` : contours simplifiés des 96 départements de métropole, calculés par paquets (3,5 s par appel) à partir de la table `communes` puis gardés dans `app_kv` (`geo_dep:<code>`). La page redemande tant que tout n'est pas calculé ; une fois complet, réponse mise en cache par le CDN. Aucune donnée Strava.
+  - `/api/activities` renvoie `france` (`communes`, `departements`, `at100`) pour les totaux nationaux.
+  - Barre des modes à 4 boutons : marges resserrées sous 430 px (police 12 px sous 360 px) pour garder le bouton des filtres sur la même ligne. Interrupteurs pleine largeur (`seg--block`) en parts égales.
 - **Historique long, lieux en bulles, départements par numéro (v57)** :
   - La carte s'affiche avec les 2 000 activités les plus récentes (10 pages Strava), puis le reste de l'historique est lu en arrière-plan par `POST /api/historique`, 3 pages par appel (environ 3 s, sous la limite de temps de Vercel). Progression dans un message en bas d'écran, recalcul de la carte et des stats à la fin (`Unlock.onHistory`).
   - Le quota Strava est ménagé : pause au-delà de 60 % du quota du quart d'heure ou de 70 % de celui du jour (derniers en-têtes `X-ReadRateLimit`), reprise à la page suivante. Les synchros récentes passent toujours avant. Plafond de 10 000 activités par personne (stockage).

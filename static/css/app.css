@@ -212,7 +212,8 @@ p { margin: 0; }
 .seg__btn[aria-pressed="true"] { background: var(--ink); color: #fff; box-shadow: 0 1px 3px rgba(24,22,27,.18); }
 .seg--sm .seg__btn { height: 28px; padding: 0 10px; font-size: var(--fs-xs); }
 .seg--block { display: flex; }
-.seg--block .seg__btn { flex: 1; justify-content: center; }
+.seg--block .seg__btn { flex: 1 1 0; min-width: 0; justify-content: center; padding: 0 8px; }
+@media (max-width: 359px) { .seg--block .seg__btn { padding: 0 4px; font-size: var(--fs-xs); } }
 
 .field { display: grid; gap: 6px; }
 .field__label { font-size: var(--fs-sm); font-weight: 650; color: var(--ink-2); }
@@ -540,7 +541,12 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
   .maptools__filters { display: flex; }
   .maptools__filterbtn { display: none; }
 }
-.panel-heading { display: none; margin-bottom: 14px; }
+.panel-heading { display: none; margin-bottom: 14px; position: relative; }
+/* Mode Communes : retour à la vue France (en haut à droite du titre, sur ordinateur) */
+.panel-back { position: absolute; right: 0; top: 6px; border: 0; background: none; padding: 4px 0; cursor: pointer;
+  font: 650 var(--fs-sm) / 1.2 var(--font-ui); color: var(--brand); }
+.panel-back:hover { text-decoration: underline; }
+.panel-back:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; border-radius: 4px; }
 .panel-heading h1 { font-size: var(--fs-xl); }
 .panel-heading p { color: var(--muted); font-size: var(--fs-sm); margin-top: 4px; }
 
@@ -644,12 +650,17 @@ html:has(.mapview), html:has(.mapview) body { height: 100%; overflow: hidden; ov
   .maptools .seg__btn { padding: 0 12px; }
   .ctip { display: none !important; }
 }
-@media (max-width: 359px) { .maptools .seg__btn { padding: 0 9px; font-size: var(--fs-sm); } }
+/* 4 modes (Tracés, Blocs, Communes, France) + le bouton des filtres sur une seule ligne, même à 320 px */
+@media (max-width: 429px) { .maptools .seg__btn { padding: 0 8px; } }
+@media (max-width: 389px) { .maptools .seg__btn { padding: 0 6px; } }
+@media (max-width: 359px) { .maptools .seg__btn { padding: 0 5px; font-size: var(--fs-xs); } .maptools { gap: 6px; } }
 @media (min-width: 768px) {
   .dep-kpi { display: block; }
   .dep-stats { --cols: 2 !important; margin-top: 8px; }
   .dep-stats .dep-stats__m { display: none; }
   .dep-stats .dep-stats__d { display: block; }
+  .panel.is-france .dep-stats #ds-pct-box { display: block; }
+  .panel.is-france .dep-stats .dep-stats__d { display: none; }
   .ccard-m { display: none !important; }
 }
 

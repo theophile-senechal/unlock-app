@@ -15,6 +15,7 @@
         <button type="button" class="seg__btn" data-mode="route" aria-pressed="true">Tracés</button>
         <button type="button" class="seg__btn" data-mode="grid" aria-pressed="false">Blocs</button>
         <button type="button" class="seg__btn" data-mode="communes" aria-pressed="false">Communes</button>
+        <button type="button" class="seg__btn" data-mode="france" aria-pressed="false">France</button>
       </div>
       <div class="maptools__spacer"></div>
       <div class="maptools__filters" id="filters-inline"></div>
@@ -42,6 +43,7 @@
       </button>
       <div class="panel__scroll">
         <div class="panel-heading">
+          <button type="button" class="panel-back" id="dep-back" data-mode="france" hidden>‹ France</button>
           <h1 id="panel-title">Vos tracés</h1>
           <p id="filter-summary">Tous les sports, toutes les années</p>
         </div>
@@ -75,12 +77,12 @@
           <div class="dep-kpi">
             <span class="dep-kpi__lbl">Communes explorées</span>
             <span class="dep-kpi__val"><span id="dk-visited">–</span> <small>/ <span id="dk-total">–</span></small></span>
-            <span class="dep-kpi__sub"><span id="dk-pct">–</span> des communes du département</span>
+            <span class="dep-kpi__sub"><span id="dk-pct">–</span> <span id="dk-scope">des communes du département</span></span>
             <div class="bar"><div class="bar__fill" id="dk-fill"></div></div>
           </div>
           <div class="stats dep-stats">
             <div class="stat dep-stats__m"><span class="stat__top">Communes</span><span class="stat__val"><span id="ds-visited">–</span><small id="ds-total"></small></span></div>
-            <div class="stat dep-stats__m"><span class="stat__top">Département</span><span class="stat__val" id="ds-pct">–</span></div>
+            <div class="stat dep-stats__m" id="ds-pct-box"><span class="stat__top" id="ds-pct-lbl">Département</span><span class="stat__val" id="ds-pct">–</span></div>
             <div class="stat"><span class="stat__top">À 100&nbsp;%</span><span class="stat__val" id="ds-100">–</span></div>
             <div class="stat dep-stats__d"><span class="stat__top">Plus de 50&nbsp;%</span><span class="stat__val" id="ds-50">–</span></div>
           </div>
@@ -114,11 +116,11 @@
               <ol class="rank" id="dep-rank"></ol>
             </section>
             <section class="section" id="dep-top-section">
-              <div class="section__head"><h2 class="section__title">Vos 5 communes</h2></div>
+              <div class="section__head"><h2 class="section__title" id="dep-top-title">Vos 5 communes</h2></div>
               <ol class="rank" id="dep-communes"></ol>
             </section>
             <div class="legend legend--dep">
-              <div class="section__title" style="font-size:var(--fs-md)">Part explorée de chaque commune</div>
+              <div class="section__title" style="font-size:var(--fs-md)" id="dep-legend-title">Part explorée de chaque commune</div>
               <div class="dlegend"><span class="dlegend__zero"></span><span class="dlegend__steps"><i style="--a:.16"></i><i style="--a:.30"></i><i style="--a:.48"></i><i style="--a:.70"></i><i style="--a:.92"></i></span></div>
               <div class="dlegend__lbl"><span>0&nbsp;%</span><span>1&nbsp;%</span><span>100&nbsp;%</span></div>
             </div>
@@ -177,7 +179,7 @@
       <button type="button" class="ctip__x" id="ct-close" aria-label="Fermer">×</button>
       <div class="ctip__name" id="ct-name"></div>
       <div class="ctip__sub" id="ct-sub"></div>
-      <div class="ctip__row"><span class="ctip__pct" id="ct-pct"></span><span class="ctip__lbl">explorés</span></div>
+      <div class="ctip__row"><span class="ctip__pct" id="ct-pct"></span><span class="ctip__lbl" id="ct-lbl">explorés</span></div>
       <div class="bar ctip__bar"><div class="bar__fill" id="ct-fill"></div></div>
       <div class="ctip__blocks" id="ct-blocks"></div>
       <div class="ctip__meta" id="ct-meta"></div>
@@ -385,13 +387,15 @@
     $('grid-select').hidden = m === 'route';
     $('grid-extra').hidden = m !== 'grid';
     $('route-hint').hidden = m !== 'route';
-    $('act-stats').hidden = m === 'communes';
-    $('panel-title').textContent = m === 'grid' ? 'Vos blocs' : m === 'communes' ? 'Vos communes' : 'Vos tracés';
-    document.body.classList.toggle('mode-communes', m === 'communes');
-    if (m !== 'communes') Dep.leave();
+    const zones = m === 'communes' || m === 'france';   // communes d'un département, ou départements de France
+    $('act-stats').hidden = zones;
+    $('panel-title').textContent = m === 'grid' ? 'Vos blocs' : m === 'communes' ? 'Vos communes' : m === 'france' ? 'Votre France' : 'Vos tracés';
+    $('dep-back').hidden = m !== 'communes';
+    document.body.classList.toggle('mode-communes', zones);
+    Dep.leave();
     if (m === 'grid' && !mqFloat.matches) setPanel(true);
     renderStats(); render();
-    if (m === 'communes') Dep.enter();
+    if (zones) Dep.enter(m === 'france' ? 'france' : 'dep');
   }
   document.addEventListener('click', (e) => { const b = e.target.closest('[data-mode]'); if (b) { if (b.dataset.mode !== mode) Unlock.track('carte_mode', { d: b.dataset.mode }); setMode(b.dataset.mode); } });
 
@@ -491,7 +495,7 @@
   function render() {
     if (!data) return;
     traceLayer.clearLayers(); cityLayer.clearLayers(); blockedLayer.clearLayers(); blockedReq++;
-    if (mode === 'communes') { Dep.refresh(); return; }
+    if (mode === 'communes' || mode === 'france') { Dep.refresh(); return; }
     let bounds = null;
     if (mode === 'grid') {
       const size = data.grid_size_used, cells = data.grid_cells || [];
@@ -625,9 +629,17 @@
     const layer = L.layerGroup().addTo(map);
     const geoCache = {};
     let cur = null, geo = null, selected = null, entered = false, selLayer = null;
+    // Portée : 'dep' (les communes d'un département) ou 'france' (les départements de métropole)
+    let scope = 'dep', frGeo = null, frTimer = null, frTries = 0, pendingCommune = null;
     const STEPS = [[10, .16], [25, .30], [50, .48], [75, .70], [101, .92]];
+    // Départements : % de communes explorées souvent faible, paliers plus serrés pour garder du contraste
+    const DEP_STEPS = [[2, .16], [5, .30], [15, .48], [40, .70], [101, .92]];
     const alpha = (p) => STEPS.find(([max]) => p < max)[1];
+    const alphaDep = (p) => DEP_STEPS.find(([max]) => p < max)[1];
     const pctTxt = (p) => Unlock.fmt(p, p > 0 && p < 10 ? 1 : 0) + ' %';
+    const pctFr = (p) => Unlock.fmt(p, p > 0 && p < 1 ? 2 : p < 10 ? 1 : 0) + ' %';
+    const ordinal = (n) => (n === 1 ? '1<sup>er</sup>' : `${n}<sup>e</sup>`);
+    const FR_KEY = 'FR';
     const deps = () => (data && data.departements) || [];
     const cityByCode = () => { const m = {}; (data.top_municipalities || []).forEach((c) => { if (c.code) m[c.code] = c; }); return m; };
 
@@ -639,7 +651,58 @@
       return geoCache[code];
     }
 
+    function franceTotals() {
+      const F = data.france || {}, list = deps();
+      const visited = list.reduce((a, d) => a + d.visited, 0);
+      const total = F.communes || 34935;
+      return { visited, total, percent: total ? visited / total * 100 : 0, deps: list.length, depsTotal: F.departements || 101,
+        at100: F.at100 != null ? F.at100 : list.reduce((a, d) => a + d.at100, 0), over50: list.reduce((a, d) => a + d.over50, 0) };
+    }
+    function fillSelect(value) {
+      const sel = $('dep-select'); sel.innerHTML = '';
+      sel.add(new Option('Toute la France', FR_KEY));
+      // Liste complète rangée par numéro (2A et 2B entre 19 et 21, outre-mer à la fin), le top 5 garde l'ordre du classement
+      const depKey = (c) => (c === '2A' ? 20.1 : c === '2B' ? 20.2 : parseFloat(c) || 999);
+      [...deps()].sort((a, b) => depKey(a.code) - depKey(b.code))
+        .forEach((x) => sel.add(new Option(`${x.code} · ${x.name} · ${pctTxt(x.percent)}`, x.code)));
+      sel.value = value;
+    }
+    function fillRank() {
+      $('dep-rank').innerHTML = deps().slice(0, 5).map((x, i) => `<li><button type="button" class="rank__item" data-dep="${Unlock.esc(x.code)}" aria-current="${scope === 'dep' && x.code === cur}">
+        <span class="rank__pos">${i + 1}</span><span class="rank__name">${Unlock.esc(x.name)}<small class="rank__sub">${Unlock.esc(x.code)} · ${Unlock.fmt(x.visited)}/${Unlock.fmt(x.total)} communes</small></span>
+        <span class="rank__val rank__val--big">${pctTxt(x.percent)}</span></button></li>`).join('');
+    }
+    function fillFrance() {
+      const has = deps().length > 0;
+      $('dep-top').hidden = !has || !!(selected && !mqFloat.matches);
+      $('dep-extra').hidden = !has || !!(selected && !mqFloat.matches);
+      $('dep-empty').hidden = has;
+      if (!has) return;
+      const T = franceTotals();
+      $('dep-name').textContent = 'Toute la France'; $('dep-code').textContent = '';
+      $('dk-visited').textContent = Unlock.fmt(T.visited); $('dk-total').textContent = Unlock.fmt(T.total);
+      $('dk-pct').textContent = pctFr(T.percent); $('dk-scope').textContent = 'des communes de France';
+      requestAnimationFrame(() => { $('dk-fill').style.width = Math.max(1.5, T.percent) + '%'; });
+      $('ds-visited').textContent = Unlock.fmt(T.visited); $('ds-total').textContent = '';
+      $('ds-pct-lbl').textContent = 'Départements';
+      $('ds-pct').innerHTML = `${Unlock.fmt(T.deps)}<small>/${Unlock.fmt(T.depsTotal)}</small>`;
+      $('ds-100').textContent = Unlock.fmt(T.at100); $('ds-50').textContent = Unlock.fmt(T.over50);
+      fillSelect(FR_KEY); fillRank();
+      $('dep-top-title').textContent = 'Vos 5 communes en France';
+      $('dep-legend-title').textContent = 'Part explorée de chaque département';
+      const cs = [...(data.top_municipalities || [])].filter((c) => c.code)
+        .sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks).slice(0, 5);
+      $('dep-communes').innerHTML = cs.map((c, i) => `<li><button type="button" class="rank__item" data-code="${Unlock.esc(c.code)}" data-cdep="${Unlock.esc(c.dep || '')}">
+        <span class="rank__pos">${i + 1}</span><span class="rank__name" title="${Unlock.esc(c.name)}">${Unlock.esc(c.name)}<small class="rank__sub">${Unlock.esc(c.dep || '')}</small></span>
+        <span class="rank__val">${pctTxt(c.stats.percent)}<small>${Unlock.fmt(c.stats.blocks)}/${Unlock.fmt(c.stats.total_blocks)} blocs</small></span></button></li>`).join('');
+    }
+
     function fillHeader() {
+      if (scope === 'france') { fillFrance(); return; }
+      $('dk-scope').textContent = 'des communes du département';
+      $('ds-pct-lbl').textContent = 'Département';
+      $('dep-top-title').textContent = 'Vos 5 communes';
+      $('dep-legend-title').textContent = 'Part explorée de chaque commune';
       const d = deps().find((x) => x.code === cur);
       const has = !!d;
       $('dep-top').hidden = !has || !!(selected && !mqFloat.matches);
@@ -652,16 +715,8 @@
       requestAnimationFrame(() => { $('dk-fill').style.width = Math.max(1.5, d.percent) + '%'; });
       $('ds-visited').textContent = Unlock.fmt(d.visited); $('ds-total').textContent = '/' + Unlock.fmt(d.total);
       $('ds-pct').textContent = pctTxt(d.percent); $('ds-100').textContent = Unlock.fmt(d.at100); $('ds-50').textContent = Unlock.fmt(d.over50);
-      const sel = $('dep-select'); sel.innerHTML = '';
-      // Liste complète rangée par numéro (2A et 2B entre 19 et 21, outre-mer à la fin), le top 5 garde l'ordre du %
-      const depKey = (c) => (c === '2A' ? 20.1 : c === '2B' ? 20.2 : parseFloat(c) || 999);
-      [...deps()].sort((a, b) => depKey(a.code) - depKey(b.code))
-        .forEach((x) => sel.add(new Option(`${x.code} · ${x.name} · ${pctTxt(x.percent)}`, x.code)));
-      sel.value = cur;
-      // Top 5 départements
-      $('dep-rank').innerHTML = [...deps()].sort((a, b) => b.percent - a.percent || b.visited - a.visited).slice(0, 5).map((x, i) => `<li><button type="button" class="rank__item" data-dep="${Unlock.esc(x.code)}" aria-current="${x.code === cur}">
-        <span class="rank__pos">${i + 1}</span><span class="rank__name">${Unlock.esc(x.name)}<small class="rank__sub">${Unlock.esc(x.code)} · ${Unlock.fmt(x.visited)}/${Unlock.fmt(x.total)} communes</small></span>
-        <span class="rank__val rank__val--big">${pctTxt(x.percent)}</span></button></li>`).join('');
+      fillSelect(cur);
+      fillRank();
       // Top 5 communes du département
       const cs = (data.top_municipalities || []).filter((c) => c.dep === cur)
         .sort((a, b) => b.stats.percent - a.stats.percent || b.stats.blocks - a.stats.blocks).slice(0, 5);
@@ -698,8 +753,108 @@
       fillHeader();
       if (!code) { layer.clearLayers(); geo = null; return; }
       try { geo = await getGeo(code); } catch (e) { if (e.message !== 'auth') Unlock.toast('Contours du département indisponibles pour le moment.'); return; }
-      if (cur !== code || mode !== 'communes') return;
+      if (cur !== code || mode !== 'communes' || scope !== 'dep') return;
       draw(fit);
+      if (pendingCommune) {
+        const c = geo.communes.find((x) => x.code === pendingCommune); pendingCommune = null;
+        if (c && c._layer) focusCommune(c);
+      }
+    }
+
+    /* ----- Vue France : un polygone par département de métropole ----- */
+    async function getFrance() {
+      clearTimeout(frTimer);
+      try { frGeo = await Unlock.getJSON('/api/france/geo?v=1'); } catch (e) { if (e.message !== 'auth') Unlock.toast('Carte de France indisponible pour le moment.'); return null; }
+      // Première fois : les contours se calculent par paquets, on redemande jusqu'à ce que tout soit là
+      if (!frGeo.complete && ++frTries < 40) frTimer = setTimeout(async () => { if (scope === 'france' && entered) { await getFrance(); if (scope === 'france' && entered) drawFrance(false); } }, 1500);
+      return frGeo;
+    }
+    function drawFrance(fit) {
+      layer.clearLayers(); selLayer = null;
+      if (!frGeo) return;
+      const byDep = {}; deps().forEach((d) => { byDep[d.code] = d; });
+      const mine = [];
+      frGeo.departements.forEach((g) => {
+        const d = byDep[g.code];
+        const style = d ? { color: '#FFFFFF', weight: 1.2, fillColor: BRAND, fillOpacity: alphaDep(d.percent) }
+          : { color: '#D3CED7', weight: 1, fillColor: '#F8F7F9', fillOpacity: 0.92 };
+        const p = L.polygon(g.shape, { ...style, smoothFactor: 0.6 }).addTo(layer);
+        p.on('click', (e) => { L.DomEvent.stopPropagation(e); selectDep(g.code, p); });
+        p.on('mouseover', () => { if (mqFloat.matches) p.setStyle({ weight: 2 }); });
+        p.on('mouseout', () => { if (mqFloat.matches) p.setStyle({ weight: style.weight }); });
+        g._layer = p;
+        if (d) mine.push(p);
+      });
+      if (fit) {
+        // Cadrage sur vos départements (sinon toute la métropole)
+        const b = (mine.length ? L.featureGroup(mine) : L.featureGroup(layer.getLayers())).getBounds();
+        if (b.isValid()) map.fitBounds(b.pad(mine.length ? 0.35 : 0), { ...fitPadding(), maxZoom: 8 });
+      }
+      if (selected && selected.kind === 'dep') {
+        const g = frGeo.departements.find((x) => x.code === selected.code);
+        if (g) selectDep(g.code, g._layer, true); else unselect();
+      }
+    }
+    async function showFrance(fit) {
+      unselect(true); fillHeader();
+      if (!deps().length) { layer.clearLayers(); return; }
+      if (!frGeo || !frGeo.complete) { Unlock.busy.on('Chargement de la carte de France', '', { veil: false }); try { await getFrance(); } finally { Unlock.busy.off(); } }
+      if (scope !== 'france' || !entered) return;
+      drawFrance(fit);
+    }
+    function selectDep(code, poly, keepView) {
+      if (!keepView) Unlock.track('carte_departement', { d: 'france' });
+      const list = deps(), d = list.find((x) => x.code === code), g = frGeo.departements.find((x) => x.code === code);
+      selected = { kind: 'dep', code, name: g ? g.name : code, dep: 'France', stats: d || null, rank: d ? list.indexOf(d) + 1 : 0 };
+      if (selLayer) layer.removeLayer(selLayer);
+      selLayer = L.polygon(poly.getLatLngs(), { color: '#2A030B', weight: 3, fill: false, interactive: false }).addTo(layer);
+      selected.bounds = poly.getBounds();
+      const p = d ? d.percent : 0;
+      const sub = d ? `${Unlock.esc(code)} · ${ordinal(selected.rank)} département le plus exploré` : `${Unlock.esc(code)} · Pas encore exploré`;
+      const line = d ? `<b>${Unlock.fmt(d.visited)}</b> / ${Unlock.fmt(d.total)} communes explorées` : 'Une sortie qui le traverse suffit pour commencer.';
+      const meta = d ? [d.at100 ? `${Unlock.fmt(d.at100)} commune${d.at100 > 1 ? 's' : ''} à 100 %` : '', d.over50 ? `${Unlock.fmt(d.over50)} à plus de 50 %` : ''].filter(Boolean).join(' · ') : '';
+      const go = `${Unlock.icon('map')}Voir les communes`;
+      if (mqFloat.matches) {
+        $('ct-name').textContent = selected.name;
+        $('ct-sub').innerHTML = sub;
+        $('ct-pct').textContent = pctTxt(p); $('ct-lbl').textContent = 'des communes';
+        $('ct-fill').style.width = Math.max(p ? 1.5 : 0, p) + '%';
+        $('ct-blocks').innerHTML = line;
+        $('ct-meta').textContent = meta; $('ct-meta').hidden = !meta;
+        $('ct-go').innerHTML = go; $('ct-go').hidden = !d;
+        $('ctip').hidden = false;
+        placeTip();
+      } else {
+        $('cc-dep').textContent = 'France';
+        $('cc-name').textContent = selected.name;
+        $('cc-sub').innerHTML = sub;
+        $('cc-pct').textContent = pctTxt(p);
+        $('cc-fill').style.width = Math.max(p ? 1.5 : 0, p) + '%';
+        $('cc-blocks').innerHTML = line;
+        $('cc-stats').innerHTML = d ? `<div class="stat"><span class="stat__top">Communes</span><span class="stat__val">${Unlock.fmt(d.visited)}<small>/${Unlock.fmt(d.total)}</small></span></div>
+          <div class="stat"><span class="stat__top">À 100&nbsp;%</span><span class="stat__val">${Unlock.fmt(d.at100)}</span></div>
+          <div class="stat"><span class="stat__top">Plus de 50&nbsp;%</span><span class="stat__val">${Unlock.fmt(d.over50)}</span></div>` : '';
+        $('cc-stats').hidden = !d; $('cc-go').innerHTML = go; $('cc-go').hidden = !d;
+        $('commune-card').hidden = false; $('dep-top').hidden = true; $('dep-extra').hidden = true;
+        $('panel').querySelector('.panel__scroll').scrollTop = 0;
+        if (!keepView) setPanel(true);
+        requestAnimationFrame(() => keepVisible());
+      }
+      document.querySelectorAll('#dep-rank .rank__item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.dep === code)));
+    }
+    // Vers les communes d'un département (depuis la vue France), avec éventuellement une commune à ouvrir
+    function goDep(code, communeCode) {
+      unselect(true); cur = code; pendingCommune = communeCode || null;
+      setMode('communes');
+    }
+    function focusCommune(c) {
+      const zone = c._layer.getBounds().pad(1.2);
+      if (!mqFloat.matches) { select(c.code, c._layer); map.fitBounds(zone, { ...fitPadding(), maxZoom: 13 }); }
+      else {
+        const pr = panel.getBoundingClientRect().width;
+        map.fitBounds(zone, { paddingTopLeft: [pr + 40, 90], paddingBottomRight: [$('ctip').offsetWidth || 260, 30], maxZoom: 13 });
+        setTimeout(() => select(c.code, c._layer), 350);
+      }
     }
 
     /* ----- Sélection d'une commune ----- */
@@ -723,7 +878,8 @@
       if (mqFloat.matches) {
         $('ct-name').textContent = selected.name;
         $('ct-sub').innerHTML = `${Unlock.esc(selected.dep)} · ${sub}`;
-        $('ct-pct').textContent = pctTxt(p);
+        $('ct-pct').textContent = pctTxt(p); $('ct-lbl').textContent = 'explorés'; $('ct-meta').hidden = false;
+        $('ct-go').innerHTML = `${Unlock.icon('grid')}Voir mes blocs ici`;
         $('ct-fill').style.width = Math.max(p ? 1.5 : 0, p) + '%';
         $('ct-blocks').innerHTML = blocks;
         $('ct-meta').textContent = s ? `${Unlock.fmt(s.activities)} sortie${s.activities > 1 ? 's' : ''} · ${Unlock.fmt(s.km, s.km < 10 ? 1 : 0)} km ici` : 'Une sortie qui la traverse suffit pour la débloquer.';
@@ -732,6 +888,7 @@
         placeTip();
       } else {
         $('cc-dep').textContent = selected.dep;
+        $('cc-go').innerHTML = `${Unlock.icon('grid')}Voir mes blocs ici`;
         $('cc-name').textContent = selected.name;
         $('cc-sub').innerHTML = sub;
         $('cc-pct').textContent = pctTxt(p);
@@ -749,6 +906,7 @@
       document.querySelectorAll('#dep-communes .rank__item').forEach((b) => b.setAttribute('aria-current', String(b.dataset.code === code)));
     }
     function unselect(silent) {
+      document.querySelectorAll('#dep-rank .rank__item').forEach((b) => b.setAttribute('aria-current', String(scope === 'dep' && b.dataset.dep === cur)));
       selected = null;
       if (selLayer) { layer.removeLayer(selLayer); selLayer = null; }
       $('ctip').hidden = true;
@@ -798,7 +956,7 @@
     }
 
     map.on('move zoom', placeTip);
-    map.on('click', () => { if (mode === 'communes' && selected) unselect(); });
+    map.on('click', () => { if ((mode === 'communes' || mode === 'france') && selected) unselect(); });
     window.addEventListener('resize', () => { if (selected && mqFloat.matches) placeTip(); });
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && selected) unselect(); });
     $('ct-close').addEventListener('click', () => unselect());
@@ -806,43 +964,58 @@
     $('cc-back').addEventListener('click', () => unselect());
     const toBlocks = () => {
       if (!selected) return;
+      if (selected.kind === 'dep') { Unlock.track('carte_departement', { d: 'voir_communes' }); goDep(selected.code); return; }
       const c = (data.top_municipalities || []).find((x) => x.code === selected.code); if (!c) return;
       unselect(true); setMode('grid'); showCity(c, true); $('city-search').value = '';
     };
     $('ct-go').addEventListener('click', toBlocks); $('cc-go').addEventListener('click', toBlocks);
-    $('dep-select').addEventListener('change', (e) => { Unlock.track('carte_departement', { d: 'liste' }); show(e.target.value, true); });
-    $('dep-rank').addEventListener('click', (e) => { const b = e.target.closest('[data-dep]'); if (b && b.dataset.dep !== cur) { Unlock.track('carte_departement', { d: 'classement' }); show(b.dataset.dep, true); } });
+    $('dep-select').addEventListener('change', (e) => {
+      const v = e.target.value;
+      Unlock.track('carte_departement', { d: v === FR_KEY ? 'liste_france' : 'liste' });
+      if (v === FR_KEY) { if (scope !== 'france') setMode('france'); return; }
+      if (scope === 'france') goDep(v); else show(v, true);
+    });
+    $('dep-rank').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dep]'); if (!b) return;
+      if (scope === 'france') { Unlock.track('carte_departement', { d: 'classement_france' }); goDep(b.dataset.dep); return; }
+      if (b.dataset.dep !== cur) { Unlock.track('carte_departement', { d: 'classement' }); show(b.dataset.dep, true); }
+    });
     $('dep-communes').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-code]'); if (!b || !geo) return;
+      const b = e.target.closest('[data-code]'); if (!b) return;
+      // Vue France : on ouvre le département de la commune, puis la commune
+      if (scope === 'france') { if (b.dataset.cdep) goDep(b.dataset.cdep, b.dataset.code); return; }
+      if (!geo) return;
       const c = geo.communes.find((x) => x.code === b.dataset.code); if (!c || !c._layer) return;
       // On cadre la commune avec ses voisines autour (contexte) ; sur ordinateur, place libre à droite pour l'infobulle
-      const zone = c._layer.getBounds().pad(1.2);
-      if (!mqFloat.matches) { select(c.code, c._layer); map.fitBounds(zone, { ...fitPadding(), maxZoom: 13 }); }
-      else {
-        const pr = panel.getBoundingClientRect().width;
-        map.fitBounds(zone, { paddingTopLeft: [pr + 40, 90], paddingBottomRight: [$('ctip').offsetWidth || 260, 30], maxZoom: 13 });
-        setTimeout(() => select(c.code, c._layer), 350);
-      }
+      focusCommune(c);
     });
 
     mqFloat.addEventListener('change', () => { if (selected) unselect(); });
 
     return {
-      enter() {
-        entered = true;
+      enter(sc) {
+        entered = true; scope = sc || 'dep';
+        panel.classList.toggle('is-france', scope === 'france');
+        if (scope === 'france') { showFrance(true); return; }
         const list = deps();
         const keep = list.some((d) => d.code === cur);
         show(keep ? cur : (list[0] || {}).code || null, true);
       },
       refresh() {          // nouvelles données (filtres) : on garde le département et la vue
         if (!entered) return;
+        if (scope === 'france') {
+          const sc = selected && selected.code;
+          fillHeader(); drawFrance(false);
+          if (sc && frGeo) { const g = frGeo.departements.find((x) => x.code === sc); if (g && g._layer) selectDep(sc, g._layer, true); }
+          return;
+        }
         const list = deps();
         if (!list.some((d) => d.code === cur)) { show((list[0] || {}).code || null, true); return; }
         const sc = selected && selected.code;
         fillHeader(); draw(false);
         if (sc && geo) { const c = geo.communes.find((x) => x.code === sc); if (c) select(sc, c._layer, true); }
       },
-      leave() { entered = false; unselect(true); layer.clearLayers(); $('dep-top').hidden = true; $('dep-extra').hidden = true; $('dep-empty').hidden = true; $('commune-card').hidden = true; },
+      leave() { entered = false; clearTimeout(frTimer); panel.classList.remove('is-france'); unselect(true); layer.clearLayers(); $('dep-top').hidden = true; $('dep-extra').hidden = true; $('dep-empty').hidden = true; $('commune-card').hidden = true; },
     };
   })();
 
