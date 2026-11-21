@@ -87,6 +87,9 @@ Tables utilisées : `strava_users`, `activities` (cache 47 h), `communes`, `app_
 3. **Lieux à collectionner** : châteaux et monuments « débloqués » quand une trace passe à proximité. Source : base Mérimée (data.culture.gouv.fr) et/ou OpenStreetMap. Recalcul à la volée, sans stockage durable (Strava §5.7 / §6.2).
 
 ### Fait récemment
+- **Bilan de l'année, France et partage (v59)** :
+  - Deux écrans après « Vos départements » : « Votre France en 2026 » (carte des départements parcourus dans l'année, nouveaux cerclés de blanc, nombre de départements et « dont N nouveaux ») et « Votre part de la France » (% des communes de France explorées, « 87 communes explorées sur les 34 935 de France », communes découvertes dans l'année). Données dans `/api/annee` → `france` ; contours de `/api/france/geo`.
+  - Chaque écran (sauf le dernier, qui a sa story) se partage : bouton en haut à droite, image 1080 × 1920 avec « Mon année 2026 » en haut et « unlock · unlock-app.fr » en bas, écran agrandi jusqu'à 1,3 fois (textes repliés avant l'agrandissement). Partage du téléphone ou téléchargement sur ordinateur ; si le navigateur refuse le partage (délai), une fenêtre le repropose d'un toucher. Fichiers `unlock-annee-2026-<écran>.png`, mesure `annee_partage` et `annee_telecharge` avec le nom de l'écran.
 - **Vue France (v58)** :
   - Carte : 4e mode « France ». Les départements de métropole sont coloriés selon leur % de communes explorées (paliers 2, 5, 15, 40 %), la carte se cadre sur vos départements. Panneau : communes explorées sur le total national (« 87 / 34 935 »), départements touchés (« 6/101 »), communes à 100 %, top 5 des départements, top 5 des communes en France.
   - Clic sur un département : infobulle sur PC, fiche en bas sur téléphone (comme pour une commune), bouton « Voir les communes » qui ouvre le mode Communes sur ce département. Retour par « ‹ France » (PC), le bouton France ou « Toute la France » en tête de la liste « Changer ».

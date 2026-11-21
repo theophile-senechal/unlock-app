@@ -24,7 +24,7 @@
 
   /* La story */
   .story { position: relative; width: 100%; height: 100%; background: var(--s); overflow: hidden; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-  .st-prog { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 21px); left: 16px; right: 56px; display: flex; gap: 4px; }
+  .st-prog { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 21px); left: 16px; right: 92px; display: flex; gap: 4px; }
   .st-prog span { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.22); overflow: hidden; }
   .st-prog b { display: block; height: 100%; width: 0; background: #fff; }
   .st-prog span.done b { width: 100%; }
@@ -33,6 +33,11 @@
   @keyframes st-prog { to { width: 100%; } }
   .st-x { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 4px); right: 8px; width: 36px; height: 36px; border: 0; background: none; color: rgba(255,255,255,.85); display: grid; place-items: center; cursor: pointer; padding: 0; }
   .st-x .i { width: 20px; height: 20px; }
+  /* Partager l'écran affiché (tous sauf le dernier, qui a sa propre story) */
+  .st-sh { position: absolute; z-index: 3; top: calc(var(--safe-t, 0px) + 4px); right: 46px; width: 36px; height: 36px; border: 0; background: none; color: rgba(255,255,255,.85); display: grid; place-items: center; cursor: pointer; }
+  .st-sh .i { width: 20px; height: 20px; }
+  .st-sh[hidden] { display: none; }
+  .st-sh:disabled { opacity: .45; cursor: default; }
   .st-tap { position: absolute; z-index: 1; inset: 0; }
 
   .scr { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center;
@@ -116,6 +121,31 @@
   .btn-w--ghost { background: none; color: rgba(255,255,255,.75); }
   .btn-w--ghost:hover { color: #fff; }
 
+  /* Carte de France de l'année */
+  .fr-map { display: block; margin: 0 auto; overflow: visible; }
+  .fr-map .o { fill: rgba(255,255,255,.06); stroke: rgba(255,255,255,.16); stroke-width: .8; stroke-linejoin: round; }
+  .fr-map .y { fill: var(--a); stroke: rgba(18,16,20,.6); stroke-width: .8; stroke-linejoin: round; }
+  .fr-map .y.is-new { stroke: #fff; stroke-width: 1.4; }
+  .y-num small { font-size: .42em; letter-spacing: -.02em; margin-left: .06em; }
+
+  /* Image d'un écran à partager (1080 × 1920, rendue à partir d'un cadre de 540 × 960 hors de l'écran) */
+  .snap { position: fixed; left: -10000px; top: 0; width: 540px; height: 960px; overflow: hidden; color: #fff; font-family: var(--font-ui); }
+  .snap__top { position: absolute; top: 36px; left: 0; right: 0; text-align: center; font-size: 13px; font-weight: 650; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.6); }
+  .snap__body { position: absolute; top: 70px; bottom: 150px; left: 0; right: 0; display: flex; align-items: center; justify-content: center; }
+  .snap__body > .scr { position: static; display: flex; flex: none; padding: 0 28px; transform-origin: center; }
+  .snap__foot { position: absolute; bottom: 46px; left: 0; right: 0; text-align: center; }
+  .snap__word { font-family: var(--font-display); font-weight: 800; font-size: 44px; line-height: 1; letter-spacing: -.045em; }
+  .snap__url { margin-top: 9px; font-size: 16px; font-weight: 500; color: rgba(255,255,255,.55); }
+  .snap .an, .snap .pop, .snap .px, .snap .gy, .snap .gx { opacity: 1 !important; transform: none !important; animation: none !important; }
+  .snap .draw { stroke-dashoffset: 0 !important; animation: none !important; }
+  .snap .scr__hint, .snap .no-snap { display: none !important; }
+  /* Image prête mais partage refusé par le navigateur (délai dépassé) : on repropose d'un toucher */
+  .snap-ready { position: fixed; inset: 0; z-index: 20; background: rgba(11,10,12,.86); display: grid; place-items: center; padding: 24px; }
+  .snap-ready[hidden] { display: none; }
+  .snap-ready__box { width: 100%; max-width: 320px; text-align: center; }
+  .snap-ready img { width: 62%; max-width: 200px; aspect-ratio: 9 / 16; border-radius: 14px; box-shadow: 0 20px 50px -20px rgba(0,0,0,.8); }
+  .snap-ready p { margin: 14px 0 0; font-family: var(--font-display); font-weight: 750; font-size: 20px; letter-spacing: -.02em; }
+
   /* Écran sans sortie */
   .empty-ico { width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,.08); display: grid; place-items: center; color: var(--a); margin-bottom: 18px; }
   .empty-ico .i { width: 28px; height: 28px; }
@@ -185,7 +215,8 @@
     .yr__help { display: block; }
     .story { width: 390px; height: 844px; flex: none; border-radius: 22px; box-shadow: 0 30px 80px -20px rgba(0,0,0,.7); transform: scale(var(--k, 1)); transform-origin: center; margin: calc((844px * var(--k, 1) - 844px) / 2) calc((390px * var(--k, 1) - 390px) / 2); }
     .story .st-x { display: none; }
-    .story .st-prog { right: 16px; top: 21px; }
+    .story .st-prog { right: 52px; top: 21px; }
+    .story .st-sh { right: 8px; top: 4px; }
     .story .scr, .yr.has-apercu .story .scr { padding-top: 56px; padding-bottom: 56px; }
     .story .scr__hint { display: none; }
     .apercu { position: fixed; left: 28px; top: auto; bottom: 18px; }
@@ -205,12 +236,22 @@
   <section class="story" id="story" aria-roledescription="diaporama" aria-label="{{ annee.title }}">
     <div class="st-prog" id="prog" aria-hidden="true"></div>
     <button type="button" class="st-x" data-close aria-label="Fermer">{{ icon('x') }}</button>
+    <button type="button" class="st-sh" id="share-scr" aria-label="Partager cet écran" hidden>{{ icon('share') }}</button>
     <div class="st-tap" id="tap"></div>
     <div id="screens"></div>
   </section>
 
   <button type="button" class="yr__nav" id="next" aria-label="Écran suivant">{{ icon('chev') }}</button>
   <p class="yr__help">Flèches du clavier ou clic pour naviguer</p>
+
+  <div class="snap" id="snap" aria-hidden="true"><div class="snap__top">Mon année {{ annee.year }}</div><div class="snap__body" id="snap-body"></div>
+    <div class="snap__foot"><div class="snap__word">unlock</div><div class="snap__url">unlock-app.fr</div></div></div>
+  <div class="snap-ready" id="snap-ready" hidden role="dialog" aria-modal="true" aria-label="Image prête">
+    <div class="snap-ready__box"><img id="snap-img" alt="Aperçu de l'image"><p>Votre image est prête</p>
+      <div class="actions"><button type="button" class="btn-w btn-w--main" id="snap-share">{{ icon('share') }}Partager l'image</button>
+        <button type="button" class="btn-w btn-w--ghost" id="snap-save">{{ icon('download') }}Enregistrer</button>
+        <button type="button" class="btn-w btn-w--ghost" id="snap-close">Fermer</button></div></div>
+  </div>
 
   {% if annee.preview %}
   <div class="apercu">
@@ -230,6 +271,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='vendor/dom-to-image-more.min.js') }}"></script>
 <script>
 (() => {
   const $ = (id) => document.getElementById(id);
@@ -303,13 +345,37 @@
   }
 
   /* ---------- Écrans ---------- */
-  const SCREENS = [];   // {html, dur}
-  const add = (html, dur = 6000, hint = true) => SCREENS.push({ html, dur, hint });
+  const SCREENS = [];   // {html, dur, hint, slug}
+  let SLUG = '';         // nom de l'écran en cours de construction (nom du fichier partagé)
+  const add = (html, dur = 6000, hint = true) => SCREENS.push({ html, dur, hint, slug: SLUG });
+
+  /* Carte de France : départements de l'année en couleur (les nouveaux cerclés de blanc), les autres à peine tracés */
+  let FRGEO = null;
+  function franceSVG(fr, size) {
+    if (!FRGEO || !FRGEO.departements || !FRGEO.departements.length) return '';
+    const byDep = {}; (fr.deps || []).forEach((d) => { byDep[d.code] = d; });
+    let minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+    FRGEO.departements.forEach((g) => g.shape.forEach((poly) => poly[0].forEach(([la, lo]) => {
+      if (la < minLa) minLa = la; if (la > maxLa) maxLa = la; if (lo < minLo) minLo = lo; if (lo > maxLo) maxLo = lo; })));
+    const kx = Math.cos((minLa + maxLa) / 2 * Math.PI / 180), w0 = (maxLo - minLo) * kx, h0 = maxLa - minLa;
+    const sc = size / Math.max(w0, h0), W = w0 * sc, H = h0 * sc;
+    const P = (la, lo) => `${((lo - minLo) * kx * sc).toFixed(1)},${((maxLa - la) * sc).toFixed(1)}`;
+    const path = (shape) => shape.map((poly) => poly.map((ring) => 'M' + ring.map(([la, lo]) => P(la, lo)).join('L') + 'Z').join('')).join('');
+    const alpha = (p) => (p < 2 ? .5 : p < 5 ? .62 : p < 15 ? .76 : p < 40 ? .88 : 1);
+    const off = [], on = [];
+    FRGEO.departements.forEach((g) => (byDep[g.code] ? on : off).push(g));
+    let k = 0;
+    return `<svg class="fr-map" viewBox="0 0 ${W.toFixed(0)} ${H.toFixed(0)}" width="${W.toFixed(0)}" height="${H.toFixed(0)}" role="img" aria-label="Carte de France, vos départements de ${YEAR} en couleur">`
+      + off.map((g) => `<path class="o" d="${path(g.shape)}"/>`).join('')
+      + on.map((g) => { const d = byDep[g.code]; return `<path class="y px${d.new ? ' is-new' : ''}" style="--d:${350 + (k++) * 90}ms;fill-opacity:${alpha(d.percent)}" d="${path(g.shape)}"/>`; }).join('')
+      + '</svg>';
+  }
+  const pctFr = (p) => fmt(p, p > 0 && p < 1 ? 2 : p < 10 ? 1 : 0);
 
   function build(d) {
     const c = d.chiffres, h = d.habitudes;
     const asOf = d.complete ? "Bilan complet de l'année" : d.as_of ? `Chiffres au ${d.as_of}` : '';
-    const until = `<span class="pill pill--info an" style="--d:750ms">{{ icon('clock') }}Disponible jusqu'au 31 janvier</span>`;
+    const until = `<span class="pill pill--info an no-snap" style="--d:750ms">{{ icon('clock') }}Disponible jusqu'au 31 janvier</span>`;
     const small = innerHeight < 700;
 
     if (d.empty) {
@@ -322,6 +388,7 @@
     }
 
     // 1. Ouverture
+    SLUG = 'ouverture';
     add(`<span class="k an" style="--d:100ms">Unlock · votre bilan</span>
       <div class="y-num y-num--xl pop" style="--d:250ms">${YEAR}</div>
       <p class="t an" style="--d:500ms">Votre année en blocs</p>
@@ -330,6 +397,7 @@
       ${d.mosaique && d.mosaique.name ? `<span class="zone an" style="--d:900ms">${esc(autour(d.mosaique.name))}${autresZones(d.mosaique) ? `<small>${autresZones(d.mosaique)}</small>` : ''}</span>` : ''}`, 5600);
 
     // 2. Chiffres clés
+    SLUG = 'chiffres';
     const ev = c.new_blocks_evol;
     const evPill = c.first_year ? `<span class="pill pill--info an" style="--d:900ms">Votre première année sur Unlock</span>`
       : ev === null ? '' : `<span class="pill ${ev >= 0 ? 'pill--up' : 'pill--down'} an" style="--d:900ms">${ev >= 0 ? '+' : '−'}${fmt(Math.abs(ev))} % par rapport à ${YEAR - 1}</span>`;
@@ -345,6 +413,7 @@
       </div>`, 6000);
 
     // 3. Sortie la plus marquante
+    SLUG = 'sortie';
     if (d.sortie) {
       const s = d.sortie;
       add(`<span class="k an" style="--d:100ms">Votre sortie la plus marquante</span>
@@ -355,6 +424,7 @@
     }
 
     // 4. Habitudes : quand
+    SLUG = 'habitudes';
     if (h.moment) {
       const m = h.moment, hi = new Set();
       for (let x = m.from; x < m.to; x++) hi.add(x % 24);
@@ -367,6 +437,7 @@
     }
 
     // 5. Habitudes : comment
+    SLUG = 'sports';
     const COLORS = ['var(--a)', '#C98A96', '#7A6A70', '#4A4247'];
     const stack = h.sports.length ? `<div class="y-chart an" style="--d:350ms"><span class="y-chart__t">Répartition des sorties</span>
         <div class="stack">${h.sports.map((sp, i) => `<span class="gx" style="--w:${sp.percent}%;--d:${400 + i * 200}ms;background:${COLORS[i]}"></span>`).join('')}</div>
@@ -379,6 +450,7 @@
       ${rec ? `<p class="s an" style="--d:900ms">${esc(rec.month.charAt(0).toUpperCase() + rec.month.slice(1))}, votre mois record avec ${plural(rec.blocks, 'nouveau bloc', 'nouveaux blocs')}.</p>` : ''}`, 6500);
 
     // 6. Top communes
+    SLUG = 'communes';
     if (d.communes.length) {
       add(`<span class="k an" style="--d:100ms">Vos communes en ${YEAR}</span>
         <p class="t t--m an" style="--d:200ms">${d.communes.length > 1 ? `Le top ${d.communes.length} de l'année` : "La commune de l'année"}</p>
@@ -388,6 +460,7 @@
     }
 
     // 7. Départements
+    SLUG = 'departements';
     if (d.departements.length) {
       const n = d.departements_total || d.departements.length;
       add(`<span class="k an" style="--d:100ms">Vos départements en ${YEAR}</span>
@@ -399,7 +472,30 @@
         <p class="s an" style="--d:900ms;font-size:12.5px">Part des communes du département où vous êtes passé.</p>`, 6000);
     }
 
+    // 7 bis. Votre France de l'année : carte + nombre de départements
+    const fr = d.france;
+    if (fr && fr.deps_year) {
+      SLUG = 'france';
+      const nn = fr.deps_new, all = nn === fr.deps_year;
+      const pill = !nn ? '' : `<span class="pill pill--up an" style="--d:${small ? 900 : 1100}ms">${all ? (fr.deps_year > 1 ? `Tous découverts en ${YEAR}` : `Découvert en ${YEAR}`) : `dont ${plural(nn, 'nouveau', 'nouveaux')}`}</span>`;
+      add(`<span class="k an" style="--d:100ms">Votre France en ${YEAR}</span>
+        <div style="margin-top:${small ? 10 : 16}px">${franceSVG(fr, small ? 200 : 250)}</div>
+        <div class="y-num y-num--l an" style="--d:700ms"><span class="cnt" data-to="${fr.deps_year}">${fr.deps_year}</span></div>
+        <p class="t an" style="--d:850ms">${fr.deps_year > 1 ? 'départements explorés' : 'département exploré'} en ${YEAR}</p>
+        ${pill}`, 6500);
+
+      // 7 ter. Votre part de la France : communes explorées sur le total national
+      SLUG = 'part-de-la-france';
+      const part = fr.total ? fr.communes / fr.total * 100 : 0, reste = Math.max(0, fr.total - fr.communes);
+      add(`<span class="k an" style="--d:100ms">Votre part de la France</span>
+        <div class="y-num y-num--l pop" style="--d:250ms">${pctFr(part)}<small>${'\u00a0'}%</small></div>
+        <p class="t an" style="--d:500ms">de la France explorée</p>
+        <p class="s an" style="--d:650ms">${plural(fr.communes, 'commune explorée', 'communes explorées')} sur les ${nb(fmt(fr.total))} de France. Encore ${nb(fmt(reste))} à découvrir.</p>
+        ${fr.communes_new ? `<span class="pill pill--up an" style="--d:850ms">+${plural(fr.communes_new, 'commune découverte', 'communes découvertes')} en ${YEAR}</span>` : ''}`, 6000);
+    }
+
     // 8. Story à partager
+    SLUG = '';
     const canShare = !!(navigator.canShare && matchMedia('(pointer: coarse)').matches);
     add(`<div class="share pop" style="--d:100ms"><canvas id="share-canvas" width="1080" height="1920" aria-label="Aperçu de votre story"></canvas></div>
       <div class="swatches an" style="--d:450ms" role="group" aria-label="Couleur de la story">
@@ -461,6 +557,63 @@
     Unlock.toast('Story enregistrée', 'check');
   }
 
+  /* ---------- Partager l'écran affiché : image 1080 × 1920, « Mon année » en haut, unlock en bas ---------- */
+  const coarse = matchMedia('(pointer: coarse)').matches;
+  let snapping = false, ready = null;
+  async function renderScreen(i) {
+    const snap = $('snap'), body = $('snap-body'), [, , T] = THEMES[theme];
+    snap.style.background = `linear-gradient(180deg, ${T} 0%, #121014 62%, #121014 100%)`;
+    body.innerHTML = `<div class="scr">${SCREENS[i].html}</div>`;
+    body.querySelectorAll('.cnt').forEach((el) => { el.textContent = nb(fmt(+el.dataset.to)); });
+    const inner = body.firstElementChild, room = body.clientHeight, W = body.clientWidth;
+    // L'écran est pensé pour un téléphone : on l'agrandit (jusqu'à 1,3 fois) pour remplir l'image, ou on le réduit s'il dépasse.
+    // La largeur est fixée avant l'agrandissement : les textes passent à la ligne au lieu de sortir de l'image.
+    let k = 1.3;
+    for (let n = 0; n < 4; n++) {
+      inner.style.width = (W / k).toFixed(1) + 'px';
+      const fit = Math.min(1.3, room / inner.scrollHeight);
+      if (Math.abs(fit - k) < .01) break;
+      k = fit;
+    }
+    inner.style.transform = `scale(${k.toFixed(3)})`;
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 60)));
+    try {
+      return await domtoimage.toBlob(snap, { width: 1080, height: 1920, cacheBust: true,
+        style: { left: '0px', top: '0px', transform: 'scale(2)', transformOrigin: 'top left', width: '540px', height: '960px' } });
+    } finally { body.innerHTML = ''; }
+  }
+  function saveBlob(blob, name) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  }
+  async function shareScreen() {
+    if (snapping || !SCREENS[cur] || !SCREENS[cur].slug) return;
+    snapping = true; $('share-scr').disabled = true; pause();
+    const slug = SCREENS[cur].slug, name = `unlock-annee-${YEAR}-${slug}.png`;
+    Unlock.toast('Création de l\u2019image…', 'clock', 8000);
+    try {
+      const blob = await renderScreen(cur);
+      const file = new File([blob], name, { type: 'image/png' });
+      if (coarse && navigator.canShare && navigator.canShare({ files: [file] })) {
+        try { await navigator.share({ files: [file], title: `Mon année ${YEAR} sur Unlock` }); Unlock.track('annee_partage', { d: slug }); Unlock.toast('Partagé', 'check'); }
+        catch (e) {
+          if (e && e.name === 'AbortError') Unlock.track('annee_partage', { d: 'annule' });
+          else { ready = { blob, file, name, slug }; $('snap-img').src = URL.createObjectURL(blob); $('snap-ready').hidden = false; }   // délai dépassé : on repropose
+        }
+      } else { saveBlob(blob, name); Unlock.track('annee_telecharge', { d: slug }); Unlock.toast('Image enregistrée', 'check'); }
+    } catch (e) { console.error(e); Unlock.toast('L\u2019image n\u2019a pas pu être créée. Réessayez.'); }
+    finally { snapping = false; $('share-scr').disabled = false; }
+  }
+  $('share-scr').addEventListener('click', (e) => { e.stopPropagation(); shareScreen(); });
+  const closeReady = () => { $('snap-ready').hidden = true; if (ready) URL.revokeObjectURL($('snap-img').src); ready = null; };
+  $('snap-share').addEventListener('click', async () => {
+    if (!ready) return; const r = ready;
+    try { await navigator.share({ files: [r.file], title: `Mon année ${YEAR} sur Unlock` }); Unlock.track('annee_partage', { d: r.slug }); closeReady(); }
+    catch (e) { if (e && e.name === 'AbortError') return; saveBlob(r.blob, r.name); Unlock.track('annee_telecharge', { d: r.slug }); closeReady(); }
+  });
+  $('snap-save').addEventListener('click', () => { if (!ready) return; saveBlob(ready.blob, ready.name); Unlock.track('annee_telecharge', { d: ready.slug }); Unlock.toast('Image enregistrée', 'check'); closeReady(); });
+  $('snap-close').addEventListener('click', closeReady);
+
   /* ---------- Navigation ---------- */
   let cur = -1, timer = null, left = 0, startedAt = 0, paused = false;
   const seen = new Set();   // écrans déjà vus (mesure : jusqu'où le bilan est regardé)
@@ -484,6 +637,7 @@
     els[i].querySelectorAll('.cnt').forEach(count);
     if (els[i].querySelector('#share-canvas')) drawStory($('share-canvas'));
     $('prev').disabled = i === 0; $('next').disabled = i === els.length - 1;
+    $('share-scr').hidden = !SCREENS[i].slug;
     paused = false; story.classList.remove('is-paused');
     if (!seen.has(i)) { seen.add(i); Unlock.track('annee_ecran', { v: i + 1 }); }
     schedule(SCREENS[i].dur);
@@ -507,7 +661,7 @@
   addEventListener('keydown', (e) => {
     if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); go(cur + 1); }
     else if (e.key === 'ArrowLeft') { e.preventDefault(); go(cur - 1); }
-    else if (e.key === 'Escape') { const f = $('apercu-form'); if (f && !f.hidden) { f.hidden = true; return; } close(); }
+    else if (e.key === 'Escape') { if (!$('snap-ready').hidden) { closeReady(); return; } const f = $('apercu-form'); if (f && !f.hidden) { f.hidden = true; return; } close(); }
   });
   document.addEventListener('visibilitychange', () => document.hidden ? pause() : resume());
   screensEl.addEventListener('click', (e) => {
@@ -518,8 +672,11 @@
 
   /* ---------- Chargement ---------- */
   Unlock.loader.show(['Calcul de votre année…', 'Vos communes de l\'année…', 'Presque prêt…']);
+  // Contours de la France (publics, en cache) en parallèle du calcul de l'année ; sans eux, l'écran France n'a pas de carte
+  const frP = fetch('/api/france/geo?v=1').then((r) => (r.ok ? r.json() : null)).catch(() => null);
   fetch('/api/annee').then((r) => { if (r.status === 401) { location.href = '/login?error=expired'; throw new Error('401'); } if (!r.ok) throw new Error(r.status); return r.json(); })
     .then(async (d) => {
+      FRGEO = await frP;
       DATA = d; build(d);
       screensEl.innerHTML = SCREENS.map((s) => `<div class="scr" aria-hidden="true">${s.html}${s.hint ? '<p class="scr__hint">Touchez pour continuer</p>' : ''}</div>`).join('');
       progEl.innerHTML = SCREENS.map(() => '<span><b></b></span>').join('');
@@ -529,7 +686,7 @@
     .catch((e) => {
       if (String(e.message) === '401') return;
       Unlock.loader.hide();
-      SCREENS.length = 0;
+      SCREENS.length = 0; SLUG = '';
       add(`<div class="empty-ico">{{ icon('alert') }}</div><p class="t t--m">Bilan indisponible</p><p class="s">Le calcul n'a pas abouti. Réessayez dans quelques instants.</p>
         <div class="actions"><button type="button" class="btn-w btn-w--main" onclick="location.reload()">Réessayer</button><a class="btn-w btn-w--ghost" href="/">Revenir à la carte</a></div>`, 0, false);
       screensEl.innerHTML = `<div class="scr" style="z-index:3">${SCREENS[0].html}</div>`; progEl.innerHTML = '<span class="done"><b></b></span>';

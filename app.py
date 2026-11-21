@@ -60,7 +60,7 @@ LINKEDIN_URL = 'https://www.linkedin.com/in/th%C3%A9ophile-s%C3%A9n%C3%A9chal-51
 # Dons (facultatif) : lien de la page Ko-fi. Vide = rien ne s'affiche dans l'app.
 KOFI_URL = os.getenv('KOFI_URL', '').strip()
 if KOFI_URL and not KOFI_URL.startswith('https://'): KOFI_URL = ''
-ASSET_VERSION = '2026.11.21'
+ASSET_VERSION = '2026.11.21b'
 
 # Utilisateurs actifs = au moins une connexion sur cette période (affiché sur la page de connexion)
 ACTIVE_WINDOW_DAYS = 31
@@ -2307,17 +2307,26 @@ def _annee_territoires(res, year, before, upto, cells_y, dlat, grid_m, zone_cell
     communes.sort(key=lambda x: (x['points'], x['percent']), reverse=True)
     res["communes"] = [c for c in communes if c['points'] > 0][:5] or communes[:5]
     totals = dep_totals()
-    deps = []
+    deps, nouveaux = [], set()
     for dep in active_deps:
         cs = [c for c in cities if c.get('dep') == dep and c['stats'].get('first')]
         n1 = sum(1 for c in cs if c['stats']['first'] <= ye)
         n0 = sum(1 for c in cs if c['stats']['first'] < ys)
         total = max(totals.get(dep, 0), n1, 1)
+        if n0 == 0: nouveaux.add(dep)   # aucune commune de ce département explorée avant l'année
         deps.append({"code": dep, "name": DEPARTEMENTS.get(dep, dep), "percent": round(n1 / total * 100, 1),
                      "points": round((n1 - n0) / total * 100, 1), "communes": n1})
     deps.sort(key=lambda d: (d['percent'], d['communes']), reverse=True)
     res["departements_total"] = len(deps)
     res["departements"] = deps[:4]
+    # Vue France de l'année : départements parcourus pendant l'année (nouveaux = aucune commune explorée avant),
+    # et communes explorées à la fin de l'année sur le total national (donnée publique)
+    res["france"] = {
+        "deps": [{"code": d['code'], "percent": d['percent'], "new": d['code'] in nouveaux} for d in deps],
+        "deps_year": len(deps), "deps_new": len(nouveaux), "deps_total": len(DEPARTEMENTS),
+        "communes": sum(1 for c in cities if c['stats'].get('first') and c['stats']['first'] <= ye),
+        "communes_new": res["chiffres"]["new_communes"], "total": sum(totals.values()),
+    }
 
 @app.route('/annee')
 def annee_page():
